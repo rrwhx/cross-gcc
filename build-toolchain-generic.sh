@@ -4,13 +4,20 @@
 
 set -euo pipefail
 
-# 颜色输出定义
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RESET='\033[0m'
-info()  { echo -e "${GREEN}$*${RESET}"; }
-step()  { echo -e "${GREEN}[STEP]${RESET} $*"; }
-ok()    { echo -e "${GREEN}[OK]${RESET} $*"; }
-warn()  { echo -e "${YELLOW}$*${RESET}"; }
-error(){ echo -e "${RED}$*${RESET}"; }
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+NC='\033[0m' # 重置颜色
+
+# 输出函数
+error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
+step()  { echo -e "${GREEN}[STEP]${NC} $*"; }
+ok()    { echo -e "${BLUE}[OK]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 
 # 捕获错误并提示
 trap 'error "错误发生在脚本第 ${LINENO} 行，详细信息请查看日志。"; exit 1' ERR
@@ -30,8 +37,8 @@ THREADS="$(nproc)"  # 默认并行构建线程数
 usage() {
     cat <<EOF
 用法: $(basename "$0") --arch ARCH --libc LIBC [选项]
-  --arch         目标架构 (aarch64, riscv64, loongarch64, x86_64)
-  --libc         libc 类型 (glibc 或 musl)
+  --arch         目标架构 (aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mipsel|mips64el)
+  --libc         libc 类型 (glibc|musl)
   --download-dir 源码下载目录 (默认: ./download)
   --work-dir     构建工作目录 (默认: ./build)
   --log-dir      日志目录 (默认: ./logs)
@@ -70,7 +77,7 @@ LIBC=$(echo "$LIBC" | tr '[:upper:]' '[:lower:]')
 
 # 验证参数合法性
 case "$ARCH" in
-    aarch64|riscv64|loongarch64|x86_64) ;;
+    aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mipsel|mips64el) ;;
     *) error "不支持的架构: $ARCH"; exit 1;;
 esac
 case "$LIBC" in
@@ -83,22 +90,41 @@ info "libc 类型: $LIBC"
 
 # 根据架构和 libc 设置 TARGET 三元组
 case "$ARCH" in
-    aarch64)     TARGET_BASE="aarch64-linux";   CROSS_KERNEL_NAME="arm64";   ;;
-    riscv64)     TARGET_BASE="riscv64-linux";   CROSS_KERNEL_NAME="riscv";   ;;
-    loongarch64) TARGET_BASE="loongarch64-linux"; CROSS_KERNEL_NAME="loongarch";;
-    x86_64)      TARGET_BASE="x86_64-linux";    CROSS_KERNEL_NAME="x86";     ;;
+    aarch64)     TARGET_BASE="aarch64-linux";     CROSS_KERNEL_NAME="arm64";    ;;
+    loongarch64) TARGET_BASE="loongarch64-linux"; CROSS_KERNEL_NAME="loongarch" ;;
+    riscv64)     TARGET_BASE="riscv64-linux";     CROSS_KERNEL_NAME="riscv";    ;;
+    riscv32)     TARGET_BASE="riscv32-linux";     CROSS_KERNEL_NAME="riscv";    ;;
+    i686)        TARGET_BASE="i686-linux";        CROSS_KERNEL_NAME="x86";      ;;
+    x86_64)      TARGET_BASE="x86_64-linux";      CROSS_KERNEL_NAME="x86";      ;;
+    mips64el)    TARGET_BASE="mips64el-linux";    CROSS_KERNEL_NAME="mips";     ;;
+    mipsel)      TARGET_BASE="mipsel-linux";      CROSS_KERNEL_NAME="mips";     ;;
 esac
 if [[ "$LIBC" == "glibc" ]]; then
     TARGET="${TARGET_BASE}-gnu"
 else
     TARGET="${TARGET_BASE}-musl"
 fi
+
+if [[ "$ARCH" == "mips64el" ]]; then
+    TARGET="${TARGET}abi64"
+fi
+
 info "目标三元组 (TARGET) 已设置为: $TARGET"
+
+gcc_extra_args=()
+case "$TARGET" in
+    riscv64-linux-musl|mips64el-linux-muslabi64|mipsel-linux-musl|i686-linux-musl) gcc_extra_args+=(--disable-libsanitizer) ;;
+esac
 
 glibc_extra_args=()
 case "$TARGET" in
     aarch64-linux-gnu) glibc_extra_args+=(libc_cv_slibdir=/usr/lib64) ;;
     x86_64-linux-gnu)  glibc_extra_args+=(libc_cv_slibdir=/usr/lib) ;;
+esac
+
+musl_extra_args=()
+case "$ARCH" in
+    mips64) musl_extra_args+=(--libdir=/usr/lib64) ;;
 esac
 
 # 设置默认目录
@@ -137,130 +163,32 @@ download() {
     fi
 }
 
-# 下载所需源码包
-download "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-$LINUX_VER.tar.xz"       "$DOWNLOAD_DIR/linux-$LINUX_VER.tar.xz"
-download "https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_VER.tar.xz"             "$DOWNLOAD_DIR/binutils-$BINUTILS_VER.tar.xz"
-download "https://ftp.gnu.org/gnu/gcc/gcc-$GCC_VER/gcc-$GCC_VER.tar.xz"               "$DOWNLOAD_DIR/gcc-$GCC_VER.tar.xz"
-download "https://ftp.gnu.org/gnu/libc/glibc-$GLIBC_VER.tar.xz"                       "$DOWNLOAD_DIR/glibc-$GLIBC_VER.tar.xz"
-download "https://musl.libc.org/releases/musl-$MUSL_VER.tar.gz"                       "$DOWNLOAD_DIR/musl-$MUSL_VER.tar.gz"
+step "下载源代码"
+dl_files=(
+    "https://ftp.gnu.org/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
+    "https://ftp.gnu.org/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
+    "https://ftp.gnu.org/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
+    "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
+    "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
+)
 
-# # 解压源码
-# info "解压源码包..."
-# cd "$WORK_DIR"
-# for pkg in "linux-$LINUX_VER.tar.xz" "binutils-$BINUTILS_VER.tar.xz" "gcc-$GCC_VER.tar.xz" "glibc-$GLIBC_VER.tar.xz" "musl-$MUSL_VER.tar.gz"; do
-#     srcdir="${pkg%%.*}"
-#     if [[ -d "$srcdir" ]]; then
-#         info "$srcdir 已解压"
-#     else
-#         info "解压 $pkg ..."
-#         tar xf "$DOWNLOAD_DIR/$pkg"
-#     fi
-# done
+for url in "${dl_files[@]}"; do
+    info "下载: ${url}"
+    wget -nc -q --show-progress -P "$DOWNLOAD_DIR" "$url" || error "下载失败"
+done
 
-# # 构建 Binutils
-# info "====== 构建 Binutils ======"
-# mkdir -p "$WORK_DIR/build/binutils"
-# cd "$WORK_DIR/build/binutils"
-# "$WORK_DIR/binutils-$BINUTILS_VER/configure" \
-#     --target="$TARGET" \
-#     --prefix="$PREFIX" \
-#     --disable-nls \
-#     --disable-multilib \
-#     >> "$LOG_DIR/binutils.log" 2>&1
-# make -j"$THREADS" all    >> "$LOG_DIR/binutils.log" 2>&1
-# make install            >> "$LOG_DIR/binutils.log" 2>&1
-# info "Binutils 构建完成 (日志: $LOG_DIR/binutils.log)"
-
-# # 准备 GCC 源码并下载依赖库
-# info "====== 准备 GCC 源码 ======"
-# cd "$WORK_DIR/gcc-$GCC_VER"
-# # 下载 GMP/MPFR/MPC 等依赖（放入 gcc/ 目录）
-# if [[ ! -f "gcc/BASE-VER" ]]; then
-#     ./contrib/download_prerequisites >> "$LOG_DIR/gcc-prereq.log" 2>&1
-#     info "GCC 依赖下载完成 (日志: $LOG_DIR/gcc-prereq.log)"
-# fi
-
-# # 构建初始 GCC（仅包含 C 语言，不含 libc）
-# info "====== 构建初始 GCC (无 libc) ======"
-# mkdir -p "$WORK_DIR/gcc-init-build"
-# cd "$WORK_DIR/gcc-init-build"
-# "$WORK_DIR/gcc-$GCC_VER/configure" \
-#     --target="$TARGET" \
-#     --prefix="$WORK_DIR/gcc-init" \
-#     --disable-nls \
-#     --enable-languages=c \
-#     --without-headers \
-#     --disable-shared \
-#     --disable-multilib \
-#     --disable-bootstrap \
-#     >> "$LOG_DIR/gcc-init.log" 2>&1
-# make -j"$THREADS" all-gcc       >> "$LOG_DIR/gcc-init.log" 2>&1
-# make install-gcc               >> "$LOG_DIR/gcc-init.log" 2>&1
-# info "初始 GCC 构建完成 (日志: $LOG_DIR/gcc-init.log)"
-# export PATH="$WORK_DIR/gcc-init/bin:$PATH"
-
-# # 安装 Linux 内核头文件（glibc 构建前置）
-# if [[ "$LIBC" == "glibc" ]]; then
-#     info "====== 安装 Linux 内核头文件 ======"
-#     cd "$WORK_DIR/linux-$LINUX_VER"
-#     make ARCH="$LINUX_ARCH" INSTALL_HDR_PATH="$TARGET_PREFIX" headers_install >> "$LOG_DIR/linux-headers.log" 2>&1
-#     info "内核头文件安装完成 (日志: $LOG_DIR/linux-headers.log)"
-# fi
-
-# # 构建 C 库（glibc 或 musl）
-# if [[ "$LIBC" == "glibc" ]]; then
-#     # glibc
-#     info "====== 构建 glibc ======"
-#     mkdir -p "$WORK_DIR/glibc-build"
-#     cd "$WORK_DIR/glibc-build"
-#     CC="$WORK_DIR/gcc-init/bin/${TARGET}-gcc" \
-#     CXX="$WORK_DIR/gcc-init/bin/${TARGET}-g++" \
-#     ../glibc-$GLIBC_VER/configure \
-#         --host="$TARGET" \
-#         --prefix="$TARGET_PREFIX" \
-#         --build="$(uname -m)-linux-gnu" \
-#         --with-headers="$TARGET_PREFIX/include" \
-#         --disable-shared \
-#         --disable-multilib \
-#         >> "$LOG_DIR/glibc.log" 2>&1
-#     make -j"$THREADS"             >> "$LOG_DIR/glibc.log" 2>&1
-#     make install                  >> "$LOG_DIR/glibc.log" 2>&1
-#     info "glibc 构建完成 (日志: $LOG_DIR/glibc.log)"
-# else
-#     # musl
-#     info "====== 构建 musl ======"
-#     mkdir -p "$WORK_DIR/musl-build"
-#     cd "$WORK_DIR/musl-build"
-#     CC="$WORK_DIR/gcc-init/bin/${TARGET}-gcc" \
-#     AR="$WORK_DIR/gcc-init/bin/${TARGET}-ar" \
-#     RANLIB="$WORK_DIR/gcc-init/bin/${TARGET}-ranlib" \
-#     ../musl-$MUSL_VER/configure \
-#         --prefix="$TARGET_PREFIX" \
-#         --disable-shared \
-#         >> "$LOG_DIR/musl.log" 2>&1
-#     make -j"$THREADS"            >> "$LOG_DIR/musl.log" 2>&1
-#     make install                 >> "$LOG_DIR/musl.log" 2>&1
-#     info "musl 构建完成 (日志: $LOG_DIR/musl.log)"
-# fi
-
-# # 构建最终 GCC（包含 C 和 C++，使用所选 libc）
-# info "====== 构建最终 GCC ======"
-# mkdir -p "$WORK_DIR/gcc-final-build"
-# cd "$WORK_DIR/gcc-final-build"
-# "$WORK_DIR/gcc-$GCC_VER/configure" \
-#     --target="$TARGET" \
-#     --prefix="$PREFIX" \
-#     --with-sysroot="$TARGET_PREFIX" \
-#     --enable-languages=c,c++ \
-#     --disable-multilib \
-#     --disable-nls \
-#     >> "$LOG_DIR/gcc-final.log" 2>&1
-# make -j"$THREADS" all  >> "$LOG_DIR/gcc-final.log" 2>&1
-# make install         >> "$LOG_DIR/gcc-final.log" 2>&1
-# info "最终 GCC 构建完成 (日志: $LOG_DIR/gcc-final.log)"
-
-# info "交叉编译工具链构建成功！"
-# info "工具链已安装到: $PREFIX"
+# 解压源码
+step "解压源代码"
+for url in "${dl_files[@]}"; do
+    filename=$(basename "${url}")
+    info "解压: ${filename}"
+    srcdir="${WORK_DIR}/${filename%.tar*}"
+    if [[ -d "$srcdir" ]]; then
+        info "$srcdir 已解压"
+    else
+        tar -xf ${DOWNLOAD_DIR}/${filename} -C "$WORK_DIR" || error "解压失败"
+    fi
+done
 
 # 构建函数
 build_step() {
@@ -295,7 +223,7 @@ build_step "build" "${LOG_DIR}/binutils" \
     make -j"$(nproc)"
 
 build_step "install" "${LOG_DIR}/binutils" \
-    make install
+    make install-strip
 
 # 准备 GCC 源码并下载依赖库
 step "==== 准备 GCC 源码 ==="
@@ -327,7 +255,7 @@ build_step "build" "${LOG_DIR}/gcc" \
     make -j"$(nproc)"
 
 build_step "install" "${LOG_DIR}/gcc" \
-    make install
+    make install-strip
 
 # 准备Linux头文件
 step "=== 准备Linux头文件 ==="
@@ -346,7 +274,7 @@ if [[ "$LIBC" == "glibc" ]]; then
         env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
         CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
         "../glibc-${GLIBC_VER}/configure" \
-        --build="$(dpkg-architecture -q DEB_BUILD_GNU_TYPE)" \
+        --build="$(gcc -dumpmachine)" \
         --host="$TARGET" \
         --target="$TARGET" \
         --prefix="/usr" \
@@ -367,34 +295,53 @@ else
     mkdir -p "${WORK_DIR}/build-musl"
     cd "${WORK_DIR}/build-musl" || error "无法进入构建目录"
 
+cat > ../musl-${MUSL_VER}/src/stdio/sprintf.c <<EOF
+#include <stdio.h>
+#include <stdarg.h>
+
+int sprintf(char *restrict s, const char *restrict fmt, ...)
+{
+	char buf[4096];
+	int ret;
+	va_list ap;
+	va_start(ap, fmt);
+	ret = vsprintf(buf, fmt, ap);
+	va_end(ap);
+	for (int i=0 ; i<ret + 1; i++) {
+		s[i] = buf[i];
+	}
+	return ret;
+}
+EOF
+
     build_step  "configure" "${LOG_DIR}/musl" \
         env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
         CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
         CROSS_COMPILE="${CROSS_PREFIX}/bin/${TARGET}-" \
         "../musl-${MUSL_VER}/configure" \
-        --build="$(dpkg-architecture -q DEB_BUILD_GNU_TYPE)" \
+        --build="$(gcc -dumpmachine)" \
         --host="$TARGET" \
         --target="$TARGET" \
         --prefix="/usr" \
-        --exec-prefix="/usr" \
-        --with-headers="${CROSS_PREFIX}/${TARGET}/usr/include" \
-        --with-binutils="${CROSS_PREFIX}/$TARGET/bin" \
-        --disable-multilib \
-        --without-selinux \
-        libc_cv_forced_unwind=yes "${glibc_extra_args[@]}"
+        --exec-prefix="/usr" "${musl_extra_args[@]}"
 
     build_step "build" "${LOG_DIR}/musl" \
         make -j"$(nproc)"
 
     build_step "install" "${LOG_DIR}/musl" \
         make install DESTDIR="${CROSS_PREFIX}/${TARGET}"
+
+cat > ${CROSS_PREFIX}/${TARGET}/usr/include/execinfo.h <<EOF
+#ifndef _EXECINFO_H
+#define _EXECINFO_H 1
+
+static inline int backtrace (void **__array, int __size) {return 0;}
+static inline char **backtrace_symbols (void *const *__array, int __size) {return (char**)0;}
+static inline void backtrace_symbols_fd (void *const *__array, int __size, int __fd) {}
+#endif /* execinfo.h  */
+EOF
+
 fi
-
-build_step "build" "${LOG_DIR}/glibc" \
-    make -j"$(nproc)"
-
-build_step "install" "${LOG_DIR}/glibc" \
-    make install DESTDIR="${CROSS_PREFIX}/${TARGET}"
 
 # 完整GCC构建（包含C/C++）
 step "=== 完整GCC构建 ==="
@@ -412,13 +359,13 @@ build_step "configure" "${LOG_DIR}/gcc" \
     --with-build-sysroot="${CROSS_PREFIX}/${TARGET}" \
     --enable-threads=posix \
     --enable-shared \
-    --disable-gprofng
+    --disable-gprofng "${gcc_extra_args[@]}"
 
 build_step "build" "${LOG_DIR}/gcc" \
     make -j"$(nproc)"
 
 build_step "install" "${LOG_DIR}/gcc" \
-    make install
+    make install-strip
 
 # 完成输出
 ok "=== 构建完成 ==="

@@ -172,7 +172,7 @@ build_step  "configure" "${LOG_DIR}/glibc" \
     env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
     CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
     "../glibc-${GLIBC_VER}/configure" \
-    --build="$(dpkg-architecture -q DEB_BUILD_GNU_TYPE)" \
+    --build="$(gcc -dumpmachine)" \
     --host="$TARGET" \
     --target="$TARGET" \
     --prefix="/usr" \
