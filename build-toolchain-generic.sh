@@ -372,3 +372,6 @@ ok "=== 构建完成 ==="
 echo -e "交叉编译器路径: ${GREEN}${CROSS_PREFIX}/bin${NC}"
 echo -e "系统根目录: ${GREEN}${CROSS_PREFIX}/${TARGET}${NC}"
 echo -e "日志目录: ${GREEN}${LOG_DIR}${NC}"
+
+# rm -rf ${WORK_DIR}
+
