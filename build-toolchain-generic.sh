@@ -124,7 +124,7 @@ esac
 
 musl_extra_args=()
 case "$ARCH" in
-    mips64) musl_extra_args+=(--libdir=/usr/lib64) ;;
+    mips64el) musl_extra_args+=(--libdir=/usr/lib64) ;;
 esac
 
 # 设置默认目录
