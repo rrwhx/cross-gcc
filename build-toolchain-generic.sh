@@ -298,6 +298,8 @@ else
     mkdir -p "${WORK_DIR}/build-musl"
     cd "${WORK_DIR}/build-musl" || error "无法进入构建目录"
 
+# remove arch specified string optimization
+rm -rf ../musl-${MUSL_VER}/src/string/*/
 cat > ../musl-${MUSL_VER}/src/stdio/sprintf.c <<EOF
 #include <stdio.h>
 #include <stdarg.h>
