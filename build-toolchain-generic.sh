@@ -223,7 +223,7 @@ build_step "configure" "${LOG_DIR}/binutils" \
     --disable-gprofng
 
 build_step "build" "${LOG_DIR}/binutils" \
-    make -j"$(nproc)"
+    make -j${THREADS}
 
 build_step "install" "${LOG_DIR}/binutils" \
     make install-strip
@@ -255,7 +255,7 @@ build_step "configure" "${LOG_DIR}/gcc" \
     --disable-shared --disable-threads --disable-libatomic --disable-libgomp --disable-libquadmath --disable-libssp --disable-libvtv --disable-libstdcxx
 
 build_step "build" "${LOG_DIR}/gcc" \
-    make -j"$(nproc)"
+    make -j${THREADS}
 
 build_step "install" "${LOG_DIR}/gcc" \
     make install-strip
@@ -289,7 +289,7 @@ if [[ "$LIBC" == "glibc" ]]; then
         libc_cv_forced_unwind=yes "${glibc_extra_args[@]}"
 
     build_step "build" "${LOG_DIR}/glibc" \
-        make -j"$(nproc)"
+        make -j${THREADS}
 
     build_step "install" "${LOG_DIR}/glibc" \
         make install DESTDIR="${CROSS_PREFIX}/${TARGET}"
@@ -329,7 +329,7 @@ EOF
         --exec-prefix="/usr" "${musl_extra_args[@]}"
 
     build_step "build" "${LOG_DIR}/musl" \
-        make -j"$(nproc)"
+        make -j${THREADS}
 
     build_step "install" "${LOG_DIR}/musl" \
         make install DESTDIR="${CROSS_PREFIX}/${TARGET}"
@@ -365,7 +365,7 @@ build_step "configure" "${LOG_DIR}/gcc" \
     --disable-gprofng "${gcc_extra_args[@]}"
 
 build_step "build" "${LOG_DIR}/gcc" \
-    make -j"$(nproc)"
+    make -j${THREADS}
 
 build_step "install" "${LOG_DIR}/gcc" \
     make install-strip
