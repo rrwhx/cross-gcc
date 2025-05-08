@@ -37,7 +37,7 @@ THREADS="$(nproc)"  # 默认并行构建线程数
 usage() {
     cat <<EOF
 用法: $(basename "$0") --arch ARCH --libc LIBC [选项]
-  --arch         目标架构 (aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mipsel|mips64el)
+  --arch         目标架构 (aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el)
   --libc         libc 类型 (glibc|musl)
   --download-dir 源码下载目录 (默认: ./download)
   --work-dir     构建工作目录 (默认: ./build)
@@ -77,7 +77,7 @@ LIBC=$(echo "$LIBC" | tr '[:upper:]' '[:lower:]')
 
 # 验证参数合法性
 case "$ARCH" in
-    aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mipsel|mips64el) ;;
+    aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el) ;;
     *) error "不支持的架构: $ARCH"; exit 1;;
 esac
 case "$LIBC" in
@@ -96,8 +96,10 @@ case "$ARCH" in
     riscv32)     TARGET_BASE="riscv32-linux";     CROSS_KERNEL_NAME="riscv";    ;;
     i686)        TARGET_BASE="i686-linux";        CROSS_KERNEL_NAME="x86";      ;;
     x86_64)      TARGET_BASE="x86_64-linux";      CROSS_KERNEL_NAME="x86";      ;;
-    mips64el)    TARGET_BASE="mips64el-linux";    CROSS_KERNEL_NAME="mips";     ;;
+    mips)        TARGET_BASE="mips-linux";        CROSS_KERNEL_NAME="mips";     ;;
     mipsel)      TARGET_BASE="mipsel-linux";      CROSS_KERNEL_NAME="mips";     ;;
+    mips64)      TARGET_BASE="mips64-linux";      CROSS_KERNEL_NAME="mips";     ;;
+    mips64el)    TARGET_BASE="mips64el-linux";    CROSS_KERNEL_NAME="mips";     ;;
 esac
 if [[ "$LIBC" == "glibc" ]]; then
     TARGET="${TARGET_BASE}-gnu"
@@ -105,7 +107,7 @@ else
     TARGET="${TARGET_BASE}-musl"
 fi
 
-if [[ "$ARCH" == "mips64el" ]]; then
+if [[ "$ARCH" == mips64* ]]; then
     TARGET="${TARGET}abi64"
 fi
 
@@ -113,7 +115,7 @@ info "目标三元组 (TARGET) 已设置为: $TARGET"
 
 gcc_extra_args=()
 case "$TARGET" in
-    riscv64-linux-musl|mips64el-linux-muslabi64|mipsel-linux-musl|i686-linux-musl) gcc_extra_args+=(--disable-libsanitizer) ;;
+    riscv64-linux-musl|mips64el-linux-muslabi64|mips64-linux-muslabi64|mipsel-linux-musl|mips-linux-musl|i686-linux-musl) gcc_extra_args+=(--disable-libsanitizer) ;;
 esac
 
 glibc_extra_args=()
@@ -125,6 +127,7 @@ esac
 musl_extra_args=()
 case "$ARCH" in
     mips64el) musl_extra_args+=(--libdir=/usr/lib64) ;;
+    mips64) musl_extra_args+=(--libdir=/usr/lib64) ;;
 esac
 
 # 设置默认目录
