@@ -77,7 +77,7 @@ LIBC=$(echo "$LIBC" | tr '[:upper:]' '[:lower:]')
 
 # 验证参数合法性
 case "$ARCH" in
-    aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el) ;;
+    arm|aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el) ;;
     *) error "不支持的架构: $ARCH"; exit 1;;
 esac
 case "$LIBC" in
@@ -90,6 +90,7 @@ info "libc 类型: $LIBC"
 
 # 根据架构和 libc 设置 TARGET 三元组
 case "$ARCH" in
+    arm)         TARGET_BASE="arm-linux";         CROSS_KERNEL_NAME="arm";      ;;
     aarch64)     TARGET_BASE="aarch64-linux";     CROSS_KERNEL_NAME="arm64";    ;;
     loongarch64) TARGET_BASE="loongarch64-linux"; CROSS_KERNEL_NAME="loongarch" ;;
     riscv64)     TARGET_BASE="riscv64-linux";     CROSS_KERNEL_NAME="riscv";    ;;
@@ -111,11 +112,15 @@ if [[ "$ARCH" == mips64* ]]; then
     TARGET="${TARGET}abi64"
 fi
 
+if [[ "$ARCH" == "arm" ]]; then
+    TARGET="${TARGET}eabihf"
+fi
+
 info "目标三元组 (TARGET) 已设置为: $TARGET"
 
 gcc_extra_args=()
 case "$TARGET" in
-    riscv64-linux-musl|mips64el-linux-muslabi64|mips64-linux-muslabi64|mipsel-linux-musl|mips-linux-musl|i686-linux-musl) gcc_extra_args+=(--disable-libsanitizer) ;;
+    riscv64-linux-musl|mips64el-linux-muslabi64|mips64-linux-muslabi64|mipsel-linux-musl|mips-linux-musl|i686-linux-musl|arm-linux-musleabihf) gcc_extra_args+=(--disable-libsanitizer) ;;
 esac
 
 glibc_extra_args=()
