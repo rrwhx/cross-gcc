@@ -237,9 +237,10 @@ build_step "install" "${LOG_DIR}/binutils" \
 step "==== 准备 GCC 源码 ==="
 cd "$WORK_DIR/gcc-$GCC_VER" || error "无法进入构建目录"
 # 下载 GMP/MPFR/MPC 等依赖（放入 gcc/ 目录）
-if [[ ! -f "gcc/BASE-VER" ]]; then
-    ./contrib/download_prerequisites >> "$LOG_DIR/gcc-prereq.log" 2>&1
-    info "GCC 依赖下载完成 (日志: $LOG_DIR/gcc-prereq.log)"
+if [[ ! -f "prereq_done" ]]; then
+    build_step "gcc_download_prerequisites" "${LOG_DIR}/gcc" ./contrib/download_prerequisites
+    info "GCC 依赖下载完成 (日志: $LOG_DIR/gcc)"
+    touch prereq_done
 fi
 
 # 初始GCC构建（仅支持C语言）
