@@ -179,6 +179,13 @@ dl_files=(
     "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
     "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
 )
+dl_files=(
+    "https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
+    "https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
+    "https://mirrors.tuna.tsinghua.edu.cn/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
+    "https://mirrors.tuna.tsinghua.edu.cn/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
+    "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
+)
 
 for url in "${dl_files[@]}"; do
     info "下载: ${url}"
