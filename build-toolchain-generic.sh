@@ -36,7 +36,7 @@ LINUX_VER="6.14"
 
 # 初始化参数
 ARCH=""; LIBC=""
-DOWNLOAD_DIR=""; WORK_DIR=""; LOG_DIR=""; PREFIX_DIR="" 
+DOWNLOAD_DIR=""; WORK_DIR=""; LOG_DIR=""; PREFIX_DIR=""
 THREADS="$(nproc)"  # 默认并行构建线程数
 
 # 显示用法
