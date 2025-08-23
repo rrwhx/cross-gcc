@@ -6,17 +6,6 @@ if [ ! -f "./contrib/download_prerequisites" ]; then
     exit 1
 fi
 
-# 解析版本信息
-parse_versions() {
-    while IFS='=' read -r lib filename; do
-        # 去除单引号
-        filename="${filename//\'/}"
-        # 将变量导出到全局作用域
-        declare -g "${lib}_file"="$filename"
-        echo "检测到依赖: $lib = $filename"
-    done < <(grep -E "^(gmp|mpfr|mpc|isl|gettext)='" ./contrib/download_prerequisites)
-}
-
 # 检查压缩包完整性
 check_archive_integrity() {
     local filename="$1"
@@ -115,30 +104,18 @@ download_file() {
     return 1
 }
 
-# 主流程
-parse_versions
-
-# 检查所有变量是否已正确设置
-if [[ -z "${gmp_file}" || -z "${mpfr_file}" || -z "${mpc_file}" || -z "${isl_file}" || -z "${gettext_file}" ]]; then
-    echo "错误: 未能解析所有依赖版本信息"
-    exit 1
-fi
-
-# 定义下载源
-declare -A mirrors=(
-    [gmp]="https://mirrors.tuna.tsinghua.edu.cn/gnu/gmp/${gmp_file}"
-    [mpfr]="https://mirrors.tuna.tsinghua.edu.cn/gnu/mpfr/${mpfr_file}"
-    [mpc]="https://mirrors.tuna.tsinghua.edu.cn/gnu/mpc/${mpc_file}"
-    [gettext]="https://mirrors.tuna.tsinghua.edu.cn/gnu/gettext/${gettext_file}"
-    [isl]="https://libisl.sourceforge.io/${isl_file}"
-)
+    gmp_file=$(grep "^gmp="     ./contrib/download_prerequisites | grep "gmp-.*tar.bz2" -o)
+   mpfr_file=$(grep "^mpfr="    ./contrib/download_prerequisites | grep "mpfr-.*tar.bz2" -o)
+    mpc_file=$(grep "^mpc="     ./contrib/download_prerequisites | grep "mpc-.*tar.gz" -o)
+    isl_file=$(grep "^isl="     ./contrib/download_prerequisites | grep "isl-.*tar.bz2" -o)
+gettext_file=$(grep "^gettext=" ./contrib/download_prerequisites | grep "gettext-.*tar.gz" -o)
 
 # 下载所有文件
-download_file "${mirrors[gmp]}" "$gmp_file" || exit 1
-download_file "${mirrors[mpfr]}" "$mpfr_file" || exit 1
-download_file "${mirrors[mpc]}" "$mpc_file" || exit 1
-download_file "${mirrors[gettext]}" "$gettext_file" || exit 1
-download_file "${mirrors[isl]}" "$isl_file" || exit 1
+download_file "https://mirrors.tuna.tsinghua.edu.cn/gnu/gmp/${gmp_file}" "$gmp_file" || exit 1
+download_file "https://mirrors.tuna.tsinghua.edu.cn/gnu/mpfr/${mpfr_file}" "$mpfr_file" || exit 1
+download_file "https://mirrors.tuna.tsinghua.edu.cn/gnu/mpc/${mpc_file}" "$mpc_file" || exit 1
+download_file "https://mirrors.tuna.tsinghua.edu.cn/gnu/gettext/${gettext_file}" "$gettext_file" || exit 1
+download_file "https://libisl.sourceforge.io/${isl_file}" "$isl_file" || exit 1
 
 # 运行原始脚本（跳过下载）
 echo "运行 ./contrib/download_prerequisites (跳过下载)..."
