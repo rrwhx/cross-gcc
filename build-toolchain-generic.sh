@@ -389,7 +389,7 @@ build_step "build" "${LOG_DIR}/gcc" \
     make -j${THREADS}
 
 build_step "install" "${LOG_DIR}/gcc" \
-    make install-strip
+    make install-strip-host install-target
 
 # 完成输出
 ok "=== 构建完成 ==="
