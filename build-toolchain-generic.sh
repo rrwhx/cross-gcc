@@ -33,6 +33,8 @@ LINUX_VER="6.14"
 ARCH=""; LIBC=""
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; PREFIX_DIR=""
 THREADS="$(nproc || sysctl -n hw.logicalcpu_max 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
+CLEAN_BUILD=false
+ARCHIVE_RESULT=false
 
 # 显示用法
 usage() {
@@ -53,6 +55,10 @@ usage() {
   --glibc-ver    glibc 版本 (默认: $GLIBC_VER)
   --musl-ver     musl 版本 (默认: $MUSL_VER)
   --linux-ver    linux 内核版本 (默认: $LINUX_VER)
+
+构建后处理选项:
+  --clean        构建完成后删除构建目录
+  --archive      构建完成后将工具链打包成 tar.xz 并删除原目录
 
   -h,--help      显示帮助
 示例:
@@ -78,6 +84,8 @@ while [[ $# -gt 0 ]]; do
         --glibc-ver)   GLIBC_VER="$2"; shift 2;;
         --musl-ver)    MUSL_VER="$2"; shift 2;;
         --linux-ver)   LINUX_VER="$2"; shift 2;;
+        --clean)       CLEAN_BUILD=true; shift;;
+        --archive)     ARCHIVE_RESULT=true; shift;;
         -h|--help)     usage;;
         *)             error "未知选项: $1"; usage;;
     esac
@@ -458,5 +466,42 @@ echo -e "交叉编译器路径: ${GREEN}${CROSS_PREFIX}/bin${NC}"
 echo -e "系统根目录: ${GREEN}${CROSS_PREFIX}/${TARGET}${NC}"
 echo -e "日志目录: ${GREEN}${LOG_DIR}${NC}"
 
-# rm -rf ${WORK_DIR}
+# 构建后处理
+if [[ "$CLEAN_BUILD" == true ]]; then
+    step "=== 清理构建目录 ==="
+    if [[ -d "$BUILD_DIR" ]]; then
+        info "删除构建目录: $BUILD_DIR"
+        rm -rf "$BUILD_DIR"
+        ok "构建目录清理完成"
+    else
+        warn "构建目录不存在，跳过清理"
+    fi
+fi
 
+if [[ "$ARCHIVE_RESULT" == true ]]; then
+    step "=== 打包工具链 ==="
+    if [[ -d "$CROSS_PREFIX" ]]; then
+        # 获取工具链目录的父目录和目录名
+        PARENT_DIR="$(dirname "$CROSS_PREFIX")"
+        TOOLCHAIN_NAME="$(basename "$CROSS_PREFIX")"
+        ARCHIVE_NAME="$PARENT_DIR/${TOOLCHAIN_NAME}.tar.xz"
+
+        info "打包工具链到: $ARCHIVE_NAME"
+
+        # 使用 tar 的 -C 选项指定工作目录，避免 cd
+        if tar -cJf "$ARCHIVE_NAME" -C "$PARENT_DIR" "$TOOLCHAIN_NAME" 2>/dev/null; then
+            ok "工具链打包完成: $ARCHIVE_NAME"
+
+            # 删除原目录
+            info "删除原工具链目录: $CROSS_PREFIX"
+            rm -rf "$CROSS_PREFIX"
+            ok "原目录删除完成"
+
+            echo -e "打包文件: ${GREEN}$ARCHIVE_NAME${NC}"
+        else
+            error "打包失败"
+        fi
+    else
+        warn "工具链目录不存在，跳过打包"
+    fi
+fi
