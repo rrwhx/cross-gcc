@@ -166,6 +166,12 @@ SRC_DIR="${SRC_DIR:-$DOWNLOAD_DIR}"
 BUILD_DIR="${BUILD_DIR:-$PWD/build-$TARGET}"
 LOG_DIR="${LOG_DIR:-$PWD/logs-$TARGET}"
 PREFIX_DIR="${PREFIX_DIR:-$PWD/cross-$TARGET}"
+
+DOWNLOAD_DIR=$(realpath "$DOWNLOAD_DIR")
+SRC_DIR=$(realpath "$SRC_DIR")
+BUILD_DIR=$(realpath "$BUILD_DIR")
+LOG_DIR=$(realpath "$LOG_DIR")
+PREFIX_DIR=$(realpath "$PREFIX_DIR")
 mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$PREFIX_DIR"
 
 # 设置 GCC 源码目录
