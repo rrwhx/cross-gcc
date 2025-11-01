@@ -31,7 +31,7 @@ LINUX_VER="6.14"
 
 # 初始化参数
 ARCH=""; LIBC=""
-DOWNLOAD_DIR=""; WORK_DIR=""; LOG_DIR=""; PREFIX_DIR=""
+DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; PREFIX_DIR=""
 THREADS="$(nproc || sysctl -n hw.logicalcpu_max 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
 
 # 显示用法
@@ -40,10 +40,11 @@ usage() {
 用法: $(basename "$0") --arch ARCH --libc LIBC [选项]
   --arch         目标架构 (aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el)
   --libc         libc 类型 (glibc|musl)
-  --download-dir 源码下载目录 (默认: ./download)
-  --work-dir     构建工作目录 (默认: ./build)
-  --log-dir      日志目录 (默认: ./logs)
-  --cross-prefix 工具链安装前缀 (默认: ./cross)
+  --download-dir 源码下载目录 (默认: ./downloads)
+  --src-dir      源码解压目录 (默认: 与 download-dir 相同)
+  --build-dir    构建工作目录 (默认: ./build-TARGET)
+  --log-dir      日志目录 (默认: ./logs-TARGET)
+  --cross-prefix 工具链安装前缀 (默认: ./cross-TARGET)
   --threads      构建线程数 (默认: $(nproc))
 
 版本控制选项:
@@ -67,7 +68,8 @@ while [[ $# -gt 0 ]]; do
         --arch)        ARCH="$2"; shift 2;;
         --libc)        LIBC="$2"; shift 2;;
         --download-dir)DOWNLOAD_DIR="$2"; shift 2;;
-        --work-dir)    WORK_DIR="$2"; shift 2;;
+        --src-dir)     SRC_DIR="$2"; shift 2;;
+        --build-dir)   BUILD_DIR="$2"; shift 2;;
         --log-dir)     LOG_DIR="$2"; shift 2;;
         --cross-prefix)PREFIX_DIR="$2"; shift 2;;
         --threads)     THREADS="$2"; shift 2;;
@@ -160,10 +162,32 @@ esac
 
 # 设置默认目录
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-$PWD/downloads}"
-WORK_DIR="${WORK_DIR:-$PWD/build-$TARGET}"
+SRC_DIR="${SRC_DIR:-$DOWNLOAD_DIR}"
+BUILD_DIR="${BUILD_DIR:-$PWD/build-$TARGET}"
 LOG_DIR="${LOG_DIR:-$PWD/logs-$TARGET}"
 PREFIX_DIR="${PREFIX_DIR:-$PWD/cross-$TARGET}"
-mkdir -p "$DOWNLOAD_DIR" "$WORK_DIR" "$LOG_DIR" "$PREFIX_DIR"
+mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$PREFIX_DIR"
+
+# 设置 GCC 源码目录
+if [[ "$GCC_VER" == "git" ]]; then
+    GCC_SRC_DIR="gcc"
+else
+    GCC_SRC_DIR="gcc-${GCC_VER}"
+fi
+
+# 设置各组件源码目录
+SRC_DIR_BINUTILS="$SRC_DIR/binutils-${BINUTILS_VER}"
+SRC_DIR_GCC="$SRC_DIR/$GCC_SRC_DIR"
+SRC_DIR_GLIBC="$SRC_DIR/glibc-${GLIBC_VER}"
+SRC_DIR_MUSL="$SRC_DIR/musl-${MUSL_VER}"
+SRC_DIR_LINUX="$SRC_DIR/linux-${LINUX_VER}"
+
+# 设置各组件构建目录
+BUILD_DIR_BINUTILS="$BUILD_DIR/build-binutils"
+BUILD_DIR_GCC_INITIAL="$BUILD_DIR/build-gcc-initial"
+BUILD_DIR_GCC_FINAL="$BUILD_DIR/build-gcc-final"
+BUILD_DIR_GLIBC="$BUILD_DIR/build-glibc"
+BUILD_DIR_MUSL="$BUILD_DIR/build-musl"
 
 # 设置安装前缀和目标 sysroot
 CROSS_PREFIX="$PREFIX_DIR"
@@ -172,7 +196,8 @@ mkdir -p "$TARGET_PREFIX"
 info "工具链安装前缀: $CROSS_PREFIX"
 info "目标 sysroot: $TARGET_PREFIX"
 info "下载目录: $DOWNLOAD_DIR"
-info "工作目录: $WORK_DIR"
+info "源码目录: $SRC_DIR"
+info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
 info "构建线程数: $THREADS"
 
@@ -211,12 +236,12 @@ dl_files=(
 )
 
 if [[ "$GCC_VER" == "git" ]]; then
-    if [[ ! -d "${WORK_DIR}/gcc-${GCC_VER}" ]]; then
+    if [[ ! -d "$SRC_DIR_GCC" ]]; then
         step "克隆 GCC 仓库"
         if ! command -v git &> /dev/null; then
             error "git 未安装，无法克隆 GCC 仓库"
         fi
-        git clone --depth 1 https://mirrors.tuna.tsinghua.edu.cn/git/gcc.git "${WORK_DIR}/gcc-${GCC_VER}" || error "克隆 GCC 失败"
+        git clone --depth 1 https://mirrors.tuna.tsinghua.edu.cn/git/gcc.git "$SRC_DIR_GCC" || error "克隆 GCC 失败"
     else
         info "GCC 源码目录已存在，跳过克隆"
     fi
@@ -233,11 +258,11 @@ step "解压源代码"
 for url in "${dl_files[@]}"; do
     filename=$(basename "${url}")
     info "解压: ${filename}"
-    srcdir="${WORK_DIR}/${filename%.tar*}"
+    srcdir="$SRC_DIR/${filename%.tar*}"
     if [[ -d "$srcdir" ]]; then
         info "$srcdir 已解压"
     else
-        tar -xf ${DOWNLOAD_DIR}/${filename} -C "$WORK_DIR" || error "解压失败"
+        tar -xf ${DOWNLOAD_DIR}/${filename} -C "$SRC_DIR" || error "解压失败"
     fi
 done
 
@@ -258,11 +283,11 @@ build_step() {
 
 # 构建Binutils
 step "=== 构建 Binutils ==="
-mkdir -p "${WORK_DIR}/build-binutils"
-cd "${WORK_DIR}/build-binutils" || error "无法进入构建目录"
+mkdir -p "$BUILD_DIR_BINUTILS"
+cd "$BUILD_DIR_BINUTILS" || error "无法进入构建目录"
 
 build_step "configure" "${LOG_DIR}/binutils" \
-    "../binutils-${BINUTILS_VER}/configure" \
+    "$SRC_DIR_BINUTILS/configure" \
     --target="$TARGET" \
     --prefix="$CROSS_PREFIX" \
     --disable-multilib \
@@ -278,7 +303,7 @@ build_step "install" "${LOG_DIR}/binutils" \
 
 # 准备 GCC 源码并下载依赖库
 step "==== 准备 GCC 源码 ==="
-cd "$WORK_DIR/gcc-${GCC_VER}" || error "无法进入构建目录"
+cd "$SRC_DIR_GCC" || error "无法进入构建目录"
 # 下载 GMP/MPFR/MPC 等依赖（放入 gcc/ 目录）
 if [[ ! -f "prereq_done" ]]; then
     build_step "gcc_download_prerequisites" "${LOG_DIR}/gcc" ../../prepare_gcc.sh
@@ -288,11 +313,11 @@ fi
 
 # 初始GCC构建（仅支持C语言）
 step "=== 初始GCC构建 ==="
-mkdir -p "${WORK_DIR}/build-gcc-initial"
-cd "${WORK_DIR}/build-gcc-initial" || error "无法进入构建目录"
+mkdir -p "$BUILD_DIR_GCC_INITIAL"
+cd "$BUILD_DIR_GCC_INITIAL" || error "无法进入构建目录"
 
 build_step "configure" "${LOG_DIR}/gcc" \
-    "../gcc-${GCC_VER}/configure" \
+    "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
     --prefix="$CROSS_PREFIX" \
     --disable-multilib \
@@ -311,7 +336,7 @@ build_step "install" "${LOG_DIR}/gcc" \
 
 # 准备Linux头文件
 step "=== 准备Linux头文件 ==="
-cd "${WORK_DIR}/linux-${LINUX_VER}" || error "无法进入Linux源码目录"
+cd "$SRC_DIR_LINUX" || error "无法进入Linux源码目录"
 build_step "headers" "${LOG_DIR}/glibc" \
     make ARCH="${CROSS_KERNEL_NAME}" INSTALL_HDR_PATH="${CROSS_PREFIX}/${TARGET}/usr" headers_install
 
@@ -319,13 +344,13 @@ build_step "headers" "${LOG_DIR}/glibc" \
 if [[ "$LIBC" == "glibc" ]]; then
     # 构建glibc
     step "=== 构建 glibc ==="
-    mkdir -p "${WORK_DIR}/build-glibc"
-    cd "${WORK_DIR}/build-glibc" || error "无法进入构建目录"
+    mkdir -p "$BUILD_DIR_GLIBC"
+    cd "$BUILD_DIR_GLIBC" || error "无法进入构建目录"
 
     build_step  "configure" "${LOG_DIR}/glibc" \
         env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
         CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
-        "../glibc-${GLIBC_VER}/configure" \
+        "$SRC_DIR_GLIBC/configure" \
         --build="$(gcc -dumpmachine)" \
         --host="$TARGET" \
         --target="$TARGET" \
@@ -344,12 +369,12 @@ if [[ "$LIBC" == "glibc" ]]; then
         make install DESTDIR="${CROSS_PREFIX}/${TARGET}"
 else
     step "=== 构建 musl ==="
-    mkdir -p "${WORK_DIR}/build-musl"
-    cd "${WORK_DIR}/build-musl" || error "无法进入构建目录"
+    mkdir -p "$BUILD_DIR_MUSL"
+    cd "$BUILD_DIR_MUSL" || error "无法进入构建目录"
 
 # remove arch specified string optimization
-rm -rf ../musl-${MUSL_VER}/src/string/*/
-cat > ../musl-${MUSL_VER}/src/stdio/sprintf.c <<EOF
+rm -rf "$SRC_DIR_MUSL/src/string/"*/
+cat > "$SRC_DIR_MUSL/src/stdio/sprintf.c" <<EOF
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -372,7 +397,7 @@ EOF
         env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
         CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
         CROSS_COMPILE="${CROSS_PREFIX}/bin/${TARGET}-" \
-        "../musl-${MUSL_VER}/configure" \
+        "$SRC_DIR_MUSL/configure" \
         --build="$(gcc -dumpmachine)" \
         --host="$TARGET" \
         --target="$TARGET" \
@@ -399,11 +424,11 @@ fi
 
 # 完整GCC构建（包含C/C++）
 step "=== 完整GCC构建 ==="
-mkdir -p "${WORK_DIR}/build-gcc-final"
-cd "${WORK_DIR}/build-gcc-final" || error "无法进入构建目录"
+mkdir -p "$BUILD_DIR_GCC_FINAL"
+cd "$BUILD_DIR_GCC_FINAL" || error "无法进入构建目录"
 
 build_step "configure" "${LOG_DIR}/gcc" \
-    "../gcc-${GCC_VER}/configure" \
+    "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
     --prefix="$CROSS_PREFIX" \
     --disable-multilib \
