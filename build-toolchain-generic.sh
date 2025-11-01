@@ -48,7 +48,7 @@ usage() {
 
 版本控制选项:
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
-  --gcc-ver      gcc 版本 (默认: $GCC_VER)
+  --gcc-ver      gcc 版本 (默认: $GCC_VER, 支持 'git' 使用最新开发版)
   --glibc-ver    glibc 版本 (默认: $GLIBC_VER)
   --musl-ver     musl 版本 (默认: $MUSL_VER)
   --linux-ver    linux 内核版本 (默认: $LINUX_VER)
@@ -210,6 +210,19 @@ dl_files=(
     "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
 )
 
+if [[ "$GCC_VER" == "git" ]]; then
+    if [[ ! -d "${WORK_DIR}/gcc-${GCC_VER}" ]]; then
+        step "克隆 GCC 仓库"
+        if ! command -v git &> /dev/null; then
+            error "git 未安装，无法克隆 GCC 仓库"
+        fi
+        git clone --depth 1 https://mirrors.tuna.tsinghua.edu.cn/git/gcc.git "${WORK_DIR}/gcc-${GCC_VER}" || error "克隆 GCC 失败"
+    else
+        info "GCC 源码目录已存在，跳过克隆"
+    fi
+    unset 'dl_files[1]'  # 删除索引1（gcc）
+fi
+
 for url in "${dl_files[@]}"; do
     info "下载: ${url}"
     wget -nc -q --show-progress -P "$DOWNLOAD_DIR" "$url" || error "下载失败"
@@ -265,7 +278,7 @@ build_step "install" "${LOG_DIR}/binutils" \
 
 # 准备 GCC 源码并下载依赖库
 step "==== 准备 GCC 源码 ==="
-cd "$WORK_DIR/gcc-$GCC_VER" || error "无法进入构建目录"
+cd "$WORK_DIR/gcc-${GCC_VER}" || error "无法进入构建目录"
 # 下载 GMP/MPFR/MPC 等依赖（放入 gcc/ 目录）
 if [[ ! -f "prereq_done" ]]; then
     build_step "gcc_download_prerequisites" "${LOG_DIR}/gcc" ../../prepare_gcc.sh
