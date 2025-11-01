@@ -22,12 +22,7 @@ warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 # 捕获错误并提示
 trap 'error "错误发生在脚本第 ${LINENO} 行，详细信息请查看日志。"; exit 1' ERR
 
-BINUTILS_VER="2.44"
-GCC_VER="15.1.0"
-GLIBC_VER="2.41"
-MUSL_VER="1.2.5"
-LINUX_VER="6.14"
-
+# 默认版本设置
 BINUTILS_VER="2.45"
 GCC_VER="15.2.0"
 GLIBC_VER="2.42"
@@ -50,9 +45,18 @@ usage() {
   --log-dir      日志目录 (默认: ./logs)
   --cross-prefix 工具链安装前缀 (默认: ./cross)
   --threads      构建线程数 (默认: $(nproc))
+
+版本控制选项:
+  --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
+  --gcc-ver      gcc 版本 (默认: $GCC_VER)
+  --glibc-ver    glibc 版本 (默认: $GLIBC_VER)
+  --musl-ver     musl 版本 (默认: $MUSL_VER)
+  --linux-ver    linux 内核版本 (默认: $LINUX_VER)
+
   -h,--help      显示帮助
 示例:
   $(basename "$0") --arch aarch64 --libc glibc
+  $(basename "$0") --arch riscv64 --libc musl --gcc-ver 14.2.0 --linux-ver 6.12
 EOF
     exit 1
 }
@@ -67,6 +71,11 @@ while [[ $# -gt 0 ]]; do
         --log-dir)     LOG_DIR="$2"; shift 2;;
         --cross-prefix)PREFIX_DIR="$2"; shift 2;;
         --threads)     THREADS="$2"; shift 2;;
+        --binutils-ver)BINUTILS_VER="$2"; shift 2;;
+        --gcc-ver)     GCC_VER="$2"; shift 2;;
+        --glibc-ver)   GLIBC_VER="$2"; shift 2;;
+        --musl-ver)    MUSL_VER="$2"; shift 2;;
+        --linux-ver)   LINUX_VER="$2"; shift 2;;
         -h|--help)     usage;;
         *)             error "未知选项: $1"; usage;;
     esac
@@ -93,6 +102,14 @@ esac
 
 info "目标架构: $ARCH"
 info "libc 类型: $LIBC"
+
+# 显示版本信息
+info "=== 组件版本信息 ==="
+info "Binutils 版本: $BINUTILS_VER"
+info "GCC 版本: $GCC_VER"
+info "Glibc 版本: $GLIBC_VER"
+info "Musl 版本: $MUSL_VER"
+info "Linux 内核版本: $LINUX_VER"
 
 # 根据架构和 libc 设置 TARGET 三元组
 case "$ARCH" in
