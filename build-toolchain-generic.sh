@@ -4,6 +4,15 @@
 
 set -euo pipefail
 
+# 获取脚本的绝对路径（在脚本开始时就确定）
+if command -v readlink >/dev/null 2>&1; then
+    SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+else
+    # macOS 兼容性处理
+    SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+fi
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -320,7 +329,7 @@ step "==== 准备 GCC 源码 ==="
 cd "$SRC_DIR_GCC" || error "无法进入构建目录"
 # 下载 GMP/MPFR/MPC 等依赖（放入 gcc/ 目录）
 if [[ ! -f "prereq_done" ]]; then
-    build_step "gcc_download_prerequisites" "${LOG_DIR}/gcc" ../../prepare_gcc.sh
+    build_step "gcc_download_prerequisites" "${LOG_DIR}/gcc" "${SCRIPT_DIR}/prepare_gcc.sh"
     info "GCC 依赖下载完成 (日志: $LOG_DIR/gcc)"
     touch prereq_done
 fi
