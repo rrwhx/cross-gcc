@@ -66,7 +66,7 @@ usage() {
   --linux-ver    linux 内核版本 (默认: $LINUX_VER)
 
 构建后处理选项:
-  --clean        构建完成后删除构建目录
+  --clean        构建完成后删除构建目录和日志目录
   --archive      构建完成后将工具链打包成 tar.xz 并删除原目录
 
   -h,--help      显示帮助
@@ -477,13 +477,14 @@ echo -e "日志目录: ${GREEN}${LOG_DIR}${NC}"
 
 # 构建后处理
 if [[ "$CLEAN_BUILD" == true ]]; then
-    step "=== 清理构建目录 ==="
+    step "=== 清理构建目录和日志目录 ==="
     if [[ -d "$BUILD_DIR" ]]; then
-        info "删除构建目录: $BUILD_DIR"
+        info "删除构建目录和日志目录: $BUILD_DIR $LOG_DIR"
         rm -rf "$BUILD_DIR"
-        ok "构建目录清理完成"
+        rm -rf "$LOG_DIR"
+        ok "构建目录和日志目录清理完成"
     else
-        warn "构建目录不存在，跳过清理"
+        warn "构建目录和日志目录不存在，跳过清理"
     fi
 fi
 
