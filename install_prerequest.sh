@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
-#!/bin/bash
+#!/usr/bin/env bash
 
 # 检测系统包管理器
 if command -v apt-get &> /dev/null; then

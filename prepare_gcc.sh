@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # 检查 download_prerequisites 文件是否存在
 if [ ! -f "./contrib/download_prerequisites" ]; then
