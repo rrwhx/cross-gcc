@@ -46,7 +46,7 @@ export PATH="${CROSS_PREFIX}/bin:${PATH}"
 BINUTILS_VER="2.44"   # 修正版本号
 GCC_VER="15.1.0"
 GLIBC_VER="2.41"
-LINUX_VER="6.14"
+LINUX_VER="6.17.6"
 
 # 初始化目录
 step "创建目录结构"
