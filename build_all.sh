@@ -7,6 +7,7 @@ declare -a default_libc_list=("glibc" "musl")
 # 初始化可配置的变量
 declare -a arch_list=()
 declare -a libc_list=()
+declare -a extra_args=()
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -22,16 +23,24 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help|-h)
-            echo "用法: $0 [选项]"
+            echo "用法: $0 [选项] [其他选项传递给 build-toolchain-generic.sh]"
             echo "选项:"
             echo "  -a, --arch <架构列表>      指定架构（逗号分隔），默认: ${default_arch_list[*]}"
             echo "  -l, --libc <libc列表>      指定libc类型（逗号分隔），默认: ${default_libc_list[*]}"
             echo "  -h, --help                 显示帮助信息"
+            echo ""
+            echo "其他选项将直接传递给 build-toolchain-generic.sh，例如："
+            echo "  --binutils-ver, --gcc-ver, --glibc-ver, --musl-ver, --linux-ver"
+            echo "  --clean, --archive, --threads, --download-dir, 等等"
+            echo ""
+            echo "示例:"
+            echo "  $0 --arch aarch64,riscv64 --libc glibc --gcc-ver 14.2.0 --clean"
             exit 0
             ;;
         *)
-            echo "错误：未知选项 '$1'，使用 --help 查看帮助"
-            exit 1
+            # 将未识别的参数添加到额外参数列表中
+            extra_args+=("$1")
+            shift
             ;;
     esac
 done
@@ -53,7 +62,7 @@ for arch in "${arch_list[@]}"; do
         echo "[INFO] 开始构建工具链：ARCH=$arch, LIBC=$libc"
         echo "======================================================================"
 
-        if ./build-toolchain-generic.sh --arch "$arch" --libc "$libc"; then
+        if ./build-toolchain-generic.sh --arch "$arch" --libc "$libc" "${extra_args[@]}"; then
             echo "[OK] 构建成功：ARCH=$arch, LIBC=$libc"
         else
             echo "[ERROR] 构建失败：ARCH=$arch, LIBC=$libc"
