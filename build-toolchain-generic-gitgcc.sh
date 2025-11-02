@@ -25,12 +25,12 @@ trap 'error "错误发生在脚本第 ${LINENO} 行，详细信息请查看日�
 BINUTILS_VER="2.44"
 GLIBC_VER="2.41"
 MUSL_VER="1.2.5"
-LINUX_VER="6.14"
+LINUX_VER="6.17.6"
 
 BINUTILS_VER="2.45"
 GLIBC_VER="2.42"
 MUSL_VER="1.2.5"
-LINUX_VER="6.14"
+LINUX_VER="6.17.6"
 
 # 初始化参数
 ARCH=""; LIBC=""
