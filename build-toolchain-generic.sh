@@ -212,6 +212,12 @@ BUILD_DIR_GCC_FINAL="$BUILD_DIR/build-gcc-final"
 BUILD_DIR_GLIBC="$BUILD_DIR/build-glibc"
 BUILD_DIR_MUSL="$BUILD_DIR/build-musl"
 
+LOG_DIR_BINUTILS="$LOG_DIR/binutils"
+LOG_DIR_GCC_INITIAL="$LOG_DIR/gcc-initial"
+LOG_DIR_GCC_FINAL="$LOG_DIR/gcc-final"
+LOG_DIR_GLIBC="$LOG_DIR/glibc"
+LOG_DIR_MUSL="$LOG_DIR/musl"
+
 # 设置安装前缀和目标 sysroot
 CROSS_PREFIX="$PREFIX_DIR"
 TARGET_PREFIX="$PREFIX_DIR/$TARGET"
@@ -309,7 +315,7 @@ step "=== 构建 Binutils ==="
 mkdir -p "$BUILD_DIR_BINUTILS"
 cd "$BUILD_DIR_BINUTILS" || error "无法进入构建目录"
 
-build_step "configure" "${LOG_DIR}/binutils" \
+build_step "configure" "${LOG_DIR_BINUTILS}" \
     "$SRC_DIR_BINUTILS/configure" \
     --target="$TARGET" \
     --prefix="$CROSS_PREFIX" \
@@ -318,10 +324,10 @@ build_step "configure" "${LOG_DIR}/binutils" \
     --enable-plugins \
     --disable-gprofng
 
-build_step "build" "${LOG_DIR}/binutils" \
+build_step "build" "${LOG_DIR_BINUTILS}" \
     make -j${THREADS}
 
-build_step "install" "${LOG_DIR}/binutils" \
+build_step "install" "${LOG_DIR_BINUTILS}" \
     make install-strip
 
 # 准备 GCC 源码并下载依赖库
@@ -329,8 +335,8 @@ step "==== 准备 GCC 源码 ==="
 cd "$SRC_DIR_GCC" || error "无法进入构建目录"
 # 下载 GMP/MPFR/MPC 等依赖（放入 gcc/ 目录）
 if [[ ! -f "prereq_done" ]]; then
-    build_step "gcc_download_prerequisites" "${LOG_DIR}/gcc" "${SCRIPT_DIR}/prepare_gcc.sh"
-    info "GCC 依赖下载完成 (日志: $LOG_DIR/gcc)"
+    build_step "gcc_download_prerequisites" "${LOG_DIR_GCC_INITIAL}" "${SCRIPT_DIR}/prepare_gcc.sh"
+    info "GCC 依赖下载完成 (日志: $LOG_DIR_GCC_INITIAL)"
     touch prereq_done
 fi
 
@@ -339,7 +345,7 @@ step "=== 初始GCC构建 ==="
 mkdir -p "$BUILD_DIR_GCC_INITIAL"
 cd "$BUILD_DIR_GCC_INITIAL" || error "无法进入构建目录"
 
-build_step "configure" "${LOG_DIR}/gcc" \
+build_step "configure" "${LOG_DIR_GCC_INITIAL}" \
     "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
     --prefix="$CROSS_PREFIX" \
@@ -351,16 +357,16 @@ build_step "configure" "${LOG_DIR}/gcc" \
     --disable-nls \
     --disable-shared --disable-threads --disable-libatomic --disable-libgomp --disable-libquadmath --disable-libssp --disable-libvtv --disable-libstdcxx
 
-build_step "build" "${LOG_DIR}/gcc" \
+build_step "build" "${LOG_DIR_GCC_INITIAL}" \
     make -j${THREADS}
 
-build_step "install" "${LOG_DIR}/gcc" \
+build_step "install" "${LOG_DIR_GCC_INITIAL}" \
     make install-strip
 
 # 准备Linux头文件
 step "=== 准备Linux头文件 ==="
 cd "$SRC_DIR_LINUX" || error "无法进入Linux源码目录"
-build_step "headers" "${LOG_DIR}/glibc" \
+build_step "headers" "${LOG_DIR_GLIBC}" \
     make ARCH="${CROSS_KERNEL_NAME}" INSTALL_HDR_PATH="${CROSS_PREFIX}/${TARGET}/usr" headers_install
 
 # 构建 C 库（glibc 或 musl）
@@ -370,7 +376,7 @@ if [[ "$LIBC" == "glibc" ]]; then
     mkdir -p "$BUILD_DIR_GLIBC"
     cd "$BUILD_DIR_GLIBC" || error "无法进入构建目录"
 
-    build_step  "configure" "${LOG_DIR}/glibc" \
+    build_step  "configure" "${LOG_DIR_GLIBC}" \
         env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
         CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
         "$SRC_DIR_GLIBC/configure" \
@@ -385,10 +391,10 @@ if [[ "$LIBC" == "glibc" ]]; then
         --without-selinux \
         libc_cv_forced_unwind=yes "${glibc_extra_args[@]}"
 
-    build_step "build" "${LOG_DIR}/glibc" \
+    build_step "build" "${LOG_DIR_GLIBC}" \
         make -j${THREADS}
 
-    build_step "install" "${LOG_DIR}/glibc" \
+    build_step "install" "${LOG_DIR_GLIBC}" \
         make install DESTDIR="${CROSS_PREFIX}/${TARGET}"
 else
     step "=== 构建 musl ==="
@@ -416,7 +422,7 @@ int sprintf(char *restrict s, const char *restrict fmt, ...)
 }
 EOF
 
-    build_step  "configure" "${LOG_DIR}/musl" \
+    build_step  "configure" "${LOG_DIR_MUSL}" \
         env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
         CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
         CROSS_COMPILE="${CROSS_PREFIX}/bin/${TARGET}-" \
@@ -427,10 +433,10 @@ EOF
         --prefix="/usr" \
         --exec-prefix="/usr" "${musl_extra_args[@]}"
 
-    build_step "build" "${LOG_DIR}/musl" \
+    build_step "build" "${LOG_DIR_MUSL}" \
         make -j${THREADS}
 
-    build_step "install" "${LOG_DIR}/musl" \
+    build_step "install" "${LOG_DIR_MUSL}" \
         make install DESTDIR="${CROSS_PREFIX}/${TARGET}"
 
 cat > ${CROSS_PREFIX}/${TARGET}/usr/include/execinfo.h <<EOF
@@ -450,7 +456,7 @@ step "=== 完整GCC构建 ==="
 mkdir -p "$BUILD_DIR_GCC_FINAL"
 cd "$BUILD_DIR_GCC_FINAL" || error "无法进入构建目录"
 
-build_step "configure" "${LOG_DIR}/gcc" \
+build_step "configure" "${LOG_DIR_GCC_FINAL}" \
     "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
     --prefix="$CROSS_PREFIX" \
@@ -463,10 +469,10 @@ build_step "configure" "${LOG_DIR}/gcc" \
     --enable-shared \
     --disable-gprofng "${gcc_extra_args[@]}"
 
-build_step "build" "${LOG_DIR}/gcc" \
+build_step "build" "${LOG_DIR_GCC_FINAL}" \
     make -j${THREADS}
 
-build_step "install" "${LOG_DIR}/gcc" \
+build_step "install" "${LOG_DIR_GCC_FINAL}" \
     make install-strip-host install-target
 
 # 完成输出
