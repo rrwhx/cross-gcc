@@ -456,6 +456,9 @@ step "=== 完整GCC构建 ==="
 mkdir -p "$BUILD_DIR_GCC_FINAL"
 cd "$BUILD_DIR_GCC_FINAL" || error "无法进入构建目录"
 
+# same host and target problem workaround, but c++ not working
+# --with-cross-host="$(gcc -dumpmachine)"
+
 build_step "configure" "${LOG_DIR_GCC_FINAL}" \
     "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
