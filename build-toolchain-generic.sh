@@ -484,6 +484,43 @@ echo -e "交叉编译器路径: ${GREEN}${CROSS_PREFIX}/bin${NC}"
 echo -e "系统根目录: ${GREEN}${CROSS_PREFIX}/${TARGET}${NC}"
 echo -e "日志目录: ${GREEN}${LOG_DIR}${NC}"
 
+# 在 GCC 完整安装后，查找 ${CROSS_PREFIX}/lib* 下是否存在 libgcc_s.so
+# 若找到，则在目标 sysroot 下创建到该 lib 目录的相对符号链接（带安全检查）
+step "=== 链接 libgcc_s.so 所在的 lib 目录到目标 sysroot ==="
+for libdir in "${CROSS_PREFIX}"/lib*; do
+    # 只处理存在且为目录的条目
+    if [[ ! -d "${libdir}" ]]; then
+        continue
+    fi
+
+    # 检查目录中是否存在 libgcc_s.so 或其版本化文件
+    if compgen -G "${libdir}/libgcc_s.so*" > /dev/null; then
+        libbase="$(basename "${libdir}")"
+        linkpath="${TARGET_PREFIX}/${libbase}"
+
+        # 如果目标已经存在，跳过以免覆盖
+        if [[ -e "${linkpath}" ]]; then
+            info "目标已存在，跳过: ${linkpath}"
+            continue
+        fi
+
+        # 避免对位于目标 sysroot 内的目录创建环状链接
+        case "${libdir}" in
+            "${TARGET_PREFIX}"/*)
+                warn "lib 目录在目标 sysroot 内，跳过: ${libdir}"
+                continue
+                ;;
+        esac
+
+        # 仅使用 ln 的 -r 选项创建相对符号链接（不考虑不支持的回退情况）
+        if ln -sr "${libdir}" "${linkpath}"; then
+            ok "已创建相对符号链接: ${linkpath} -> (relative to) ${libdir} (via ln -r)"
+        else
+            error "使用 ln -r 创建相对符号链接失败: ${libdir} -> ${linkpath}"
+        fi
+    fi
+done
+
 # 构建后处理
 if [[ "$CLEAN_BUILD" == true ]]; then
     step "=== 清理构建目录和日志目录 ==="
