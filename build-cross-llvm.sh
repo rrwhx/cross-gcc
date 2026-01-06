@@ -3,13 +3,13 @@
 # Default values
 ARCH="riscv64"
 ROOTDIR=$(pwd)
-SRC_DIR="../../llvm-project-llvmorg-21.1.8/llvm/"
+SRC_DIR="../../llvm-project-llvmorg-21.1.8"
 
 usage() {
     echo "Usage: $0 [options]"
     echo "Options:"
     echo "  --arch <arch>       Target architecture (default: riscv64)"
-    echo "  --src_dir <dir>     LLVM source directory (default: ../../llvm-project-llvmorg-21.1.8/llvm/)"
+    echo "  --src_dir <dir>     LLVM source directory (default: ../../llvm-project-llvmorg-21.1.8)"
     echo "  --root_dir <dir>    Root directory for build and install (default: current directory)"
     echo "  -h, --help          Show this help message"
     exit 0
