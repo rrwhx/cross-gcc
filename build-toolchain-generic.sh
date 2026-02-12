@@ -40,7 +40,7 @@ LINUX_VER="6.17.6"
 
 # 初始化参数
 ARCH=""; LIBC=""
-DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; PREFIX_DIR=""
+DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; PREFIX_DIR=""; WORK_DIR=""
 THREADS="$(nproc || sysctl -n hw.logicalcpu_max 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
@@ -51,11 +51,12 @@ usage() {
 用法: $(basename "$0") --arch ARCH --libc LIBC [选项]
   --arch         目标架构 (aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el)
   --libc         libc 类型 (glibc|musl)
-  --download-dir 源码下载目录 (默认: ./downloads)
+  --work-dir     工作目录前缀 (默认: 当前目录)
+  --download-dir 源码下载目录 (默认: WORK_DIR/downloads)
   --src-dir      源码解压目录 (默认: 与 download-dir 相同)
-  --build-dir    构建工作目录 (默认: ./build-TARGET)
-  --log-dir      日志目录 (默认: ./logs-TARGET)
-  --cross-prefix 工具链安装前缀 (默认: ./cross-TARGET)
+  --build-dir    构建工作目录 (默认: WORK_DIR/build-TARGET)
+  --log-dir      日志目录 (默认: WORK_DIR/logs-TARGET)
+  --cross-prefix 工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
   --threads      构建线程数 (默认: $(nproc))
 
 版本控制选项:
@@ -82,6 +83,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch)        ARCH="$2"; shift 2;;
         --libc)        LIBC="$2"; shift 2;;
+        --work-dir)    WORK_DIR="$2"; shift 2;;
         --download-dir)DOWNLOAD_DIR="$2"; shift 2;;
         --src-dir)     SRC_DIR="$2"; shift 2;;
         --build-dir)   BUILD_DIR="$2"; shift 2;;
@@ -178,11 +180,15 @@ case "$ARCH" in
 esac
 
 # 设置默认目录
-DOWNLOAD_DIR="${DOWNLOAD_DIR:-$PWD/downloads}"
+if [[ -n "$WORK_DIR" ]]; then
+    mkdir -p "$WORK_DIR"
+fi
+BASE_DIR="${WORK_DIR:-$PWD}"
+DOWNLOAD_DIR="${DOWNLOAD_DIR:-$BASE_DIR/downloads}"
 SRC_DIR="${SRC_DIR:-$DOWNLOAD_DIR}"
-BUILD_DIR="${BUILD_DIR:-$PWD/build-$TARGET}"
-LOG_DIR="${LOG_DIR:-$PWD/logs-$TARGET}"
-PREFIX_DIR="${PREFIX_DIR:-$PWD/cross-$TARGET}"
+BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build-$TARGET}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs-$TARGET}"
+PREFIX_DIR="${PREFIX_DIR:-$BASE_DIR/cross-$TARGET}"
 
 DOWNLOAD_DIR=$(realpath "$DOWNLOAD_DIR")
 SRC_DIR=$(realpath "$SRC_DIR")
