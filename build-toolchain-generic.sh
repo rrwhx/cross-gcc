@@ -244,9 +244,9 @@ download() {
     else
         info "下载 $url ..."
         if command -v wget > /dev/null; then
-            wget -O "$dest" "$url"
+            wget -nc -q --show-progress -O "$dest" "$url" || error "下载失败: $url"
         elif command -v curl > /dev/null; then
-            curl -L -o "$dest" "$url"
+            curl -fSL --progress-bar -o "$dest" "$url" || error "下载失败: $url"
         else
             error "未安装 wget 或 curl，无法下载文件"
             exit 1
@@ -284,8 +284,8 @@ if [[ "$GCC_VER" == "git" ]]; then
 fi
 
 for url in "${dl_files[@]}"; do
-    info "下载: ${url}"
-    wget -nc -q --show-progress -P "$DOWNLOAD_DIR" "$url" || error "下载失败"
+    filename=$(basename "${url}")
+    download "$url" "$DOWNLOAD_DIR/$filename"
 done
 
 # 解压源码
