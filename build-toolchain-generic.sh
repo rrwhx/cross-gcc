@@ -243,10 +243,10 @@ download() {
         info "已存在: $dest，跳过下载"
     else
         info "下载 $url ..."
-        if command -v wget > /dev/null; then
-            wget -nc -q --show-progress -O "$dest" "$url" || error "下载失败: $url"
-        elif command -v curl > /dev/null; then
+        if command -v curl > /dev/null; then
             curl -fSL --progress-bar -o "$dest" "$url" || error "下载失败: $url"
+        elif command -v wget > /dev/null; then
+            wget -nc -q --show-progress -O "$dest" "$url" || error "下载失败: $url"
         else
             error "未安装 wget 或 curl，无法下载文件"
             exit 1
