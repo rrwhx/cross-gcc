@@ -75,8 +75,22 @@ download_file() {
     for ((attempt=1; attempt<=max_retries; attempt++)); do
         echo "正在下载 [$attempt/$max_retries]: $url"
 
-        # 使用wget下载
-        if wget --no-check-certificate --quiet --show-progress -O "$filename" "$url"; then
+        local dl_success=false
+
+        if command -v curl > /dev/null; then
+             if curl -fSL --insecure --progress-bar -o "$filename" "$url"; then
+                 dl_success=true
+             fi
+        elif command -v wget > /dev/null; then
+             if wget --no-check-certificate --quiet --show-progress -O "$filename" "$url"; then
+                 dl_success=true
+             fi
+        else
+             echo "错误: 未找到 curl 或 wget，无法下载文件"
+             exit 1
+        fi
+
+        if $dl_success; then
             # 下载后验证完整性
             if check_file_integrity "$filename"; then
                 echo "下载成功: $filename"
