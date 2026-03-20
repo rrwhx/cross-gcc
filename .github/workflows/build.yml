@@ -1,0 +1,110 @@
+name: Build Cross-GCC Toolchain
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        include:
+          - arch: riscv64
+            libc: glibc
+          - arch: loongarch64
+            libc: glibc
+          - arch: aarch64
+            libc: glibc
+          - arch: x86_64
+            libc: glibc
+          - arch: riscv32
+            libc: glibc
+          - arch: riscv64
+            libc: musl
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            gcc \
+            g++ \
+            make \
+            bison \
+            flex \
+            libgmp-dev \
+            libmpfr-dev \
+            libmpc-dev \
+            wget \
+            tar \
+            xz-utils \
+            curl \
+            git \
+            texinfo \
+            libssl-dev
+
+      - name: Build toolchain
+        run: |
+          chmod +x build-toolchain-generic.sh
+          ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc ${{ matrix.libc }} --clean --archive
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.arch }}-${{ matrix.libc }}-toolchain
+          path: cross-*.tar.xz
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: List files
+        run: ls -lh artifacts/
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-toolchain
+          name: "Latest Toolchain Build"
+          body: |
+            ## Cross-GCC Toolchain
+
+            🔄 **Auto updated** by commit: ${{ github.sha }}
+            📅 **Date**: ${{ github.event.head_commit.timestamp }}
+
+            ## 支持架构
+            | Arch | LibC |
+            |------|------|
+            | riscv64 | glibc |
+            | riscv64 | musl |
+            | riscv32 | glibc |
+            | loongarch64 | glibc |
+            | aarch64 | glibc |
+            | x86_64 | glibc |
+          files: artifacts/*.tar.xz
+          overwrite_files: true
+          make_latest: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
