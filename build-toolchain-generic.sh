@@ -40,7 +40,7 @@ LINUX_VER="6.17.6"
 
 # 初始化参数
 ARCH=""; LIBC=""
-DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; PREFIX_DIR=""; WORK_DIR=""
+DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
 THREADS="$(nproc || sysctl -n hw.logicalcpu_max 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
@@ -56,7 +56,7 @@ usage() {
   --src-dir      源码解压目录 (默认: 与 download-dir 相同)
   --build-dir    构建工作目录 (默认: WORK_DIR/build-TARGET)
   --log-dir      日志目录 (默认: WORK_DIR/logs-TARGET)
-  --cross-prefix 工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
+  --install-dir  工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
   --threads      构建线程数 (默认: $(nproc))
 
 版本控制选项:
@@ -88,7 +88,7 @@ while [[ $# -gt 0 ]]; do
         --src-dir)     SRC_DIR="$2"; shift 2;;
         --build-dir)   BUILD_DIR="$2"; shift 2;;
         --log-dir)     LOG_DIR="$2"; shift 2;;
-        --cross-prefix)PREFIX_DIR="$2"; shift 2;;
+        --install-dir) INSTALL_DIR="$2"; shift 2;;
         --threads)     THREADS="$2"; shift 2;;
         --binutils-ver)BINUTILS_VER="$2"; shift 2;;
         --gcc-ver)     GCC_VER="$2"; shift 2;;
@@ -188,14 +188,14 @@ DOWNLOAD_DIR="${DOWNLOAD_DIR:-$BASE_DIR/downloads}"
 SRC_DIR="${SRC_DIR:-$DOWNLOAD_DIR}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build-$TARGET}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs-$TARGET}"
-PREFIX_DIR="${PREFIX_DIR:-$BASE_DIR/cross-$TARGET}"
+INSTALL_DIR="${INSTALL_DIR:-$BASE_DIR/cross-$TARGET}"
 
 DOWNLOAD_DIR=$(realpath "$DOWNLOAD_DIR")
 SRC_DIR=$(realpath "$SRC_DIR")
 BUILD_DIR=$(realpath "$BUILD_DIR")
 LOG_DIR=$(realpath "$LOG_DIR")
-PREFIX_DIR=$(realpath "$PREFIX_DIR")
-mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$PREFIX_DIR"
+INSTALL_DIR=$(realpath "$INSTALL_DIR")
+mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
 # 设置 GCC 源码目录
 if [[ "$GCC_VER" == "git" ]]; then
@@ -225,11 +225,11 @@ LOG_DIR_GLIBC="$LOG_DIR/glibc"
 LOG_DIR_MUSL="$LOG_DIR/musl"
 
 # 设置安装前缀和目标 sysroot
-CROSS_PREFIX="$PREFIX_DIR"
-TARGET_PREFIX="$PREFIX_DIR/$TARGET"
-mkdir -p "$TARGET_PREFIX"
+CROSS_PREFIX="$INSTALL_DIR"
+TARGET_SYSROOT="$INSTALL_DIR/$TARGET"
+mkdir -p "$TARGET_SYSROOT"
 info "工具链安装前缀: $CROSS_PREFIX"
-info "目标 sysroot: $TARGET_PREFIX"
+info "目标 sysroot: $TARGET_SYSROOT"
 info "下载目录: $DOWNLOAD_DIR"
 info "源码目录: $SRC_DIR"
 info "构建目录: $BUILD_DIR"
@@ -502,7 +502,7 @@ for libdir in "${CROSS_PREFIX}"/lib*; do
     # 检查目录中是否存在 libgcc_s.so 或其版本化文件
     if compgen -G "${libdir}/libgcc_s.so*" > /dev/null; then
         libbase="$(basename "${libdir}")"
-        linkpath="${TARGET_PREFIX}/${libbase}"
+        linkpath="${TARGET_SYSROOT}/${libbase}"
 
         # 如果目标已经存在，跳过以免覆盖
         if [[ -e "${linkpath}" ]]; then
@@ -512,7 +512,7 @@ for libdir in "${CROSS_PREFIX}"/lib*; do
 
         # 避免对位于目标 sysroot 内的目录创建环状链接
         case "${libdir}" in
-            "${TARGET_PREFIX}"/*)
+            "${TARGET_SYSROOT}"/*)
                 warn "lib 目录在目标 sysroot 内，跳过: ${libdir}"
                 continue
                 ;;
