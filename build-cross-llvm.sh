@@ -20,6 +20,7 @@ usage() {
     echo "  --build-dir <dir>   Optional build directory"
     echo "  --install-dir <dir> Optional install directory"
     echo "  --log-dir <dir>     Optional log directory"
+    echo "  --link-jobs <n>     Optional number of parallel link jobs (LLVM_PARALLEL_LINK_JOBS)"
     echo "  -h, --help          Show this help message"
     exit 0
 }
@@ -37,6 +38,7 @@ TARGET_SYSROOT=""
 BUILD_DIR=""
 INSTALL_DIR=""
 LOG_DIR=""
+LINK_JOBS=""
 
 parse_args() {
     while [[ "$#" -gt 0 ]]; do
@@ -49,6 +51,7 @@ parse_args() {
             --build-dir) BUILD_DIR="$2"; shift ;;
             --install-dir) INSTALL_DIR="$2"; shift ;;
             --log-dir) LOG_DIR="$2"; shift ;;
+            --link-jobs) LINK_JOBS="$2"; shift ;;
             -h|--help) usage ;;
             *) error "Unknown parameter passed: $1"; ;;
         esac
@@ -117,6 +120,10 @@ configure_llvm() {
             "-DBUILTINS_CMAKE_ARGS=-DCMAKE_SYSROOT=${TARGET_SYSROOT};-DCMAKE_CXX_FLAGS=--gcc-toolchain=${TARGET_GCC_TOOLCHAIN}${EXTRA_FLAGS}"
             "-DRUNTIMES_CMAKE_ARGS=-DCMAKE_SYSROOT=${TARGET_SYSROOT};-DCMAKE_CXX_FLAGS=--gcc-toolchain=${TARGET_GCC_TOOLCHAIN}${EXTRA_FLAGS}"
         )
+    fi
+
+    if [ -n "$LINK_JOBS" ]; then
+        CMAKE_EXTRA_ARGS+=("-DLLVM_PARALLEL_LINK_JOBS=${LINK_JOBS}")
     fi
 
     cd "${BUILD_DIR}"
