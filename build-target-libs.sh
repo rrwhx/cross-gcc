@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/lib.sh"
 setup_error_trap
 
 ZLIB_VER="1.3.2"
+ZLIB_NG_VER="2.3.3"
 LZ4_VER="1.10.0"
 ZSTD_VER="1.5.7"
 SNAPPY_VER="1.2.2"
@@ -111,6 +112,7 @@ should_build() {
 
 step "=== 下载依赖库源码 ==="
 if should_build "zlib"; then download "https://github.com/madler/zlib/releases/download/v${ZLIB_VER}/zlib-${ZLIB_VER}.tar.gz" "$DOWNLOAD_DIR/zlib-${ZLIB_VER}.tar.gz"; fi
+if should_build "zlib-ng"; then download "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/${ZLIB_NG_VER}.tar.gz" "$DOWNLOAD_DIR/zlib-ng-${ZLIB_NG_VER}.tar.gz"; fi
 if should_build "lz4"; then download "https://github.com/lz4/lz4/archive/refs/tags/v${LZ4_VER}.tar.gz" "$DOWNLOAD_DIR/lz4-${LZ4_VER}.tar.gz"; fi
 if should_build "zstd"; then download "https://github.com/facebook/zstd/releases/download/v${ZSTD_VER}/zstd-${ZSTD_VER}.tar.gz" "$DOWNLOAD_DIR/zstd-${ZSTD_VER}.tar.gz"; fi
 if should_build "snappy"; then download "https://github.com/google/snappy/archive/refs/tags/${SNAPPY_VER}.tar.gz" "$DOWNLOAD_DIR/snappy-${SNAPPY_VER}.tar.gz"; fi
@@ -119,6 +121,10 @@ step "=== 解压源码 ==="
 if should_build "zlib" && [ ! -d "$SRC_DIR/zlib-${ZLIB_VER}" ]; then
     info "解压: zlib-${ZLIB_VER}.tar.gz"
     tar -xf "$DOWNLOAD_DIR/zlib-${ZLIB_VER}.tar.gz" -C "$SRC_DIR"
+fi
+if should_build "zlib-ng" && [ ! -d "$SRC_DIR/zlib-ng-${ZLIB_NG_VER}" ]; then
+    info "解压: zlib-ng-${ZLIB_NG_VER}.tar.gz"
+    tar -xf "$DOWNLOAD_DIR/zlib-ng-${ZLIB_NG_VER}.tar.gz" -C "$SRC_DIR"
 fi
 if should_build "lz4" && [ ! -d "$SRC_DIR/lz4-${LZ4_VER}" ]; then
     info "解压: lz4-${LZ4_VER}.tar.gz"
@@ -168,8 +174,10 @@ build_package() {
             )
             ;;
         cmake)
+            local target_cpu="${TARGET%%-*}"
             local cmake_common_args=(
                 -DCMAKE_SYSTEM_NAME=Linux
+                -DCMAKE_SYSTEM_PROCESSOR="$target_cpu"
                 -DCMAKE_SYSROOT="$TARGET_SYSROOT"
                 -DCMAKE_FIND_ROOT_PATH="$TARGET_SYSROOT"
                 -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY
@@ -200,6 +208,11 @@ build_package() {
 }
 
 if should_build "zlib"; then build_package zlib "${ZLIB_VER}" autotools; else info "跳过编译 zlib"; fi
+if should_build "zlib-ng"; then
+    build_package zlib-ng "${ZLIB_NG_VER}" cmake -DZLIB_COMPAT=OFF -DZLIB_ENABLE_TESTS=OFF
+else
+    info "跳过编译 zlib-ng"
+fi
 if should_build "lz4"; then build_package lz4 "${LZ4_VER}" make; else info "跳过编译 lz4"; fi
 if should_build "zstd"; then build_package zstd "${ZSTD_VER}" make; else info "跳过编译 zstd"; fi
 if should_build "snappy"; then
