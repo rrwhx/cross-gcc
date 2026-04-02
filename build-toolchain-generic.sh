@@ -44,6 +44,7 @@ DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=
 THREADS="$(nproc || sysctl -n hw.logicalcpu_max 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
+ENABLE_SANITIZER=false
 
 # 显示用法
 usage() {
@@ -67,6 +68,7 @@ usage() {
   --linux-ver    linux 内核版本 (默认: $LINUX_VER)
 
 构建后处理选项:
+  --enable-sanitizer 开启 GCC sanitizer (默认关闭)
   --clean        构建完成后删除构建目录和日志目录
   --archive      构建完成后将工具链打包成 tar.xz 并删除原目录
 
@@ -95,6 +97,7 @@ while [[ $# -gt 0 ]]; do
         --glibc-ver)   GLIBC_VER="$2"; shift 2;;
         --musl-ver)    MUSL_VER="$2"; shift 2;;
         --linux-ver)   LINUX_VER="$2"; shift 2;;
+        --enable-sanitizer) ENABLE_SANITIZER=true; shift;;
         --clean)       CLEAN_BUILD=true; shift;;
         --archive)     ARCHIVE_RESULT=true; shift;;
         -h|--help)     usage;;
@@ -163,9 +166,16 @@ fi
 info "目标三元组 (TARGET) 已设置为: $TARGET"
 
 gcc_extra_args=()
-case "$TARGET" in
-    riscv64-linux-musl|mips64el-linux-muslabi64|mips64-linux-muslabi64|mipsel-linux-musl|mips-linux-musl|i686-linux-musl|arm-linux-musleabihf) gcc_extra_args+=(--disable-libsanitizer) ;;
-esac
+if [[ "$ENABLE_SANITIZER" == false ]]; then
+    gcc_extra_args+=(--disable-libsanitizer)
+else
+    case "$TARGET" in
+        riscv64-linux-musl|mips64el-linux-muslabi64|mips64-linux-muslabi64|mipsel-linux-musl|mips-linux-musl|i686-linux-musl|arm-linux-musleabihf)
+            warn "目标 $TARGET 不支持 sanitizer，强制禁用 (--disable-libsanitizer)"
+            gcc_extra_args+=(--disable-libsanitizer)
+            ;;
+    esac
+fi
 
 glibc_extra_args=()
 case "$TARGET" in
