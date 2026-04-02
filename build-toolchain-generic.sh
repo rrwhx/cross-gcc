@@ -207,18 +207,30 @@ LOG_DIR=$(realpath "$LOG_DIR")
 INSTALL_DIR=$(realpath "$INSTALL_DIR")
 mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
-# 设置 GCC 源码目录
-if [[ "$GCC_VER" == "git" ]]; then
-    GCC_SRC_DIR="gcc"
+if [[ "$BINUTILS_VER" == "git" ]]; then
+    SRC_DIR_BINUTILS="$SRC_DIR/binutils"
 else
-    GCC_SRC_DIR="gcc-${GCC_VER}"
+    SRC_DIR_BINUTILS="$SRC_DIR/binutils-${BINUTILS_VER}"
 fi
 
-# 设置各组件源码目录
-SRC_DIR_BINUTILS="$SRC_DIR/binutils-${BINUTILS_VER}"
-SRC_DIR_GCC="$SRC_DIR/$GCC_SRC_DIR"
-SRC_DIR_GLIBC="$SRC_DIR/glibc-${GLIBC_VER}"
-SRC_DIR_MUSL="$SRC_DIR/musl-${MUSL_VER}"
+if [[ "$GCC_VER" == "git" ]]; then
+    SRC_DIR_GCC="$SRC_DIR/gcc"
+else
+    SRC_DIR_GCC="$SRC_DIR/gcc-${GCC_VER}"
+fi
+
+if [[ "$GLIBC_VER" == "git" ]]; then
+    SRC_DIR_GLIBC="$SRC_DIR/glibc"
+else
+    SRC_DIR_GLIBC="$SRC_DIR/glibc-${GLIBC_VER}"
+fi
+
+if [[ "$MUSL_VER" == "git" ]]; then
+    SRC_DIR_MUSL="$SRC_DIR/musl"
+else
+    SRC_DIR_MUSL="$SRC_DIR/musl-${MUSL_VER}"
+fi
+
 SRC_DIR_LINUX="$SRC_DIR/linux-${LINUX_VER}"
 
 # 设置各组件构建目录
@@ -266,31 +278,38 @@ download() {
 
 step "下载源代码"
 dl_files=(
-    "https://ftp.gnu.org/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
-    "https://ftp.gnu.org/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
-    "https://ftp.gnu.org/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
-    "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
-    "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
-)
-dl_files=(
-    "https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
-    "https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
-    "https://mirrors.tuna.tsinghua.edu.cn/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
     "https://mirrors.tuna.tsinghua.edu.cn/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
-    "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
 )
 
-if [[ "$GCC_VER" == "git" ]]; then
-    if [[ ! -d "$SRC_DIR_GCC" ]]; then
-        step "克隆 GCC 仓库"
-        if ! command -v git &> /dev/null; then
-            error "git 未安装，无法克隆 GCC 仓库"
+fetch_source() {
+    local name=$1
+    local ver=$2
+    local src_dir=$3
+    local git_url=$4
+    local tar_url=$5
+
+    if [[ "$ver" == "git" ]]; then
+        if [[ ! -d "$src_dir" ]]; then
+            step "克隆 $name 仓库"
+            if ! command -v git &> /dev/null; then
+                error "git 未安装，无法克隆 $name 仓库"
+            fi
+            git clone --depth 1 "$git_url" "$src_dir" || error "克隆 $name 失败"
+        else
+            info "$name 源码目录已存在，跳过克隆"
         fi
-        git clone --depth 1 https://mirrors.tuna.tsinghua.edu.cn/git/gcc.git "$SRC_DIR_GCC" || error "克隆 GCC 失败"
     else
-        info "GCC 源码目录已存在，跳过克隆"
+        dl_files+=("$tar_url")
     fi
-    unset 'dl_files[1]'  # 删除索引1（gcc）
+}
+
+fetch_source "Binutils" "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://mirrors.tuna.tsinghua.edu.cn/git/binutils-gdb.git" "https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
+fetch_source "GCC" "$GCC_VER" "$SRC_DIR_GCC" "https://mirrors.tuna.tsinghua.edu.cn/git/gcc.git" "https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
+
+if [[ "$LIBC" == "glibc" ]]; then
+    fetch_source "Glibc" "$GLIBC_VER" "$SRC_DIR_GLIBC" "https://mirrors.tuna.tsinghua.edu.cn/git/glibc.git" "https://mirrors.tuna.tsinghua.edu.cn/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
+elif [[ "$LIBC" == "musl" ]]; then
+    fetch_source "Musl" "$MUSL_VER" "$SRC_DIR_MUSL" "https://github.com/kraj/musl" "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
 fi
 
 for url in "${dl_files[@]}"; do
