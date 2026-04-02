@@ -41,7 +41,7 @@ LINUX_VER="6.17.6"
 # 初始化参数
 ARCH=""; LIBC=""
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
-THREADS="$(nproc || sysctl -n hw.logicalcpu_max 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
+THREADS="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
 ENABLE_SANITIZER=false
@@ -58,7 +58,7 @@ usage() {
   --build-dir    构建工作目录 (默认: WORK_DIR/build-TARGET)
   --log-dir      日志目录 (默认: WORK_DIR/logs-TARGET)
   --install-dir  工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
-  --threads      构建线程数 (默认: $(nproc))
+  --threads      构建线程数 (默认: $THREADS)
 
 版本控制选项:
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
