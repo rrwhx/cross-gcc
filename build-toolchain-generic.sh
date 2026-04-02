@@ -486,6 +486,7 @@ build_step "configure" "${LOG_DIR_GCC_FINAL}" \
     --with-build-sysroot="${CROSS_PREFIX}/${TARGET}" \
     --enable-threads=posix \
     --enable-shared \
+    --disable-nls \
     --disable-gprofng "${gcc_extra_args[@]}"
 
 build_step "build" "${LOG_DIR_GCC_FINAL}" \
