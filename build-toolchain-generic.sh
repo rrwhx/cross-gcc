@@ -367,6 +367,7 @@ build_step "configure" "${LOG_DIR_GCC_INITIAL}" \
     --prefix="$CROSS_PREFIX" \
     --disable-multilib \
     --disable-bootstrap \
+    --enable-checking=release \
     --enable-languages=c \
     --without-headers \
     --with-newlib \
@@ -481,6 +482,7 @@ build_step "configure" "${LOG_DIR_GCC_FINAL}" \
     --prefix="$CROSS_PREFIX" \
     --disable-multilib \
     --disable-bootstrap \
+    --enable-checking=release \
     --enable-languages=c,c++,fortran,lto \
     --with-sysroot="${CROSS_PREFIX}/${TARGET}" \
     --with-build-sysroot="${CROSS_PREFIX}/${TARGET}" \
