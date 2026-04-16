@@ -119,7 +119,7 @@ LIBC=$(echo "$LIBC" | tr '[:upper:]' '[:lower:]')
 
 # 验证参数合法性
 case "$ARCH" in
-    arm|aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el) ;;
+    arm|aarch64|loongarch32|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el) ;;
     *) error "不支持的架构: $ARCH"; exit 1;;
 esac
 case "$LIBC" in
@@ -142,6 +142,7 @@ info "Linux 内核版本: $LINUX_VER"
 case "$ARCH" in
     arm)         TARGET_BASE="arm-linux";         CROSS_KERNEL_NAME="arm";      ;;
     aarch64)     TARGET_BASE="aarch64-linux";     CROSS_KERNEL_NAME="arm64";    ;;
+    loongarch32) TARGET_BASE="loongarch32-linux"; CROSS_KERNEL_NAME="loongarch" ;;
     loongarch64) TARGET_BASE="loongarch64-linux"; CROSS_KERNEL_NAME="loongarch" ;;
     riscv64)     TARGET_BASE="riscv64-linux";     CROSS_KERNEL_NAME="riscv";    ;;
     riscv32)     TARGET_BASE="riscv32-linux";     CROSS_KERNEL_NAME="riscv";    ;;
