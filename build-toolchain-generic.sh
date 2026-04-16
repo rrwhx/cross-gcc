@@ -42,6 +42,7 @@ LINUX_VER="6.17.6"
 ARCH=""; LIBC=""
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
 THREADS="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
+MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
 ENABLE_SANITIZER=false
@@ -59,6 +60,7 @@ usage() {
   --log-dir      日志目录 (默认: WORK_DIR/logs-TARGET)
   --install-dir  工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
   --threads      构建线程数 (默认: $THREADS)
+  --mirror       下载镜像源 (默认: $MIRROR, 推荐: mirrors.tuna.tsinghua.edu.cn, mirrors.bfsu.edu.cn, mirror.nju.edu.cn)
 
 版本控制选项(支持 'git' 使用最新开发版):
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
@@ -92,6 +94,7 @@ while [[ $# -gt 0 ]]; do
         --log-dir)     LOG_DIR="$2"; shift 2;;
         --install-dir) INSTALL_DIR="$2"; shift 2;;
         --threads)     THREADS="$2"; shift 2;;
+        --mirror)      MIRROR="$2"; shift 2;;
         --binutils-ver)BINUTILS_VER="$2"; shift 2;;
         --gcc-ver)     GCC_VER="$2"; shift 2;;
         --glibc-ver)   GLIBC_VER="$2"; shift 2;;
@@ -305,12 +308,12 @@ fetch_source() {
     fi
 }
 
-fetch_source "Binutils" "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://mirrors.tuna.tsinghua.edu.cn/git/binutils-gdb.git" "https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
-fetch_source "GCC" "$GCC_VER" "$SRC_DIR_GCC" "https://mirrors.tuna.tsinghua.edu.cn/git/gcc.git" "https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
-fetch_source "Linux" "$LINUX_VER" "$SRC_DIR_LINUX" "https://mirrors.tuna.tsinghua.edu.cn/git/linux.git" "https://mirrors.tuna.tsinghua.edu.cn/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
+fetch_source "Binutils" "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://${MIRROR}/git/binutils-gdb.git" "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
+fetch_source "GCC" "$GCC_VER" "$SRC_DIR_GCC" "https://${MIRROR}/git/gcc.git" "https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
+fetch_source "Linux" "$LINUX_VER" "$SRC_DIR_LINUX" "https://${MIRROR}/git/linux.git" "https://${MIRROR}/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
 
 if [[ "$LIBC" == "glibc" ]]; then
-    fetch_source "Glibc" "$GLIBC_VER" "$SRC_DIR_GLIBC" "https://mirrors.tuna.tsinghua.edu.cn/git/glibc.git" "https://mirrors.tuna.tsinghua.edu.cn/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
+    fetch_source "Glibc" "$GLIBC_VER" "$SRC_DIR_GLIBC" "https://${MIRROR}/git/glibc.git" "https://${MIRROR}/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
 elif [[ "$LIBC" == "musl" ]]; then
     fetch_source "Musl" "$MUSL_VER" "$SRC_DIR_MUSL" "https://github.com/kraj/musl" "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
 fi
