@@ -140,23 +140,18 @@ info "Linux 内核版本: $LINUX_VER"
 
 # 根据架构和 libc 设置 TARGET 三元组
 case "$ARCH" in
-    arm)         TARGET_BASE="arm-linux";         CROSS_KERNEL_NAME="arm";      ;;
-    aarch64)     TARGET_BASE="aarch64-linux";     CROSS_KERNEL_NAME="arm64";    ;;
-    loongarch32) TARGET_BASE="loongarch32-linux"; CROSS_KERNEL_NAME="loongarch" ;;
-    loongarch64) TARGET_BASE="loongarch64-linux"; CROSS_KERNEL_NAME="loongarch" ;;
-    riscv64)     TARGET_BASE="riscv64-linux";     CROSS_KERNEL_NAME="riscv";    ;;
-    riscv32)     TARGET_BASE="riscv32-linux";     CROSS_KERNEL_NAME="riscv";    ;;
-    i686)        TARGET_BASE="i686-linux";        CROSS_KERNEL_NAME="x86";      ;;
-    x86_64)      TARGET_BASE="x86_64-linux";      CROSS_KERNEL_NAME="x86";      ;;
-    mips)        TARGET_BASE="mips-linux";        CROSS_KERNEL_NAME="mips";     ;;
-    mipsel)      TARGET_BASE="mipsel-linux";      CROSS_KERNEL_NAME="mips";     ;;
-    mips64)      TARGET_BASE="mips64-linux";      CROSS_KERNEL_NAME="mips";     ;;
-    mips64el)    TARGET_BASE="mips64el-linux";    CROSS_KERNEL_NAME="mips";     ;;
+    arm)         CROSS_KERNEL_NAME="arm"       ;;
+    aarch64)     CROSS_KERNEL_NAME="arm64"     ;;
+    loongarch*)  CROSS_KERNEL_NAME="loongarch" ;;
+    riscv*)      CROSS_KERNEL_NAME="riscv"     ;;
+    i686|x86_64) CROSS_KERNEL_NAME="x86"       ;;
+    mips*)       CROSS_KERNEL_NAME="mips"      ;;
 esac
+
 if [[ "$LIBC" == "glibc" ]]; then
-    TARGET="${TARGET_BASE}-gnu"
+    TARGET="${ARCH}-linux-gnu"
 else
-    TARGET="${TARGET_BASE}-musl"
+    TARGET="${ARCH}-linux-musl"
 fi
 
 if [[ "$ARCH" == mips64* ]]; then
