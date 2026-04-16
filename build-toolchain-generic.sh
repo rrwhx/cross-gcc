@@ -60,9 +60,9 @@ usage() {
   --install-dir  工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
   --threads      构建线程数 (默认: $THREADS)
 
-版本控制选项:
+版本控制选项(支持 'git' 使用最新开发版):
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
-  --gcc-ver      gcc 版本 (默认: $GCC_VER, 支持 'git' 使用最新开发版)
+  --gcc-ver      gcc 版本 (默认: $GCC_VER)
   --glibc-ver    glibc 版本 (默认: $GLIBC_VER)
   --musl-ver     musl 版本 (默认: $MUSL_VER)
   --linux-ver    linux 内核版本 (默认: $LINUX_VER)
@@ -231,7 +231,11 @@ else
     SRC_DIR_MUSL="$SRC_DIR/musl-${MUSL_VER}"
 fi
 
-SRC_DIR_LINUX="$SRC_DIR/linux-${LINUX_VER}"
+if [[ "$LINUX_VER" == "git" ]]; then
+    SRC_DIR_LINUX="$SRC_DIR/linux"
+else
+    SRC_DIR_LINUX="$SRC_DIR/linux-${LINUX_VER}"
+fi
 
 # 设置各组件构建目录
 BUILD_DIR_BINUTILS="$BUILD_DIR/build-binutils"
@@ -277,9 +281,7 @@ download() {
 }
 
 step "下载源代码"
-dl_files=(
-    "https://mirrors.tuna.tsinghua.edu.cn/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
-)
+dl_files=()
 
 fetch_source() {
     local name=$1
@@ -305,6 +307,7 @@ fetch_source() {
 
 fetch_source "Binutils" "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://mirrors.tuna.tsinghua.edu.cn/git/binutils-gdb.git" "https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
 fetch_source "GCC" "$GCC_VER" "$SRC_DIR_GCC" "https://mirrors.tuna.tsinghua.edu.cn/git/gcc.git" "https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
+fetch_source "Linux" "$LINUX_VER" "$SRC_DIR_LINUX" "https://mirrors.tuna.tsinghua.edu.cn/git/linux.git" "https://mirrors.tuna.tsinghua.edu.cn/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
 
 if [[ "$LIBC" == "glibc" ]]; then
     fetch_source "Glibc" "$GLIBC_VER" "$SRC_DIR_GLIBC" "https://mirrors.tuna.tsinghua.edu.cn/git/glibc.git" "https://mirrors.tuna.tsinghua.edu.cn/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
