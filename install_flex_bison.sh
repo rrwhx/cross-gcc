@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 # install_flex_bison.sh
-# 下载、编译、安装 flex + bison，供 glibc 编译使用
+# 下载、编译、安装 flex + bison + texinfo，供 glibc 编译使用
 # 默认安装前缀: $HOME/.local
 # ============================================================
 
@@ -25,6 +25,7 @@ BUILD_DIR="${BUILD_DIR:-/tmp/build_flex_bison_$$}"
 
 FLEX_VERSION="${FLEX_VERSION:-2.6.4}"
 BISON_VERSION="${BISON_VERSION:-3.8.2}"
+TEXINFO_VERSION="${TEXINFO_VERSION:-7.3}"
 
 JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)}"
 # 为了兼容 macOS 较新版 Clang，避免 implicit-function-declaration 错误
@@ -40,6 +41,7 @@ usage() {
   -j, --jobs N            并行编译数 (默认: nproc)
   --flex-version VER      flex 版本 (默认: ${FLEX_VERSION})
   --bison-version VER     bison 版本 (默认: ${BISON_VERSION})
+  --texinfo-version VER   texinfo 版本 (默认: ${TEXINFO_VERSION})
   --keep-build            安装后保留构建目录
   -h, --help              显示帮助
 
@@ -64,6 +66,7 @@ while [[ $# -gt 0 ]]; do
     -j|--jobs)          JOBS="$2";          shift 2 ;;
     --flex-version)     FLEX_VERSION="$2";  shift 2 ;;
     --bison-version)    BISON_VERSION="$2"; shift 2 ;;
+    --texinfo-version)  TEXINFO_VERSION="$2"; shift 2 ;;
     --keep-build)       KEEP_BUILD=true;    shift   ;;
     -h|--help)          usage ;;
     *) die "未知参数: $1，使用 --help 查看帮助" ;;
@@ -72,6 +75,7 @@ done
 
 FLEX_URL="https://github.com/westes/flex/releases/download/v${FLEX_VERSION}/flex-${FLEX_VERSION}.tar.gz"
 BISON_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/bison/bison-${BISON_VERSION}.tar.xz"
+TEXINFO_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/texinfo/texinfo-${TEXINFO_VERSION}.tar.xz"
 
 # ─── 清理函数 ────────────────────────────────────────────────
 cleanup() {
@@ -182,7 +186,7 @@ verify() {
   # 临时将 $PREFIX/bin 加入 PATH 进行验证
   export PATH="$bin_dir:$PATH"
 
-  for tool in flex bison; do
+  for tool in flex bison makeinfo; do
     local bin="$bin_dir/$tool"
     if [[ ! -x "$bin" ]]; then
       echo -e "  ${RED}✗${NC} $tool 二进制不存在: $bin"
@@ -243,10 +247,11 @@ print_env_hint() {
 main() {
   echo -e "${CYAN}"
   echo "=========================================================="
-  echo " flex + bison 自动构建安装脚本"
+  echo " flex + bison + texinfo 自动构建安装脚本"
   echo "=========================================================="
-  echo " flex 版本   : ${FLEX_VERSION}"
-  echo " bison 版本  : ${BISON_VERSION}"
+  echo " flex 版本    : ${FLEX_VERSION}"
+  echo " bison 版本   : ${BISON_VERSION}"
+  echo " texinfo 版本 : ${TEXINFO_VERSION}"
   echo " 安装前缀    : ${PREFIX}"
   echo " 构建目录    : ${BUILD_DIR}"
   echo "=========================================================="
@@ -260,16 +265,20 @@ main() {
   # ── 下载源码 ──
   local flex_tar="$BUILD_DIR/flex-${FLEX_VERSION}.tar.gz"
   local bison_tar="$BUILD_DIR/bison-${BISON_VERSION}.tar.xz"
+  local texinfo_tar="$BUILD_DIR/texinfo-${TEXINFO_VERSION}.tar.xz"
 
-  download "$FLEX_URL"  "$flex_tar"
-  download "$BISON_URL" "$bison_tar"
+  download "$FLEX_URL"    "$flex_tar"
+  download "$BISON_URL"   "$bison_tar"
+  download "$TEXINFO_URL" "$texinfo_tar"
 
   # ── 解压 ──
   local flex_src="$BUILD_DIR/flex-src"
   local bison_src="$BUILD_DIR/bison-src"
+  local texinfo_src="$BUILD_DIR/texinfo-src"
 
-  extract "$flex_tar"  "$flex_src"
-  extract "$bison_tar" "$bison_src"
+  extract "$flex_tar"    "$flex_src"
+  extract "$bison_tar"   "$bison_src"
+  extract "$texinfo_tar" "$texinfo_src"
 
   # ── 构建安装 flex ──
   echo ""
@@ -288,6 +297,11 @@ main() {
   info "━━━ 开始构建 bison ${BISON_VERSION} ━━━"
   # bison 需要 m4，已在依赖检查中确认
   build_and_install "bison ${BISON_VERSION}" "$bison_src"
+
+  # ── 构建安装 texinfo ──
+  echo ""
+  info "━━━ 开始构建 texinfo ${TEXINFO_VERSION} ━━━"
+  build_and_install "texinfo ${TEXINFO_VERSION}" "$texinfo_src"
 
   # ── 验证 ──
   verify
