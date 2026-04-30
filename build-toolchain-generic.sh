@@ -13,23 +13,9 @@ else
 fi
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
-# 颜色定义
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-CYAN='\033[0;36m'
-NC='\033[0m' # 重置颜色
+source "$SCRIPT_DIR/lib.sh"
 
-# 输出函数
-error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
-info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
-step()  { echo -e "${GREEN}[STEP]${NC} $*"; }
-ok()    { echo -e "${BLUE}[OK]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
-
-# 捕获错误并提示
-trap 'error "错误发生在脚本第 ${LINENO} 行，详细信息请查看日志。"; exit 1' ERR
+setup_error_trap
 
 # 默认版本设置
 BINUTILS_VER="2.45"
@@ -261,24 +247,6 @@ info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
 info "构建线程数: $THREADS"
 
-# 下载函数：若文件不存在则使用 wget 或 curl 下载
-download() {
-    url="$1"; dest="$2"
-    if [[ -f "$dest" ]]; then
-        info "已存在: $dest，跳过下载"
-    else
-        info "下载 $url ..."
-        if command -v curl > /dev/null; then
-            curl -fSL --progress-bar -o "$dest" "$url" || error "下载失败: $url"
-        elif command -v wget > /dev/null; then
-            wget -nc -q --show-progress -O "$dest" "$url" || error "下载失败: $url"
-        else
-            error "未安装 wget 或 curl，无法下载文件"
-            exit 1
-        fi
-    fi
-}
-
 step "下载源代码"
 dl_files=()
 
@@ -331,21 +299,6 @@ for url in "${dl_files[@]}"; do
         tar -xf ${DOWNLOAD_DIR}/${filename} -C "$SRC_DIR" || error "解压失败"
     fi
 done
-
-# 构建函数
-build_step() {
-    local name=$1
-    local log_dir=$2
-    mkdir -p $log_dir
-    shift 2
-
-    step "执行: $*"
-    if "$@" 2>&1 | cat > "${log_dir}/${name}.log"; then
-        ok "${name} 成功"
-    else
-        error "${name} 失败，详见 ${log_dir}/${name}.log"
-    fi
-}
 
 # 构建Binutils
 step "=== 构建 Binutils ==="
@@ -562,42 +515,5 @@ for libdir in "${CROSS_PREFIX}"/lib*; do
 done
 
 # 构建后处理
-if [[ "$CLEAN_BUILD" == true ]]; then
-    step "=== 清理构建目录和日志目录 ==="
-    if [[ -d "$BUILD_DIR" ]]; then
-        info "删除构建目录和日志目录: $BUILD_DIR $LOG_DIR"
-        rm -rf "$BUILD_DIR"
-        rm -rf "$LOG_DIR"
-        ok "构建目录和日志目录清理完成"
-    else
-        warn "构建目录和日志目录不存在，跳过清理"
-    fi
-fi
-
-if [[ "$ARCHIVE_RESULT" == true ]]; then
-    step "=== 打包工具链 ==="
-    if [[ -d "$CROSS_PREFIX" ]]; then
-        # 获取工具链目录的父目录和目录名
-        PARENT_DIR="$(dirname "$CROSS_PREFIX")"
-        TOOLCHAIN_NAME="$(basename "$CROSS_PREFIX")"
-        ARCHIVE_NAME="$PARENT_DIR/${TOOLCHAIN_NAME}.tar.xz"
-
-        info "打包工具链到: $ARCHIVE_NAME"
-
-        # 使用 tar 的 -C 选项指定工作目录，避免 cd
-        if tar -cJf "$ARCHIVE_NAME" -C "$PARENT_DIR" "$TOOLCHAIN_NAME" 2>/dev/null; then
-            ok "工具链打包完成: $ARCHIVE_NAME"
-
-            # 删除原目录
-            info "删除原工具链目录: $CROSS_PREFIX"
-            rm -rf "$CROSS_PREFIX"
-            ok "原目录删除完成"
-
-            echo -e "打包文件: ${GREEN}$ARCHIVE_NAME${NC}"
-        else
-            error "打包失败"
-        fi
-    else
-        warn "工具链目录不存在，跳过打包"
-    fi
-fi
+clean_build_dir "$BUILD_DIR" "$LOG_DIR" "$CLEAN_BUILD"
+archive_toolchain "$CROSS_PREFIX" "$ARCHIVE_RESULT"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 # 检查 download_prerequisites 文件是否存在
 if [ ! -f "./contrib/download_prerequisites" ]; then
@@ -45,8 +46,6 @@ check_archive_integrity() {
 # 检查文件完整性
 check_file_integrity() {
     local filename="$1"
-    local min_size=10240  # 10KB作为最小有效文件大小
-
     # 检查文件是否存在
     if [ ! -f "$filename" ]; then
         return 1
