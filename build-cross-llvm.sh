@@ -1,35 +1,35 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
-# source common library
+# 加载公共库
 source "$(dirname "$0")/lib.sh"
 
 # ==============================================================================
-# Helper functions
+# 辅助函数
 # ==============================================================================
 
 usage() {
-    echo "Usage: $0 [options]"
-    echo "Options:"
-    echo "  --arch <arch>       Target architecture (required)"
-    echo "  --src-dir <dir>     LLVM source directory (required)"
-    echo "  --work-dir <dir>    Work directory for build and install (default: current directory)"
-    echo "  --target-gcc-toolchain <dir> Optional target GCC toolchain directory"
-    echo "  --target-sysroot <dir> Optional target sysroot directory"
-    echo "  --build-dir <dir>   Optional build directory"
-    echo "  --install-dir <dir> Optional install directory"
-    echo "  --log-dir <dir>     Optional log directory"
-    echo "  --link-jobs <n>     Optional number of parallel link jobs (LLVM_PARALLEL_LINK_JOBS)"
-    echo "  -h, --help          Show this help message"
+    echo "用法: $0 [选项]"
+    echo "选项:"
+    echo "  --arch <arch>       目标架构 (必填)"
+    echo "  --src-dir <dir>     LLVM 源码目录 (必填)"
+    echo "  --work-dir <dir>    工作目录 (默认: 当前目录)"
+    echo "  --target-gcc-toolchain <dir> 可选的目标 GCC 工具链目录"
+    echo "  --target-sysroot <dir> 可选的目标 sysroot 目录"
+    echo "  --build-dir <dir>   可选的构建目录"
+    echo "  --install-dir <dir> 可选的安装目录"
+    echo "  --log-dir <dir>     可选的日志目录"
+    echo "  --link-jobs <n>     可选的并行链接作业数 (LLVM_PARALLEL_LINK_JOBS)"
+    echo "  -h, --help          显示帮助信息"
     exit 0
 }
 
 # ==============================================================================
-# Initialization and parameter parsing
+# 初始化与参数解析
 # ==============================================================================
 
-# Default values
+# 默认值
 ARCH=""
 WORK_DIR=$(pwd)
 SRC_DIR=""
@@ -53,7 +53,7 @@ parse_args() {
             --log-dir) LOG_DIR="$2"; shift ;;
             --link-jobs) LINK_JOBS="$2"; shift ;;
             -h|--help) usage ;;
-            *) error "Unknown parameter passed: $1"; ;;
+            *) error "未知参数: $1"; ;;
         esac
         shift
     done
@@ -61,19 +61,19 @@ parse_args() {
 
 validate_args() {
     if [ -z "$ARCH" ]; then
-        error "--arch is required. Use --help for usage."
+        error "--arch 参数为必需，使用 --help 查看用法。"
     fi
 
     if [ -z "$SRC_DIR" ]; then
-        error "--src-dir is required. Use --help for usage."
+        error "--src-dir 参数为必需，使用 --help 查看用法。"
     fi
 
     if [[ ( -n "$TARGET_GCC_TOOLCHAIN" && -z "$TARGET_SYSROOT" ) || ( -z "$TARGET_GCC_TOOLCHAIN" && -n "$TARGET_SYSROOT" ) ]]; then
-        error "--target-gcc-toolchain and --target-sysroot must be used together."
+        error "--target-gcc-toolchain 和 --target-sysroot 必须同时使用。"
     fi
 
     if [ ! -d "$SRC_DIR" ]; then
-        error "Source directory not found: $SRC_DIR"
+        error "源码目录不存在: $SRC_DIR"
     fi
 }
 
@@ -91,23 +91,23 @@ setup_environment() {
     INSTALL_DIR=$(realpath "$INSTALL_DIR")
     LOG_DIR=$(realpath "$LOG_DIR")
 
-    info "Architecture  : ${ARCH}"
-    info "Source Dir    : ${SRC_DIR}"
-    info "Working Dir   : ${WORK_DIR}"
-    info "Build Dir     : ${BUILD_DIR}"
-    info "Install Dir   : ${INSTALL_DIR}"
-    info "Log Dir       : ${LOG_DIR}"
+    info "目标架构      : ${ARCH}"
+    info "源码目录      : ${SRC_DIR}"
+    info "工作目录      : ${WORK_DIR}"
+    info "构建目录      : ${BUILD_DIR}"
+    info "安装目录      : ${INSTALL_DIR}"
+    info "日志目录      : ${LOG_DIR}"
 
     if [ -n "$TARGET_GCC_TOOLCHAIN" ] && [ -n "$TARGET_SYSROOT" ]; then
         TARGET_GCC_TOOLCHAIN=$(realpath "$TARGET_GCC_TOOLCHAIN")
         TARGET_SYSROOT=$(realpath "$TARGET_SYSROOT")
-        info "Target GCC    : ${TARGET_GCC_TOOLCHAIN}"
-        info "Target Sysroot: ${TARGET_SYSROOT}"
+        info "目标 GCC      : ${TARGET_GCC_TOOLCHAIN}"
+        info "目标 Sysroot  : ${TARGET_SYSROOT}"
     fi
 }
 
 configure_llvm() {
-    step "=== Configuring LLVM ==="
+    step "=== 配置 LLVM ==="
 
     local CMAKE_EXTRA_ARGS=()
     if [ -n "$TARGET_GCC_TOOLCHAIN" ] && [ -n "$TARGET_SYSROOT" ]; then
@@ -144,26 +144,26 @@ configure_llvm() {
       -DLLVM_DEFAULT_TARGET_TRIPLE=${ARCH}-unknown-linux-gnu \
       -DLLVM_ENABLE_ZLIB=FORCE_ON
 
-      # disable i386 runtime when build x86 target
-      # remove -DLLVM_DEFAULT_TARGET_TRIPLE=${ARCH}-unknown-linux-gnu, add -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
+      # NOTE: 构建 x86 目标时禁用 i386 运行时的备选方案：
+      # 移除 -DLLVM_DEFAULT_TARGET_TRIPLE=${ARCH}-unknown-linux-gnu，改用 -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
       #-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
 }
 
 build_llvm() {
-    step "=== Building LLVM ==="
+    step "=== 构建 LLVM ==="
     cd "${BUILD_DIR}"
     build_step "build" "${LOG_DIR}" ninja
 }
 
 install_llvm() {
-    step "=== Installing LLVM ==="
+    step "=== 安装 LLVM ==="
     cd "${BUILD_DIR}"
     build_step "install" "${LOG_DIR}" ninja install
-    ok "LLVM installation completed at ${INSTALL_DIR}"
+    ok "LLVM 安装完成，路径: ${INSTALL_DIR}"
 }
 
 # ==============================================================================
-# Main execution
+# 主执行流程
 # ==============================================================================
 
 main() {

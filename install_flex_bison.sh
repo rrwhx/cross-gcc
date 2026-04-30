@@ -7,17 +7,14 @@
 
 set -euo pipefail
 
-# ─── 颜色输出 ────────────────────────────────────────────────
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
-success() { echo -e "${GREEN}[OK]${NC}    $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
-die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+# ─── 加载公共库 ──────────────────────────────────────────────
+if command -v readlink >/dev/null 2>&1; then
+    SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+else
+    SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+fi
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+source "$SCRIPT_DIR/lib.sh"
 
 # ─── 可配置变量 ──────────────────────────────────────────────
 PREFIX="${PREFIX:-$HOME/.local}"
@@ -69,7 +66,7 @@ while [[ $# -gt 0 ]]; do
     --texinfo-version)  TEXINFO_VERSION="$2"; shift 2 ;;
     --keep-build)       KEEP_BUILD=true;    shift   ;;
     -h|--help)          usage ;;
-    *) die "未知参数: $1，使用 --help 查看帮助" ;;
+    *) error "未知参数: $1，使用 --help 查看帮助" ;;
   esac
 done
 
@@ -97,32 +94,9 @@ check_deps() {
     fi
   done
   if [[ ${#missing[@]} -gt 0 ]]; then
-    die "缺少以下工具: ${missing[*]}\n请先安装后再运行此脚本"
+    error "缺少以下工具: ${missing[*]}\n请先安装后再运行此脚本"
   fi
-  success "依赖工具检查通过"
-}
-
-# ─── 下载函数 ────────────────────────────────────────────────
-download() {
-  local url="$1"
-  local dest="$2"
-  local name
-  name=$(basename "$dest")
-
-  if [[ -f "$dest" ]]; then
-    info "$name 已存在，跳过下载"
-    return
-  fi
-
-  info "下载: $url"
-  if command -v curl &>/dev/null; then
-    curl -fSL --progress-bar -o "$dest" "$url" \
-      || die "下载失败: $url"
-  else
-    wget -q --show-progress -O "$dest" "$url" \
-      || die "下载失败: $url"
-  fi
-  success "下载完成: $name"
+  ok "依赖工具检查通过"
 }
 
 # ─── 解压函数 ────────────────────────────────────────────────
@@ -132,8 +106,8 @@ extract() {
   info "解压: $(basename "$archive")"
   mkdir -p "$dest_dir"
   tar -xf "$archive" -C "$dest_dir" --strip-components=1 \
-    || die "解压失败: $archive"
-  success "解压完成"
+    || error "解压失败: $archive"
+  ok "解压完成"
 }
 
 # ─── 构建安装函数 ─────────────────────────────────────────────
@@ -156,23 +130,23 @@ build_and_install() {
     --disable-dependency-tracking \
     $extra_flags > "$conf_log" 2>&1; then
     tail -n 20 "$conf_log"
-    die "配置 $name 失败！请查看日志: $conf_log"
+    error "配置 $name 失败！请查看日志: $conf_log"
   fi
 
   info "编译 $name ..."
   if ! make -j"$JOBS" > "$build_log" 2>&1; then
     tail -n 20 "$build_log"
-    die "编译 $name 失败！请查看日志: $build_log"
+    error "编译 $name 失败！请查看日志: $build_log"
   fi
 
   info "安装 $name ..."
   if ! make install > "$install_log" 2>&1; then
     tail -n 20 "$install_log"
-    die "安装 $name 失败！请查看日志: $install_log"
+    error "安装 $name 失败！请查看日志: $install_log"
   fi
 
   popd > /dev/null
-  success "$name 安装完成"
+  ok "$name 安装完成"
 }
 
 # ─── 验证安装 ────────────────────────────────────────────────
@@ -215,9 +189,9 @@ verify() {
 
   echo ""
   if [[ "$all_ok" == true ]]; then
-    success "所有工具验证通过！"
+    ok "所有工具验证通过！"
   else
-    die "部分工具验证失败，请检查上方错误"
+    error "部分工具验证失败，请检查上方错误"
   fi
 }
 

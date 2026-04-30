@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-set -e
-#!/usr/bin/env bash
+set -euo pipefail
 
 # 检测系统包管理器
 if command -v apt-get &> /dev/null; then
@@ -14,8 +13,8 @@ if command -v apt-get &> /dev/null; then
 elif command -v dnf &> /dev/null || command -v yum &> /dev/null; then
     echo "检测到 yum/dnf 包管理器"
     PKG_MANAGER=$(command -v dnf || command -v yum)
-    sudo $PKG_MANAGER groupinstall -y "Development Tools"
-    sudo $PKG_MANAGER install -y \
+    sudo "$PKG_MANAGER" groupinstall -y "Development Tools"
+    sudo "$PKG_MANAGER" install -y \
         bison flex texinfo python3 gawk \
         git wget gzip bzip2 xz \
         gmp-devel mpfr-devel libmpc-devel \
@@ -34,11 +33,5 @@ else
     exit 1
 fi
 
-# 检查安装结果
-if [ $? -eq 0 ]; then
-    echo "软件包安装成功"
-else
-    echo "软件包安装失败"
-    exit 1
-fi
+echo "软件包安装成功"
 
