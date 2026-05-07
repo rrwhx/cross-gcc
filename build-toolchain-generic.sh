@@ -274,7 +274,8 @@ fetch_source() {
 
 fetch_source "Binutils" "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://${MIRROR}/git/binutils-gdb.git" "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
 fetch_source "GCC" "$GCC_VER" "$SRC_DIR_GCC" "https://${MIRROR}/git/gcc.git" "https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
-fetch_source "Linux" "$LINUX_VER" "$SRC_DIR_LINUX" "https://${MIRROR}/git/linux.git" "https://${MIRROR}/kernel/v6.x/linux-${LINUX_VER}.tar.xz"
+LINUX_MAJOR_VER="${LINUX_VER%%.*}"
+fetch_source "Linux" "$LINUX_VER" "$SRC_DIR_LINUX" "https://${MIRROR}/git/linux.git" "https://${MIRROR}/kernel/v${LINUX_MAJOR_VER}.x/linux-${LINUX_VER}.tar.xz"
 
 if [[ "$LIBC" == "glibc" ]]; then
     fetch_source "Glibc" "$GLIBC_VER" "$SRC_DIR_GLIBC" "https://${MIRROR}/git/glibc.git" "https://${MIRROR}/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
