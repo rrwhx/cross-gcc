@@ -52,10 +52,27 @@ jobs:
             texinfo \
             libssl-dev
 
+      - name: Get latest versions
+        id: versions
+        run: |
+          chmod +x get_latest_versions.sh
+          eval "$(./get_latest_versions.sh --shell)"
+          echo "gcc_ver=$GCC_VER" >> $GITHUB_OUTPUT
+          echo "binutils_ver=$BINUTILS_VER" >> $GITHUB_OUTPUT
+          echo "glibc_ver=$GLIBC_VER" >> $GITHUB_OUTPUT
+          echo "musl_ver=$MUSL_VER" >> $GITHUB_OUTPUT
+          echo "linux_ver=$LINUX_VER" >> $GITHUB_OUTPUT
+
       - name: Build toolchain
         run: |
           chmod +x build-toolchain-generic.sh
           ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc ${{ matrix.libc }} --clean --archive
+        env:
+          GCC_VER: ${{ steps.versions.outputs.gcc_ver }}
+          BINUTILS_VER: ${{ steps.versions.outputs.binutils_ver }}
+          GLIBC_VER: ${{ steps.versions.outputs.glibc_ver }}
+          MUSL_VER: ${{ steps.versions.outputs.musl_ver }}
+          LINUX_VER: ${{ steps.versions.outputs.linux_ver }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -72,6 +89,20 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Get latest versions
+        id: versions
+        run: |
+          chmod +x get_latest_versions.sh
+          eval "$(./get_latest_versions.sh --shell)"
+          echo "gcc_ver=$GCC_VER" >> $GITHUB_OUTPUT
+          echo "binutils_ver=$BINUTILS_VER" >> $GITHUB_OUTPUT
+          echo "glibc_ver=$GLIBC_VER" >> $GITHUB_OUTPUT
+          echo "musl_ver=$MUSL_VER" >> $GITHUB_OUTPUT
+          echo "linux_ver=$LINUX_VER" >> $GITHUB_OUTPUT
+
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
@@ -91,6 +122,15 @@ jobs:
 
             🔄 **Auto updated** by commit: ${{ github.sha }}
             📅 **Date**: ${{ github.event.head_commit.timestamp }}
+
+            ## 组件版本
+            | 组件 | 版本 |
+            |------|------|
+            | GCC | ${{ steps.versions.outputs.gcc_ver }} |
+            | binutils | ${{ steps.versions.outputs.binutils_ver }} |
+            | glibc | ${{ steps.versions.outputs.glibc_ver }} |
+            | musl | ${{ steps.versions.outputs.musl_ver }} |
+            | Linux 内核头文件 | ${{ steps.versions.outputs.linux_ver }} |
 
             ## 支持架构
             | Arch | LibC |
