@@ -381,6 +381,7 @@ if [[ "$LIBC" == "glibc" ]]; then
         --with-binutils="${CROSS_PREFIX}/$TARGET/bin" \
         --disable-multilib \
         --without-selinux \
+        --disable-werror \
         libc_cv_forced_unwind=yes "${glibc_extra_args[@]}"
 
     build_step "build" "${LOG_DIR_GLIBC}" \
