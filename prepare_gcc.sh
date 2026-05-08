@@ -117,11 +117,19 @@ download_file() {
     return 1
 }
 
-    gmp_file=$(grep "^gmp="     ./contrib/download_prerequisites | grep "gmp-.*tar.bz2" -o)
-   mpfr_file=$(grep "^mpfr="    ./contrib/download_prerequisites | grep "mpfr-.*tar.bz2" -o)
-    mpc_file=$(grep "^mpc="     ./contrib/download_prerequisites | grep "mpc-.*tar.gz" -o)
-    isl_file=$(grep "^isl="     ./contrib/download_prerequisites | grep "isl-.*tar.bz2" -o)
-gettext_file=$(grep "^gettext=" ./contrib/download_prerequisites | grep "gettext-.*tar.gz" -o)
+extract_pkg() {
+    local key="$1"
+    local prefix="$2"
+    grep "^${key}=" ./contrib/download_prerequisites 2>/dev/null \
+        | grep -oE "${prefix}-[0-9][0-9.a-z]*\.tar\.(gz|bz2|xz)" \
+        | head -1 || true
+}
+
+    gmp_file=$(extract_pkg "gmp"     "gmp")
+   mpfr_file=$(extract_pkg "mpfr"    "mpfr")
+    mpc_file=$(extract_pkg "mpc"     "mpc")
+    isl_file=$(extract_pkg "isl"     "isl")
+gettext_file=$(extract_pkg "gettext" "gettext")
 
 # 下载所有文件
 if [ -n "$gmp_file" ]; then
