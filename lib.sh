@@ -26,7 +26,7 @@ download() {
     local url="$1"
     local dest="$2"
     if [[ -f "$dest" ]]; then
-        info "已存在: $dest，跳过下载"
+        info "已存在: ${dest}，跳过下载"
     else
         info "下载 $url ..."
         if command -v curl > /dev/null; then

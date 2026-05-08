@@ -96,7 +96,7 @@ export OBJCOPY="${TARGET}-objcopy"
 export OBJDUMP="${TARGET}-objdump"
 
 if ! command -v "$CC" &>/dev/null; then
-    error "无法在 PATH 中找到交叉编译器 $CC，请检查 toolchain-dir 结构"
+    error "无法在 PATH 中找到交叉编译器 ${CC}，请检查 toolchain-dir 结构"
 fi
 
 info "工具链目录: $TOOLCHAIN_DIR"
