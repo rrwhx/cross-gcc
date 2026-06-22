@@ -347,7 +347,15 @@ build_step "configure" "${LOG_DIR_GCC_INITIAL}" \
     --without-headers \
     --with-newlib \
     --disable-nls \
-    --disable-shared --disable-threads --disable-libatomic --disable-libgomp --disable-libquadmath --disable-libssp --disable-libvtv --disable-libstdcxx
+    --disable-shared \
+    --disable-threads \
+    --disable-libatomic \
+    --disable-libgomp \
+    --disable-libquadmath \
+    --disable-libssp \
+    --disable-libvtv \
+    --disable-libstdcxx \
+    --disable-werror
 
 build_step "build" "${LOG_DIR_GCC_INITIAL}" \
     make -j${THREADS}
@@ -465,7 +473,9 @@ build_step "configure" "${LOG_DIR_GCC_FINAL}" \
     --enable-threads=posix \
     --enable-shared \
     --disable-nls \
-    --disable-gprofng "${gcc_extra_args[@]}"
+    --disable-gprofng \
+    --disable-werror \
+    "${gcc_extra_args[@]}"
 
 build_step "build" "${LOG_DIR_GCC_FINAL}" \
     make -j${THREADS}
