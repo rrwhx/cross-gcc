@@ -14,7 +14,7 @@ setup_error_trap
 
 # ---------------------------------------------------------------------------
 # 库定义 (声明式)
-# 格式: "名称|版本|下载URL模板|构建系统|额外参数(空格分隔)"
+# 格式: "名称|版本|下载URL模板|构建系统|额外参数(支持引号包含空格)"
 # URL 模板中 {VER} 会被替换为版本号
 # ---------------------------------------------------------------------------
 LIB_DEFS=(
@@ -23,6 +23,7 @@ LIB_DEFS=(
     "lz4|1.10.0|https://github.com/lz4/lz4/archive/refs/tags/v{VER}.tar.gz|make|"
     "zstd|1.5.7|https://github.com/facebook/zstd/releases/download/v{VER}/zstd-{VER}.tar.gz|make|"
     "snappy|1.2.2|https://github.com/google/snappy/archive/refs/tags/{VER}.tar.gz|cmake|-DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF"
+    "jemalloc|5.3.1|https://github.com/jemalloc/jemalloc/releases/download/{VER}/jemalloc-{VER}.tar.bz2|autotools|'EXTRA_CXXFLAGS=-include stdexcept'"
 )
 
 # ---------------------------------------------------------------------------
@@ -135,6 +136,13 @@ parse_lib_def() {
 
     # 替换 URL 模板中的版本占位符
     LIB_URL="${LIB_URL//\{VER\}/$LIB_VER}"
+
+    # 从 URL 末尾提取归档文件扩展名
+    if [[ "$LIB_URL" =~ \.(tar\.[a-z0-9]+)$ ]]; then
+        LIB_EXT="${BASH_REMATCH[1]}"
+    else
+        LIB_EXT="tar.gz"
+    fi
 }
 
 # 编译并安装单个库
@@ -144,10 +152,10 @@ build_package() {
     local build_sys="$3"
     local extra_string="$4"
 
-    # 将空格分隔的额外参数字符串转为数组
+    # 将额外参数字符串转为数组 (支持引号包含空格的参数)
     local extra_args=()
     if [[ -n "$extra_string" ]]; then
-        read -ra extra_args <<< "$extra_string"
+        eval "extra_args=($extra_string)"
     fi
 
     step "=== 编译并安装 ${lib_name} ==="
@@ -223,7 +231,7 @@ step "=== 下载依赖库源码 ==="
 for def in "${LIB_DEFS[@]}"; do
     parse_lib_def "$def"
     if should_build "$LIB_NAME"; then
-        download "$LIB_URL" "$DOWNLOAD_DIR/${LIB_NAME}-${LIB_VER}.tar.gz"
+        download "$LIB_URL" "$DOWNLOAD_DIR/${LIB_NAME}-${LIB_VER}.${LIB_EXT}"
     fi
 done
 
@@ -234,8 +242,8 @@ step "=== 解压源码 ==="
 for def in "${LIB_DEFS[@]}"; do
     parse_lib_def "$def"
     if should_build "$LIB_NAME" && [[ ! -d "$SRC_DIR/${LIB_NAME}-${LIB_VER}" ]]; then
-        info "解压: ${LIB_NAME}-${LIB_VER}.tar.gz"
-        tar -xf "$DOWNLOAD_DIR/${LIB_NAME}-${LIB_VER}.tar.gz" -C "$SRC_DIR"
+        info "解压: ${LIB_NAME}-${LIB_VER}.${LIB_EXT}"
+        tar -xf "$DOWNLOAD_DIR/${LIB_NAME}-${LIB_VER}.${LIB_EXT}" -C "$SRC_DIR"
     fi
 done
 
