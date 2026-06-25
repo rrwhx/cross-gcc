@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cross_compile Linux kernel with KVM guest support
+# cross-compile Linux kernel with KVM guest support
 set -euo pipefail
 
 if command -v readlink >/dev/null 2>&1; then
@@ -16,7 +16,7 @@ setup_error_trap
 # ---------------------------------------------------------------------------
 # 默认配置
 # ---------------------------------------------------------------------------
-LINUX_VER="${LINUX_VER:-6.17.6}"
+LINUX_VER="${LINUX_VER:-7.1.1}"
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 
 # ---------------------------------------------------------------------------
@@ -32,12 +32,12 @@ CLEAN_BUILD=false
 
 usage() {
     cat <<EOF
-用法: $(basename "$0") --arch ARCH --cross_compile PREFIX [选项]
+用法: $(basename "$0") --arch ARCH --cross-compile PREFIX [选项]
 
 交叉编译 Linux 内核 (defconfig + kvm_guest.config)
 
   --arch            目标架构 (例如: riscv64, aarch64, x86_64)
-  --cross_compile   交叉编译前缀，可为完整路径或仅前缀
+  --cross-compile   交叉编译前缀，可为完整路径或仅前缀
                     (例如: riscv64-linux-gnu- 或 /path/to/bin/riscv64-linux-gnu-)
   --work-dir        工作目录前缀 (默认: 当前目录)
   --linux-ver       Linux 内核版本 (默认: ${LINUX_VER})
@@ -49,8 +49,8 @@ usage() {
   -h,--help         显示帮助
 
 示例:
-  $(basename "$0") --arch riscv64 --cross_compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
-  $(basename "$0") --arch riscv64 --cross_compile riscv64-linux-gnu- --linux-src ./downloads/linux-6.17.6
+  $(basename "$0") --arch riscv64 --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+  $(basename "$0") --arch riscv64 --cross-compile riscv64-linux-gnu- --linux-src ./downloads/linux-7.1.1
 EOF
     exit 1
 }
@@ -58,7 +58,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch)           ARCH="$2"; shift 2;;
-        --cross_compile)  CROSS_COMPILE="$2"; shift 2;;
+        --cross-compile)  CROSS_COMPILE="$2"; shift 2;;
         --work-dir)       WORK_DIR="$2"; shift 2;;
         --linux-ver)      LINUX_VER="$2"; shift 2;;
         --linux-src)      LINUX_SRC="$2"; shift 2;;
@@ -72,7 +72,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$ARCH" || -z "$CROSS_COMPILE" ]]; then
-    error "--arch 和 --cross_compile 参数为必需。"
+    error "--arch 和 --cross-compile 参数为必需。"
 fi
 
 # ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ if [[ "$CROSS_COMPILE" == */* ]]; then
 fi
 
 if ! command -v "${CROSS_COMPILE}gcc" &>/dev/null; then
-    error "无法找到交叉编译器 ${CROSS_COMPILE}gcc，请检查 --cross_compile 参数"
+    error "无法找到交叉编译器 ${CROSS_COMPILE}gcc，请检查 --cross-compile 参数"
 fi
 
 # ---------------------------------------------------------------------------

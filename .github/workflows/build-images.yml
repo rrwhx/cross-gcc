@@ -1,0 +1,95 @@
+name: Build BusyBox & Kernel Images
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'build_busybox.sh'
+      - 'build_kernel.sh'
+      - 'lib.sh'
+      - '.github/workflows/build-images.yml'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-images:
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: riscv64
+            target: riscv64-linux-gnu
+            kernel_arch: riscv
+          - arch: aarch64
+            target: aarch64-linux-gnu
+            kernel_arch: arm64
+          - arch: x86_64
+            target: x86_64-linux-gnu
+            kernel_arch: x86
+          - arch: loongarch64
+            target: loongarch64-linux-gnu
+            kernel_arch: loongarch
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          chmod +x install_prerequest.sh
+          ./install_prerequest.sh
+
+      - name: Cache toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: cross-${{ matrix.target }}
+          key: toolchain-${{ matrix.arch }}
+
+      - name: Build toolchain (if not cached)
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          chmod +x build-toolchain-generic.sh
+          ./build-toolchain-generic.sh \
+            --arch ${{ matrix.arch }} --libc glibc
+
+      - name: Build BusyBox
+        run: |
+          chmod +x build_busybox.sh
+          ./build_busybox.sh \
+            --arch ${{ matrix.arch }} \
+            --cross-compile ./cross-${{ matrix.target }}/bin/${{ matrix.target }}- \
+            --clean
+
+      - name: Build Linux Kernel
+        run: |
+          chmod +x build_kernel.sh
+          ./build_kernel.sh \
+            --arch ${{ matrix.arch }} \
+            --cross-compile ./cross-${{ matrix.target }}/bin/${{ matrix.target }}- \
+            --clean
+
+      - name: List build artifacts
+        run: |
+          echo "=== BusyBox initramfs ==="
+          ls -lh initrd-${{ matrix.arch }}.cpio
+          echo "=== Kernel images ==="
+          ls -lh kernel-${{ matrix.arch }}/
+
+      - name: Upload BusyBox initramfs
+        uses: actions/upload-artifact@v7
+        with:
+          name: initrd-${{ matrix.arch }}
+          path: initrd-${{ matrix.arch }}.cpio
+          retention-days: 7
+
+      - name: Upload Kernel images
+        uses: actions/upload-artifact@v7
+        with:
+          name: kernel-${{ matrix.arch }}
+          path: kernel-${{ matrix.arch }}/
+          retention-days: 7

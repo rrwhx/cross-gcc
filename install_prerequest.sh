@@ -6,9 +6,9 @@ if command -v apt-get &> /dev/null; then
     echo "检测到 apt 包管理器"
     sudo apt-get install -y \
         build-essential bison flex texinfo \
-        python3 gawk git wget gzip bzip2 xz-utils \
-        libgmp-dev libmpfr-dev libmpc-dev \
-        gettext file rsync
+        python3 gawk git wget curl gzip bzip2 xz-utils \
+        libgmp-dev libmpfr-dev libmpc-dev libssl-dev libelf-dev \
+        gettext file rsync cpio bc
 
 elif command -v dnf &> /dev/null || command -v yum &> /dev/null; then
     echo "检测到 yum/dnf 包管理器"
@@ -16,17 +16,17 @@ elif command -v dnf &> /dev/null || command -v yum &> /dev/null; then
     sudo "$PKG_MANAGER" groupinstall -y "Development Tools"
     sudo "$PKG_MANAGER" install -y \
         bison flex texinfo python3 gawk \
-        git wget gzip bzip2 xz \
-        gmp-devel mpfr-devel libmpc-devel \
-        gettext file rsync
+        git wget curl gzip bzip2 xz \
+        gmp-devel mpfr-devel libmpc-devel openssl-devel elfutils-libelf-devel \
+        gettext file rsync cpio bc
 
 elif command -v pacman &> /dev/null; then
     echo "检测到 pacman 包管理器"
     sudo pacman -S --needed --noconfirm \
         base-devel bison flex texinfo python \
-        gawk git wget gzip bzip2 xz \
-        gmp mpfr libmpc \
-        gettext file rsync
+        gawk git wget curl gzip bzip2 xz \
+        gmp mpfr libmpc openssl libelf \
+        gettext file rsync cpio bc
 
 else
     echo "错误：未检测到支持的包管理器"

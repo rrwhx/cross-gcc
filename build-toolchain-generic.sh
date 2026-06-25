@@ -18,11 +18,11 @@ source "$SCRIPT_DIR/lib.sh"
 setup_error_trap
 
 # 默认版本设置
-BINUTILS_VER="${BINUTILS_VER:-2.45}"
-GCC_VER="${GCC_VER:-15.2.0}"
-GLIBC_VER="${GLIBC_VER:-2.42}"
-MUSL_VER="${MUSL_VER:-1.2.5}"
-LINUX_VER="${LINUX_VER:-6.17.6}"
+BINUTILS_VER="${BINUTILS_VER:-2.46.1}"
+GCC_VER="${GCC_VER:-16.1.0}"
+GLIBC_VER="${GLIBC_VER:-2.43}"
+MUSL_VER="${MUSL_VER:-1.2.6}"
+LINUX_VER="${LINUX_VER:-7.1.1}"
 
 # 初始化参数
 ARCH=""; LIBC=""

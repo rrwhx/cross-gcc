@@ -14,7 +14,7 @@ error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
 step()  { echo -e "${GREEN}[STEP]${NC} $*"; }
 ok()    { echo -e "${BLUE}[OK]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC} $*" >&2; }
 
 # 跨平台 CPU 线程数检测 (可被各脚本直接使用)
 THREADS=${THREADS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
@@ -43,6 +43,20 @@ download() {
     fi
 }
 
+# 打印构建日志中的错误上下文
+print_build_error_context() {
+    local log_file="$1"
+    local error_lines
+    error_lines=$(grep -n -C2 -E "fatal error|: error:|undefined reference to|ld: error:|collect2: error:|CMake Error|Traceback \(most recent call last\):|ModuleNotFoundError|No such file or directory" "$log_file" | head -50)
+    if [[ -n "$error_lines" ]]; then
+        warn "--- 关键错误行 ---"
+        echo "$error_lines" >&2
+    fi
+    warn "--- 日志末尾 ---"
+    tail -20 "$log_file" >&2
+    warn "---"
+}
+
 # 构建函数
 build_step() {
     local name=$1
@@ -54,6 +68,7 @@ build_step() {
     if "$@" 2>&1 | cat > "${log_dir}/${name}.log"; then
         ok "${name} 成功"
     else
+        print_build_error_context "${log_dir}/${name}.log"
         error "${name} 失败，详见 ${log_dir}/${name}.log"
     fi
 }
