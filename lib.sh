@@ -16,6 +16,9 @@ step()  { echo -e "${GREEN}[STEP]${NC} $*"; }
 ok()    { echo -e "${BLUE}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 
+# 跨平台 CPU 线程数检测 (可被各脚本直接使用)
+THREADS=${THREADS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
+
 # 捕获错误并提示
 setup_error_trap() {
     trap 'error "错误发生在脚本第 ${LINENO} 行，详细信息请查看日志。"; exit 1' ERR

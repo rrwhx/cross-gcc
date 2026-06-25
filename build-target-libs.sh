@@ -34,7 +34,7 @@ TOOLCHAIN_DIR=""
 WORK_DIR=$(pwd)
 SKIP_LIBS=""   # 逗号分隔的字符串，避免空数组在 set -u 下的兼容性问题
 ONLY_LIBS=""
-THREADS=$(nproc 2>/dev/null || echo 4)
+THREADS=${THREADS}
 
 usage() {
     cat <<EOF
