@@ -27,11 +27,13 @@ LINUX_VER="${LINUX_VER:-7.1.1}"
 # 初始化参数
 ARCH=""; LIBC=""
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
-THREADS="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
+THREADS=${THREADS}  # 默认并行构建线程数
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
 ENABLE_SANITIZER=false
+GIT_UPDATE=false
+FRESH_BUILD=false
 
 # 显示用法
 usage() {
@@ -57,8 +59,10 @@ usage() {
 
 构建后处理选项:
   --enable-sanitizer 开启 GCC sanitizer (默认关闭)
-  --clean        构建完成后删除构建目录和日志目录
-  --archive      构建完成后将工具链打包成 tar.xz 并删除原目录
+  --git-update     当版本为 'git' 且仓库已存在时，拉取最新代码
+  --fresh          构建前删除已有的 build/log/install 目录
+  --clean          构建完成后删除构建目录和日志目录
+  --archive        构建完成后将工具链打包成 tar.xz 并删除原目录
 
   -h,--help      显示帮助
 示例:
@@ -87,6 +91,8 @@ while [[ $# -gt 0 ]]; do
         --musl-ver)    MUSL_VER="$2"; shift 2;;
         --linux-ver)   LINUX_VER="$2"; shift 2;;
         --enable-sanitizer) ENABLE_SANITIZER=true; shift;;
+        --git-update)  GIT_UPDATE=true; shift;;
+        --fresh)       FRESH_BUILD=true; shift;;
         --clean)       CLEAN_BUILD=true; shift;;
         --archive)     ARCHIVE_RESULT=true; shift;;
         -h|--help)     usage;;
@@ -192,6 +198,12 @@ LOG_DIR=$(realpath "$LOG_DIR")
 INSTALL_DIR=$(realpath "$INSTALL_DIR")
 mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
+if [[ "$FRESH_BUILD" == true ]]; then
+    step "=== 清理已有的 build/log/install 目录 ==="
+    rm -rf "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
+    mkdir -p "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
+fi
+
 if [[ "$BINUTILS_VER" == "git" ]]; then
     SRC_DIR_BINUTILS="$SRC_DIR/binutils"
 else
@@ -258,15 +270,7 @@ fetch_source() {
     local tar_url=$5
 
     if [[ "$ver" == "git" ]]; then
-        if [[ ! -d "$src_dir" ]]; then
-            step "克隆 $name 仓库"
-            if ! command -v git &> /dev/null; then
-                error "git 未安装，无法克隆 $name 仓库"
-            fi
-            git clone --depth 1 "$git_url" "$src_dir" || error "克隆 $name 失败"
-        else
-            info "$name 源码目录已存在，跳过克隆"
-        fi
+        git_clone "$git_url" "$src_dir" 1 "$GIT_UPDATE"
     else
         dl_files+=("$tar_url")
     fi
@@ -326,7 +330,7 @@ step "==== 准备 GCC 源码 ==="
 cd "$SRC_DIR_GCC" || error "无法进入构建目录"
 # 下载 GMP/MPFR/MPC 等依赖（放入 gcc/ 目录）
 if [[ ! -f "prereq_done" ]]; then
-    build_step "gcc_download_prerequisites" "${LOG_DIR_GCC_INITIAL}" "${SCRIPT_DIR}/prepare_gcc.sh"
+    build_step "gcc_download_prerequisites" "${LOG_DIR_GCC_INITIAL}" "${SCRIPT_DIR}/prepare-gcc.sh"
     info "GCC 依赖下载完成 (日志: $LOG_DIR_GCC_INITIAL)"
     touch prereq_done
 fi

@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 获取脚本的绝对路径（在脚本开始时就确定）
+if command -v readlink >/dev/null 2>&1; then
+    SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+else
+    SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+fi
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
+source "$SCRIPT_DIR/lib.sh"
+
 # 默认支持的架构和 libc 列表
 declare -a default_arch_list=("aarch64" "loongarch64" "riscv32" "riscv64" "i686" "x86_64" "mipsel" "mips64el" "mips" "mips64")
 declare -a default_libc_list=("glibc" "musl")
@@ -51,28 +61,26 @@ done
 [[ ${#libc_list[@]} -eq 0 ]] && libc_list=("${default_libc_list[@]}")
 
 # 打印配置信息
-echo "==============================================="
-echo "[CONFIG] 目标架构: ${arch_list[*]}"
-echo "[CONFIG] 目标 libc: ${libc_list[*]}"
-echo "==============================================="
+info "==============================================="
+info "目标架构: ${arch_list[*]}"
+info "目标 libc: ${libc_list[*]}"
+info "==============================================="
 
 # 遍历每个架构和 libc 组合
 for arch in "${arch_list[@]}"; do
     for libc in "${libc_list[@]}"; do
-        echo "======================================================================"
-        echo "[INFO] 开始构建工具链：ARCH=$arch, LIBC=$libc"
-        echo "======================================================================"
+        step "======================================================================"
+        info "开始构建工具链：ARCH=$arch, LIBC=$libc"
+        step "======================================================================"
 
-        if ./build-toolchain-generic.sh --arch "$arch" --libc "$libc" "${extra_args[@]}"; then
-            echo "[OK] 构建成功：ARCH=$arch, LIBC=$libc"
+        if "$SCRIPT_DIR/build-toolchain-generic.sh" --arch "$arch" --libc "$libc" "${extra_args[@]}"; then
+            ok "构建成功：ARCH=$arch, LIBC=$libc"
         else
-            echo "[ERROR] 构建失败：ARCH=$arch, LIBC=$libc"
-            # 可选：记录失败日志
-            # echo "$arch-$libc" >> failed_builds.log
+            warn "构建失败：ARCH=$arch, LIBC=$libc"
         fi
     done
 done
 
-echo "==============================================="
-echo "[INFO] 全部构建任务已完成！"
-echo "==============================================="
+ok "==============================================="
+info "全部构建任务已完成！"
+ok "==============================================="

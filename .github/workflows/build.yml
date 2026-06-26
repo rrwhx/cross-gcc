@@ -34,14 +34,12 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          chmod +x install_prerequest.sh
-          ./install_prerequest.sh
+          ./install-prerequisites.sh
 
       - name: Get latest versions
         id: versions
         run: |
-          chmod +x get_latest_versions.sh
-          eval "$(./get_latest_versions.sh --shell)"
+          eval "$(./get-latest-versions.sh --shell)"
           echo "gcc_ver=$GCC_VER" >> $GITHUB_OUTPUT
           echo "binutils_ver=$BINUTILS_VER" >> $GITHUB_OUTPUT
           echo "glibc_ver=$GLIBC_VER" >> $GITHUB_OUTPUT
@@ -50,7 +48,6 @@ jobs:
 
       - name: Build toolchain
         run: |
-          chmod +x build-toolchain-generic.sh
           ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc ${{ matrix.libc }} --clean --archive
         env:
           GCC_VER: ${{ steps.versions.outputs.gcc_ver }}
@@ -80,8 +77,7 @@ jobs:
       - name: Get latest versions
         id: versions
         run: |
-          chmod +x get_latest_versions.sh
-          eval "$(./get_latest_versions.sh --shell)"
+          eval "$(./get-latest-versions.sh --shell)"
           echo "gcc_ver=$GCC_VER" >> $GITHUB_OUTPUT
           echo "binutils_ver=$BINUTILS_VER" >> $GITHUB_OUTPUT
           echo "glibc_ver=$GLIBC_VER" >> $GITHUB_OUTPUT

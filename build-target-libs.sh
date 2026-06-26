@@ -44,6 +44,7 @@ usage() {
   --work-dir       工作目录前缀 (默认: 当前目录)
   --skip           跳过指定的库，多次使用指定多个 (例如: --skip lz4 --skip snappy)
   --only           仅编译指定的库，多次使用指定多个 (例如: --only zlib --only zstd)
+  -j,--threads     并行编译线程数 (默认: ${THREADS})
   -h,--help        显示帮助
 示例:
   $(basename "$0") --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu
@@ -58,6 +59,7 @@ while [[ $# -gt 0 ]]; do
         --work-dir)      WORK_DIR="$2"; shift 2;;
         --skip)          SKIP_LIBS="${SKIP_LIBS:+${SKIP_LIBS},}$2"; shift 2;;
         --only)          ONLY_LIBS="${ONLY_LIBS:+${ONLY_LIBS},}$2"; shift 2;;
+        -j|--threads)    THREADS="$2"; shift 2;;
         -h|--help)       usage;;
         *)               error "未知选项: $1"; usage;;
     esac
@@ -260,4 +262,4 @@ for def in "${LIB_DEFS[@]}"; do
 done
 
 ok "请求的依赖库已经成功交叉编译并安装到 Sysroot 中！"
-echo -e "你可以通过目录 \033[0;32m${TARGET_SYSROOT}/usr/lib\033[0m 查看生成的库文件。"
+echo -e "你可以通过目录 ${GREEN}${TARGET_SYSROOT}/usr/lib${NC} 查看生成的库文件。"

@@ -4,8 +4,8 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'build_busybox.sh'
-      - 'build_kernel.sh'
+      - 'build-busybox.sh'
+      - 'build-kernel.sh'
       - 'lib.sh'
       - '.github/workflows/build-images.yml'
   pull_request:
@@ -22,16 +22,12 @@ jobs:
         include:
           - arch: riscv64
             target: riscv64-linux-gnu
-            kernel_arch: riscv
           - arch: aarch64
             target: aarch64-linux-gnu
-            kernel_arch: arm64
           - arch: x86_64
             target: x86_64-linux-gnu
-            kernel_arch: x86
           - arch: loongarch64
             target: loongarch64-linux-gnu
-            kernel_arch: loongarch
 
     steps:
       - name: Checkout code
@@ -40,45 +36,55 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          chmod +x install_prerequest.sh
-          ./install_prerequest.sh
+          ./install-prerequisites.sh
 
       - name: Cache toolchain
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: cross-${{ matrix.target }}
-          key: toolchain-${{ matrix.arch }}
+          key: toolchain-${{ matrix.arch }}-${{ hashFiles('build-toolchain-generic.sh', 'lib.sh', 'prepare-gcc.sh') }}
 
       - name: Build toolchain (if not cached)
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
-          chmod +x build-toolchain-generic.sh
           ./build-toolchain-generic.sh \
-            --arch ${{ matrix.arch }} --libc glibc
+            --arch ${{ matrix.arch }} --libc glibc --clean
 
       - name: Build BusyBox
         run: |
-          chmod +x build_busybox.sh
-          ./build_busybox.sh \
+          ./build-busybox.sh \
             --arch ${{ matrix.arch }} \
-            --cross-compile ./cross-${{ matrix.target }}/bin/${{ matrix.target }}- \
-            --clean
+            --cross-compile ./cross-${{ matrix.target }}/bin/${{ matrix.target }}-
+
+      - name: Save BusyBox binary and clean
+        run: |
+          cp build-busybox-${{ matrix.arch }}/busybox busybox-${{ matrix.arch }}
+          rm -rf build-busybox-${{ matrix.arch }} logs-busybox-${{ matrix.arch }}
 
       - name: Build Linux Kernel
         run: |
-          chmod +x build_kernel.sh
-          ./build_kernel.sh \
+          ./build-kernel.sh \
             --arch ${{ matrix.arch }} \
             --cross-compile ./cross-${{ matrix.target }}/bin/${{ matrix.target }}- \
             --clean
 
       - name: List build artifacts
         run: |
+          echo "=== BusyBox binary ==="
+          ls -lh busybox-${{ matrix.arch }}
+          file busybox-${{ matrix.arch }}
           echo "=== BusyBox initramfs ==="
           ls -lh initrd-${{ matrix.arch }}.cpio
           echo "=== Kernel images ==="
           ls -lh kernel-${{ matrix.arch }}/
+
+      - name: Upload BusyBox binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: busybox-${{ matrix.arch }}
+          path: busybox-${{ matrix.arch }}
+          retention-days: 7
 
       - name: Upload BusyBox initramfs
         uses: actions/upload-artifact@v7
@@ -93,3 +99,64 @@ jobs:
           name: kernel-${{ matrix.arch }}
           path: kernel-${{ matrix.arch }}/
           retention-days: 7
+
+  release:
+    needs: build-images
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          # 复制 busybox 二进制
+          for f in artifacts/busybox-*/busybox-*; do
+            [ -f "$f" ] && cp "$f" release/
+          done
+          # 复制 initramfs
+          for f in artifacts/initrd-*/*.cpio; do
+            [ -f "$f" ] && cp "$f" release/
+          done
+          # 复制内核文件
+          for dir in artifacts/kernel-*/; do
+            arch=$(basename "$dir" | sed 's/kernel-//')
+            for img in vmlinux Image Image.gz bzImage zImage; do
+              [ -f "$dir/$img" ] && cp "$dir/$img" "release/${arch}-${img}"
+            done
+          done
+          echo "=== Release files ==="
+          ls -lh release/
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-images
+          name: "Latest BusyBox & Kernel Images"
+          body: |
+            ## BusyBox & Kernel Images
+
+            自动构建的 BusyBox initramfs 和 Linux 内核镜像。
+
+            ### 产物说明
+            | 文件 | 说明 |
+            |------|------|
+            | `busybox-<arch>` | BusyBox 静态链接二进制 |
+            | `initrd-<arch>.cpio` | BusyBox initramfs (cpio 格式) |
+            | `<arch>-vmlinux` | 未压缩内核 ELF |
+            | `<arch>-Image` / `<arch>-Image.gz` | 压缩内核镜像 |
+
+            ### 支持架构
+            riscv64, aarch64, x86_64, loongarch64
+          files: release/*
+          overwrite_files: true
+          make_latest: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

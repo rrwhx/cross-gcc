@@ -38,8 +38,29 @@ download() {
             wget -nc -q --show-progress -O "$dest" "$url" || error "下载失败: $url"
         else
             error "未安装 curl 或 wget，无法下载文件"
-            exit 1
         fi
+    fi
+}
+
+# Git 浅克隆函数：若目标目录不存在则克隆，已存在则根据 update 参数决定是否拉取更新
+git_clone() {
+    local url="$1"
+    local dest="$2"
+    local depth="${3:-1}"
+    local update="${4:-false}"
+    if [[ -d "$dest" ]]; then
+        if [[ "$update" == true ]]; then
+            info "更新 git 仓库: $dest"
+            git -C "$dest" fetch --depth "$depth" && git -C "$dest" reset --hard origin/HEAD || error "git 更新失败: $dest"
+        else
+            info "源码目录已存在，跳过克隆: $dest"
+        fi
+    else
+        if ! command -v git &>/dev/null; then
+            error "git 未安装，无法克隆仓库"
+        fi
+        info "克隆 $url ..."
+        git clone --depth "$depth" "$url" "$dest" || error "克隆失败: $url"
     fi
 }
 

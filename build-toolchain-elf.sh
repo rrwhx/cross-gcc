@@ -12,17 +12,20 @@ source "$SCRIPT_DIR/lib.sh"
 
 setup_error_trap
 
-# 默认版本设置
-BINUTILS_VER="2.45"
-GCC_VER="15.2.0"
-NEWLIB_VER="4.6.0.20260123"
+# 默认版本设置（支持环境变量覆盖）
+BINUTILS_VER="${BINUTILS_VER:-2.46.1}"
+GCC_VER="${GCC_VER:-16.1.0}"
+NEWLIB_VER="${NEWLIB_VER:-4.6.0.20260123}"
 
 # 初始化参数
 ARCH=""
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
-THREADS="$(nproc || sysctl -n hw.logicalcpu_max 2>/dev/null || error "detect cpu num")"  # 默认并行构建线程数
+THREADS=${THREADS}
+MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
+GIT_UPDATE=false
+FRESH_BUILD=false
 
 # 显示用法
 usage() {
@@ -35,7 +38,8 @@ usage() {
   --build-dir    构建工作目录 (默认: WORK_DIR/build-TARGET)
   --log-dir      日志目录 (默认: WORK_DIR/logs-TARGET)
   --install-dir  工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
-  --threads      构建线程数 (默认: $(nproc))
+  --threads      构建线程数 (默认: $THREADS)
+  --mirror       下载镜像源 (默认: $MIRROR)
 
 版本控制选项:
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
@@ -43,6 +47,8 @@ usage() {
   --newlib-ver   newlib 版本 (默认: $NEWLIB_VER)
 
 构建后处理选项:
+  --git-update   当版本为 'git' 且仓库已存在时，拉取最新代码
+  --fresh        构建前删除已有的 build/log/install 目录
   --clean        构建完成后删除构建目录和日志目录
   --archive      构建完成后将工具链打包成 tar.xz 并删除原目录
 
@@ -65,9 +71,12 @@ while [[ $# -gt 0 ]]; do
         --log-dir)     LOG_DIR="$2"; shift 2;;
         --install-dir) INSTALL_DIR="$2"; shift 2;;
         --threads)     THREADS="$2"; shift 2;;
+        --mirror)      MIRROR="$2"; shift 2;;
         --binutils-ver)BINUTILS_VER="$2"; shift 2;;
         --gcc-ver)     GCC_VER="$2"; shift 2;;
         --newlib-ver)  NEWLIB_VER="$2"; shift 2;;
+        --git-update)  GIT_UPDATE=true; shift;;
+        --fresh)       FRESH_BUILD=true; shift;;
         --clean)       CLEAN_BUILD=true; shift;;
         --archive)     ARCHIVE_RESULT=true; shift;;
         -h|--help)     usage;;
@@ -138,6 +147,12 @@ LOG_DIR=$(realpath "$LOG_DIR")
 INSTALL_DIR=$(realpath "$INSTALL_DIR")
 mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
+if [[ "$FRESH_BUILD" == true ]]; then
+    step "=== 清理已有的 build/log/install 目录 ==="
+    rm -rf "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
+    mkdir -p "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
+fi
+
 # 设置 GCC 源码目录
 if [[ "$GCC_VER" == "git" ]]; then
     GCC_SRC_DIR="gcc"
@@ -175,11 +190,11 @@ info "构建线程数: $THREADS"
 
 step "获取源代码"
 dl_files=(
-    "https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
+    "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
 )
 
 if [[ "$GCC_VER" != "git" ]]; then
-    dl_files+=("https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz")
+    dl_files+=("https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz")
 fi
 
 for url in "${dl_files[@]}"; do
@@ -188,15 +203,7 @@ for url in "${dl_files[@]}"; do
 done
 
 if [[ "$GCC_VER" == "git" ]]; then
-    if [[ ! -d "$SRC_DIR_GCC" ]]; then
-        step "克隆 GCC 仓库"
-        if ! command -v git &> /dev/null; then
-            error "git 未安装，无法克隆 GCC 仓库"
-        fi
-        git clone --depth 1 https://mirrors.tuna.tsinghua.edu.cn/git/gcc.git "$SRC_DIR_GCC" || error "克隆 GCC 失败"
-    else
-        info "GCC 源码目录已存在，跳过克隆"
-    fi
+    git_clone "https://${MIRROR}/git/gcc.git" "$SRC_DIR_GCC" 1 "$GIT_UPDATE"
 fi
 
 # 处理 newlib 的特殊路径
@@ -264,7 +271,7 @@ build_step "install" "${LOG_DIR_BINUTILS}" \
 step "==== 准备 GCC 源码 ==="
 cd "$SRC_DIR_GCC" || error "无法进入构建目录"
 if [[ ! -f "prereq_done" ]]; then
-    build_step "gcc_download_prerequisites" "${LOG_DIR_GCC_INITIAL}" "${SCRIPT_DIR}/prepare_gcc.sh"
+    build_step "gcc_download_prerequisites" "${LOG_DIR_GCC_INITIAL}" "${SCRIPT_DIR}/prepare-gcc.sh"
     info "GCC 依赖下载完成 (日志: $LOG_DIR_GCC_INITIAL)"
     touch prereq_done
 fi

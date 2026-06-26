@@ -4,8 +4,9 @@
 
 ### 支持的目标
 
-- **架构**：`aarch64` · `loongarch64` · `riscv32` · `riscv64` · `i686` · `x86_64` · `mips` · `mipsel` · `mips64` · `mips64el`
+- **架构**：`aarch64` · `loongarch64` · `riscv32` · `riscv64` · `i686` · `x86_64` · `mips` · `mipsel` · `mips64` · `mips64el` · `arm`
 - **C 库**：**glibc** · **musl** · **newlib**（bare-metal ELF）
+- **LLVM/Clang**：支持自动下载或 git 最新版
 
 ---
 
@@ -15,15 +16,19 @@
 |------|------|
 | `build-toolchain-generic.sh` | 核心脚本：构建 GCC + binutils + glibc/musl 工具链 |
 | `build-toolchain-elf.sh` | 构建 GCC + binutils + newlib（bare-metal ELF）工具链 |
-| `build-cross-llvm.sh` | 基于已有 GCC 工具链构建 LLVM/Clang 交叉编译器 |
-| `build-target-libs.sh` | 交叉编译目标平台第三方库（zlib, zstd, lz4, snappy 等） |
-| `build_all.sh` | 批量构建多架构 × 多 libc 组合 |
-| `lib.sh` | 公共函数库（下载、日志、构建辅助） |
-| `install_prerequest.sh` | 安装系统级构建依赖（apt/dnf/pacman） |
-| `install_flex_bison.sh` | 从源码编译安装 flex + bison + texinfo（无 root 权限时使用） |
-| `prepare_gcc.sh` | GCC 源码预处理（下载 gmp/mpfr/mpc/isl 等依赖） |
-| `run_macos.sh` | macOS 环境适配封装（自动设置 GNU 工具路径） |
-| `.github/workflows/build.yml` | GitHub Actions CI 构建工作流 |
+| `build-toolchain-llvm.sh` | 构建 LLVM/Clang 交叉编译器（支持自动下载源码） |
+| `build-target-libs.sh` | 交叉编译目标平台第三方库（zlib, zstd, lz4, snappy, jemalloc 等） |
+| `build-busybox.sh` | 交叉编译 BusyBox 并生成 initramfs |
+| `build-kernel.sh` | 交叉编译 Linux 内核 |
+| `build-all.sh` | 批量构建多架构 × 多 libc 组合 |
+| `lib.sh` | 公共函数库（下载、git 克隆、日志、构建辅助） |
+| `install-prerequisites.sh` | 安装系统级构建依赖（apt/dnf/pacman） |
+| `install-flex-bison.sh` | 从源码编译安装 flex + bison + texinfo |
+| `prepare-gcc.sh` | GCC 源码预处理（下载 gmp/mpfr/mpc/isl 等依赖） |
+| `get-latest-versions.sh` | 获取各组件最新发布版本号 |
+| `env-macos.sh` | macOS 环境适配封装（自动设置 GNU 工具路径） |
+| `run-build-llvm.sh` | 批量构建多版本 × 多架构 LLVM 的快捷脚本 |
+| `run-build-all.sh` | 批量构建多版本 GCC 的配方脚本 |
 
 ---
 
@@ -32,13 +37,13 @@
 #### 1. 安装系统依赖
 
 ```bash
-./install_prerequest.sh
+./install-prerequisites.sh
 
 # 无 root 权限时，从源码编译 flex/bison/texinfo 到 $HOME/.local
-./install_flex_bison.sh
+./install-flex-bison.sh
 ```
 
-#### 2. 构建工具链
+#### 2. 构建 GCC 工具链
 
 ```bash
 # glibc 工具链
@@ -50,22 +55,52 @@
 # bare-metal ELF 工具链 (newlib)
 ./build-toolchain-elf.sh --arch riscv64
 
-# 批量构建（默认 10 架构 × 2 libc = 20 组合）
-./build_all.sh
-./build_all.sh --arch aarch64,riscv64,x86_64 --libc glibc
+# 使用 git 最新开发版 + 拉取更新
+./build-toolchain-generic.sh --arch riscv64 --libc glibc --gcc-ver git --git-update
+
+# 全新构建（清除旧 build/log/install 目录）
+./build-toolchain-generic.sh --arch aarch64 --libc glibc --fresh
+
+# 批量构建
+./build-all.sh --arch aarch64,riscv64,x86_64 --libc glibc
 ```
 
-#### 3. 构建 LLVM/Clang（需先有 GCC 工具链）
+#### 3. 构建 LLVM/Clang
 
 ```bash
-./build-cross-llvm.sh \
+# 自动下载 LLVM 22.1.8 并构建（需先有 GCC 工具链）
+./build-toolchain-llvm.sh \
     --arch aarch64 \
-    --src-dir ./llvm-project-llvmorg-22.1.1 \
     --target-sysroot ./cross-aarch64-linux-gnu/aarch64-linux-gnu \
     --target-gcc-toolchain ./cross-aarch64-linux-gnu
+
+# 指定 LLVM 版本
+./build-toolchain-llvm.sh --arch riscv64 --llvm-ver 21.1.8 \
+    --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
+    --target-gcc-toolchain ./cross-riscv64-linux-gnu
+
+# 使用 git 最新版
+./build-toolchain-llvm.sh --arch riscv64 --llvm-ver git --git-update \
+    --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
+    --target-gcc-toolchain ./cross-riscv64-linux-gnu
+
+# 批量构建多版本 × 多架构
+./run-build-llvm.sh -v 22.1.8 -v 21.1.8 -a riscv64,aarch64
 ```
 
-#### 4. 交叉编译第三方库
+#### 4. 交叉编译 BusyBox 与 Linux 内核
+
+```bash
+# BusyBox (生成 initramfs)
+./build-busybox.sh --arch riscv64 \
+    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+
+# Linux 内核
+./build-kernel.sh --arch riscv64 \
+    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+```
+
+#### 5. 交叉编译第三方库
 
 ```bash
 ./build-target-libs.sh \
@@ -80,43 +115,19 @@
 
 ---
 
-### `build-toolchain-generic.sh` 参数
+### 通用选项
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--arch` | 目标架构（必填） | — |
-| `--libc` | C 库类型 glibc/musl（必填） | — |
-| `--gcc-ver` | GCC 版本（支持 `git`） | `15.2.0` |
-| `--binutils-ver` | binutils 版本 | `2.45` |
-| `--glibc-ver` | glibc 版本 | `2.42` |
-| `--musl-ver` | musl 版本 | `1.2.5` |
-| `--linux-ver` | Linux 内核头文件版本 | `6.17.6` |
-| `--work-dir` | 工作目录前缀 | 当前目录 |
-| `--install-dir` | 工具链安装路径 | `WORK_DIR/cross-TARGET` |
-| `--threads` | 并行编译线程数 | `nproc` |
-| `--mirror` | 下载镜像源 | `mirrors.tuna.tsinghua.edu.cn` |
-| `--clean` | 构建后删除构建目录 | 关闭 |
-| `--archive` | 构建后打包为 tar.xz | 关闭 |
-| `--enable-sanitizer` | 开启 GCC sanitizer | 关闭 |
+以下选项在所有 `build-toolchain-*.sh` 脚本中通用：
 
-### 版本定制与高级用法
-
-```bash
-# 指定版本
-./build-toolchain-generic.sh --arch aarch64 --libc glibc \
-    --gcc-ver 14.1.0 --glibc-ver 2.41
-
-# 使用 GCC git 最新开发版 + 批量构建
-./build_all.sh --arch aarch64,riscv64,x86_64 --libc glibc \
-    --gcc-ver git --glibc-ver 2.43 --work-dir gcc_latest-glibc243
-
-# 构建后自动打包并清理
-./build-toolchain-generic.sh --arch riscv64 --libc musl --clean --archive
-
-# macOS 构建（需先安装 GNU 工具）
-brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
-./run_macos.sh ./build_all.sh --arch aarch64,riscv64 --libc glibc
-```
+| 选项 | 说明 |
+|------|------|
+| `--work-dir` | 工作目录前缀 |
+| `--threads` / `-j` | 并行编译线程数 |
+| `--mirror` | 下载镜像源（默认清华） |
+| `--git-update` | 版本为 `git` 时拉取最新代码 |
+| `--fresh` | 构建前清除已有 build/log/install 目录 |
+| `--clean` | 构建后删除构建目录和日志 |
+| `--archive` | 构建后打包为 tar.xz 并删除原目录 |
 
 ---
 
@@ -139,3 +150,27 @@ cross-aarch64-linux-gnu/
 export PATH="$(pwd)/cross-aarch64-linux-gnu/bin:$PATH"
 aarch64-linux-gnu-gcc -o hello hello.c
 ```
+
+---
+
+### macOS 构建
+
+```bash
+brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
+./env-macos.sh ./build-all.sh --arch aarch64,riscv64 --libc glibc
+```
+
+---
+
+### CI/CD
+
+项目包含两个 GitHub Actions 工作流：
+
+- **`build.yml`**：构建 GCC 工具链并发布到 GitHub Release
+- **`build-images.yml`**：构建 BusyBox initramfs 和 Linux 内核，上传到 Release
+
+产物包含：
+- `cross-<arch>-linux-<libc>.tar.xz` — GCC 交叉编译工具链
+- `busybox-<arch>` — BusyBox 静态链接二进制
+- `initrd-<arch>.cpio` — BusyBox initramfs
+- `<arch>-vmlinux` / `<arch>-Image` — Linux 内核镜像
