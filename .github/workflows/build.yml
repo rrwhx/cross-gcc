@@ -3,8 +3,24 @@ name: Build Cross-GCC Toolchain
 on:
   push:
     branches: [main, master]
+    paths:
+      - 'build-toolchain-generic.sh'
+      - 'build-toolchain-elf.sh'
+      - 'lib.sh'
+      - 'prepare-gcc.sh'
+      - 'install-prerequisites.sh'
+      - 'get-latest-versions.sh'
+      - '.github/workflows/build.yml'
   pull_request:
     branches: [main, master]
+    paths:
+      - 'build-toolchain-generic.sh'
+      - 'build-toolchain-elf.sh'
+      - 'lib.sh'
+      - 'prepare-gcc.sh'
+      - 'install-prerequisites.sh'
+      - 'get-latest-versions.sh'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 jobs:
