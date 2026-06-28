@@ -27,7 +27,7 @@
 | `prepare-gcc.sh` | GCC 源码预处理（下载 gmp/mpfr/mpc/isl 等依赖） |
 | `get-latest-versions.sh` | 获取各组件最新发布版本号 |
 | `env-macos.sh` | macOS 环境适配封装（自动设置 GNU 工具路径） |
-| `run-build-llvm.sh` | 批量构建多版本 × 多架构 LLVM 的快捷脚本 |
+| `build-all-llvm.sh` | 批量构建多版本 × 多架构 LLVM 工具链 |
 | `run-build-all.sh` | 批量构建多版本 GCC 的配方脚本 |
 
 ---
@@ -84,8 +84,13 @@
     --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
     --target-gcc-toolchain ./cross-riscv64-linux-gnu
 
-# 批量构建多版本 × 多架构
-./run-build-llvm.sh -v 22.1.8 -v 21.1.8 -a riscv64,aarch64
+# 批量构建多版本 × 多架构（--version 和 --gcc-dir 必填）
+./build-all-llvm.sh -v 22.1.8,21.1.8 -a riscv64,aarch64 \
+    --gcc-dir ./cross-{ARCH}-linux-gnu
+
+# 指定工作目录
+./build-all-llvm.sh -v 22.1.8 -a riscv64,aarch64 \
+    --gcc-dir ./gcc_161/cross-{ARCH}-linux-gnu --work-dir ./llvm_2218
 ```
 
 #### 4. 交叉编译 BusyBox 与 Linux 内核
