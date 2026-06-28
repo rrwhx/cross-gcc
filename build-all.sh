@@ -26,7 +26,7 @@ while [[ $# -gt 0 ]]; do
         --arch|--architecture|-a)
             # 按逗号分割用户输入的架构列表
             IFS=',' read -ra arch_list <<< "$2"
-            shift 2  # 跳過选项和值
+            shift 2  # 跳过选项和值
             ;;
         --libc|--libc-type|-l)
             # 按逗号分割用户输入的 libc 列表

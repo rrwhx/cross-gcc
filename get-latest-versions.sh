@@ -5,6 +5,11 @@
 
 set -euo pipefail
 
+if ! command -v python3 &>/dev/null; then
+    echo "Error: python3 is required but not installed" >&2
+    exit 1
+fi
+
 # Mirror / upstream URLs
 GNU_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/gnu"
 KERNEL_API="https://www.kernel.org/releases.json"
@@ -103,12 +108,27 @@ get_musl_version() {
     echo "$page" | extract_versions 'v([0-9]+\.[0-9]+\.[0-9]+)' | sort -V | tail -1
 }
 
-# Fetch all versions
-LINUX_VER=$(get_linux_version)
-GCC_VER=$(get_gnu_latest "gcc")
-BINUTILS_VER=$(get_gnu_latest "binutils")
-GLIBC_VER=$(get_gnu_latest "glibc")
-MUSL_VER=$(get_musl_version)
+# Fetch all versions (exit on failure)
+fetch_failed=false
+
+LINUX_VER=$(get_linux_version) || fetch_failed=true
+GCC_VER=$(get_gnu_latest "gcc") || fetch_failed=true
+BINUTILS_VER=$(get_gnu_latest "binutils") || fetch_failed=true
+GLIBC_VER=$(get_gnu_latest "glibc") || fetch_failed=true
+MUSL_VER=$(get_musl_version) || fetch_failed=true
+
+for var in LINUX_VER GCC_VER BINUTILS_VER GLIBC_VER MUSL_VER; do
+    val="${!var}"
+    if [[ -z "$val" || "$val" == *"FAILED"* ]]; then
+        echo "Error: failed to fetch $var (got: '$val')" >&2
+        fetch_failed=true
+    fi
+done
+
+if [[ "$fetch_failed" == true ]]; then
+    echo "Error: one or more version fetches failed" >&2
+    exit 1
+fi
 
 # Output results
 case "$OUTPUT_FORMAT" in

@@ -35,6 +35,7 @@ WORK_DIR=$(pwd)
 SKIP_LIBS=""   # 逗号分隔的字符串，避免空数组在 set -u 下的兼容性问题
 ONLY_LIBS=""
 THREADS=${THREADS}
+CLEAN_BUILD=false
 
 usage() {
     cat <<EOF
@@ -45,6 +46,7 @@ usage() {
   --skip           跳过指定的库，多次使用指定多个 (例如: --skip lz4 --skip snappy)
   --only           仅编译指定的库，多次使用指定多个 (例如: --only zlib --only zstd)
   -j,--threads     并行编译线程数 (默认: ${THREADS})
+  --clean          构建完成后删除构建目录和日志目录
   -h,--help        显示帮助
 示例:
   $(basename "$0") --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu
@@ -60,6 +62,7 @@ while [[ $# -gt 0 ]]; do
         --skip)          SKIP_LIBS="${SKIP_LIBS:+${SKIP_LIBS},}$2"; shift 2;;
         --only)          ONLY_LIBS="${ONLY_LIBS:+${ONLY_LIBS},}$2"; shift 2;;
         -j|--threads)    THREADS="$2"; shift 2;;
+        --clean)         CLEAN_BUILD=true; shift;;
         -h|--help)       usage;;
         *)               error "未知选项: $1"; usage;;
     esac
@@ -263,3 +266,6 @@ done
 
 ok "请求的依赖库已经成功交叉编译并安装到 Sysroot 中！"
 echo -e "你可以通过目录 ${GREEN}${TARGET_SYSROOT}/usr/lib${NC} 查看生成的库文件。"
+
+# 构建后处理
+clean_build_dir "$BUILD_DIR" "$LOG_DIR" "$CLEAN_BUILD"

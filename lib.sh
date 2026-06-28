@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Common library for cross compiler build scripts
 
-# 颜色定义
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-CYAN='\033[0;36m'
-NC='\033[0m' # 重置颜色
+# 颜色定义（非终端时禁用颜色）
+if [[ -t 1 ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    BLUE='\033[0;34m'
+    YELLOW='\033[0;33m'
+    CYAN='\033[0;36m'
+    NC='\033[0m'
+else
+    RED='' GREEN='' BLUE='' YELLOW='' CYAN='' NC=''
+fi
 
 # 输出函数
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
