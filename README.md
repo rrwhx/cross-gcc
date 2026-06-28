@@ -56,7 +56,7 @@
 ./build-toolchain-elf.sh --arch riscv64
 
 # 使用 git 最新开发版 + 拉取更新
-./build-toolchain-generic.sh --arch riscv64 --libc glibc --gcc-ver git --git-update
+./build-toolchain-generic.sh --arch riscv64 --libc glibc --gcc-ver git:update
 
 # 全新构建（清除旧 build/log/install 目录）
 ./build-toolchain-generic.sh --arch aarch64 --libc glibc --fresh
@@ -80,7 +80,7 @@
     --target-gcc-toolchain ./cross-riscv64-linux-gnu
 
 # 使用 git 最新版
-./build-toolchain-llvm.sh --arch riscv64 --llvm-ver git --git-update \
+./build-toolchain-llvm.sh --arch riscv64 --llvm-ver git:update \
     --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
     --target-gcc-toolchain ./cross-riscv64-linux-gnu
 
@@ -129,10 +129,20 @@
 | `--work-dir` | 工作目录前缀 |
 | `--threads` / `-j` | 并行编译线程数 |
 | `--mirror` | 下载镜像源（默认清华） |
-| `--git-update` | 版本为 `git` 时拉取最新代码 |
 | `--fresh` | 构建前清除已有 build/log/install 目录 |
 | `--clean` | 构建后删除构建目录和日志 |
 | `--archive` | 构建后打包为 tar.xz 并删除原目录 |
+
+### 版本参数 git 格式
+
+版本参数（如 `--gcc-ver`、`--llvm-ver`）支持 `git[:REF][:update]` 格式：
+
+| 格式 | 行为 |
+|------|------|
+| `git` | 克隆默认分支 HEAD，已存在则跳过 |
+| `git:update` | 克隆 HEAD，已存在则拉取最新 |
+| `git:TAG` | 克隆指定 tag/branch，已存在则跳过 |
+| `git:TAG:update` | 克隆指定 ref，已存在则更新到该 ref |
 
 ---
 

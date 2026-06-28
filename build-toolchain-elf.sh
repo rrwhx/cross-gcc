@@ -24,7 +24,6 @@ THREADS=${THREADS}
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
-GIT_UPDATE=false
 FRESH_BUILD=false
 
 # 显示用法
@@ -41,13 +40,13 @@ usage() {
   --threads      构建线程数 (默认: $THREADS)
   --mirror       下载镜像源 (默认: $MIRROR)
 
-版本控制选项:
+版本控制选项(支持 'git[:REF][:update]' 格式):
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
-  --gcc-ver      gcc 版本 (默认: $GCC_VER, 支持 'git' 使用最新开发版)
+  --gcc-ver      gcc 版本 (默认: $GCC_VER)
   --newlib-ver   newlib 版本 (默认: $NEWLIB_VER)
+                 git 格式: git | git:TAG | git:update | git:TAG:update
 
 构建后处理选项:
-  --git-update   当版本为 'git' 且仓库已存在时，拉取最新代码
   --fresh        构建前删除已有的 build/log/install 目录
   --clean        构建完成后删除构建目录和日志目录
   --archive      构建完成后将工具链打包成 tar.xz 并删除原目录
@@ -75,7 +74,6 @@ while [[ $# -gt 0 ]]; do
         --binutils-ver)BINUTILS_VER="$2"; shift 2;;
         --gcc-ver)     GCC_VER="$2"; shift 2;;
         --newlib-ver)  NEWLIB_VER="$2"; shift 2;;
-        --git-update)  GIT_UPDATE=true; shift;;
         --fresh)       FRESH_BUILD=true; shift;;
         --clean)       CLEAN_BUILD=true; shift;;
         --archive)     ARCHIVE_RESULT=true; shift;;
@@ -154,7 +152,7 @@ if [[ "$FRESH_BUILD" == true ]]; then
 fi
 
 # 设置 GCC 源码目录
-if [[ "$GCC_VER" == "git" ]]; then
+if [[ "$GCC_VER" == git* ]]; then
     GCC_SRC_DIR="gcc"
 else
     GCC_SRC_DIR="gcc-${GCC_VER}"
@@ -193,7 +191,7 @@ dl_files=(
     "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
 )
 
-if [[ "$GCC_VER" != "git" ]]; then
+if [[ "$GCC_VER" != git* ]]; then
     dl_files+=("https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz")
 fi
 
@@ -202,8 +200,9 @@ for url in "${dl_files[@]}"; do
     download "$url" "$DOWNLOAD_DIR/$filename"
 done
 
-if [[ "$GCC_VER" == "git" ]]; then
-    git_clone "https://${MIRROR}/git/gcc.git" "$SRC_DIR_GCC" 1 "$GIT_UPDATE"
+if [[ "$GCC_VER" == git* ]]; then
+    parse_git_ver "$GCC_VER"
+    git_clone "https://${MIRROR}/git/gcc.git" "$SRC_DIR_GCC" 1 "$_GIT_UPDATE" "$_GIT_REF"
 fi
 
 # 处理 newlib 的特殊路径

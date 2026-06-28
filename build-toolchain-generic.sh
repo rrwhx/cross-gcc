@@ -32,7 +32,6 @@ MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
 ENABLE_SANITIZER=false
-GIT_UPDATE=false
 FRESH_BUILD=false
 
 # 显示用法
@@ -50,16 +49,16 @@ usage() {
   --threads      构建线程数 (默认: $THREADS)
   --mirror       下载镜像源 (默认: $MIRROR, 推荐: mirrors.tuna.tsinghua.edu.cn, mirrors.bfsu.edu.cn, mirror.nju.edu.cn)
 
-版本控制选项(支持 'git' 使用最新开发版):
+版本控制选项(支持 'git[:REF][:update]' 格式):
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
   --gcc-ver      gcc 版本 (默认: $GCC_VER)
   --glibc-ver    glibc 版本 (默认: $GLIBC_VER)
   --musl-ver     musl 版本 (默认: $MUSL_VER)
   --linux-ver    linux 内核版本 (默认: $LINUX_VER)
+                 git 格式: git | git:TAG | git:update | git:TAG:update
 
 构建后处理选项:
   --enable-sanitizer 开启 GCC sanitizer (默认关闭)
-  --git-update     当版本为 'git' 且仓库已存在时，拉取最新代码
   --fresh          构建前删除已有的 build/log/install 目录
   --clean          构建完成后删除构建目录和日志目录
   --archive        构建完成后将工具链打包成 tar.xz 并删除原目录
@@ -67,7 +66,8 @@ usage() {
   -h,--help      显示帮助
 示例:
   $(basename "$0") --arch aarch64 --libc glibc
-  $(basename "$0") --arch riscv64 --libc musl --gcc-ver 14.2.0 --linux-ver 6.12
+  $(basename "$0") --arch riscv64 --libc glibc --gcc-ver git:update
+  $(basename "$0") --arch riscv64 --libc musl --gcc-ver git:releases/gcc-16.1.0:update
 EOF
     exit 1
 }
@@ -91,7 +91,6 @@ while [[ $# -gt 0 ]]; do
         --musl-ver)    MUSL_VER="$2"; shift 2;;
         --linux-ver)   LINUX_VER="$2"; shift 2;;
         --enable-sanitizer) ENABLE_SANITIZER=true; shift;;
-        --git-update)  GIT_UPDATE=true; shift;;
         --fresh)       FRESH_BUILD=true; shift;;
         --clean)       CLEAN_BUILD=true; shift;;
         --archive)     ARCHIVE_RESULT=true; shift;;
@@ -204,31 +203,31 @@ if [[ "$FRESH_BUILD" == true ]]; then
     mkdir -p "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 fi
 
-if [[ "$BINUTILS_VER" == "git" ]]; then
+if [[ "$BINUTILS_VER" == git* ]]; then
     SRC_DIR_BINUTILS="$SRC_DIR/binutils"
 else
     SRC_DIR_BINUTILS="$SRC_DIR/binutils-${BINUTILS_VER}"
 fi
 
-if [[ "$GCC_VER" == "git" ]]; then
+if [[ "$GCC_VER" == git* ]]; then
     SRC_DIR_GCC="$SRC_DIR/gcc"
 else
     SRC_DIR_GCC="$SRC_DIR/gcc-${GCC_VER}"
 fi
 
-if [[ "$GLIBC_VER" == "git" ]]; then
+if [[ "$GLIBC_VER" == git* ]]; then
     SRC_DIR_GLIBC="$SRC_DIR/glibc"
 else
     SRC_DIR_GLIBC="$SRC_DIR/glibc-${GLIBC_VER}"
 fi
 
-if [[ "$MUSL_VER" == "git" ]]; then
+if [[ "$MUSL_VER" == git* ]]; then
     SRC_DIR_MUSL="$SRC_DIR/musl"
 else
     SRC_DIR_MUSL="$SRC_DIR/musl-${MUSL_VER}"
 fi
 
-if [[ "$LINUX_VER" == "git" ]]; then
+if [[ "$LINUX_VER" == git* ]]; then
     SRC_DIR_LINUX="$SRC_DIR/linux"
 else
     SRC_DIR_LINUX="$SRC_DIR/linux-${LINUX_VER}"
@@ -269,8 +268,9 @@ fetch_source() {
     local git_url=$4
     local tar_url=$5
 
-    if [[ "$ver" == "git" ]]; then
-        git_clone "$git_url" "$src_dir" 1 "$GIT_UPDATE"
+    if [[ "$ver" == git* ]]; then
+        parse_git_ver "$ver"
+        git_clone "$git_url" "$src_dir" 1 "$_GIT_UPDATE" "$_GIT_REF"
     else
         dl_files+=("$tar_url")
     fi

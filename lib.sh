@@ -42,16 +42,43 @@ download() {
     fi
 }
 
+# Git 版本参数解析：解析 "git[:REF][:update]" 格式
+# 输出变量: _GIT_REF, _GIT_UPDATE
+parse_git_ver() {
+    local ver="$1"
+    _GIT_REF=""
+    _GIT_UPDATE=false
+    local rest="${ver#git}"
+    if [[ -z "$rest" ]]; then
+        return
+    fi
+    rest="${rest#:}"
+    if [[ "$rest" == "update" ]]; then
+        _GIT_UPDATE=true
+    elif [[ "$rest" == *":update" ]]; then
+        _GIT_REF="${rest%:update}"
+        _GIT_UPDATE=true
+    else
+        _GIT_REF="$rest"
+    fi
+}
+
 # Git 浅克隆函数：若目标目录不存在则克隆，已存在则根据 update 参数决定是否拉取更新
+# 参数: url dest [depth] [update] [ref]
 git_clone() {
     local url="$1"
     local dest="$2"
     local depth="${3:-1}"
     local update="${4:-false}"
+    local ref="${5:-}"
     if [[ -d "$dest" ]]; then
         if [[ "$update" == true ]]; then
-            info "更新 git 仓库: $dest"
-            git -C "$dest" fetch --depth "$depth" && git -C "$dest" reset --hard origin/HEAD || error "git 更新失败: $dest"
+            info "更新 git 仓库: $dest${ref:+ (ref=$ref)}"
+            if [[ -n "$ref" ]]; then
+                git -C "$dest" fetch --depth "$depth" origin "$ref" && git -C "$dest" checkout FETCH_HEAD || error "git 更新失败: $dest (ref=$ref)"
+            else
+                git -C "$dest" fetch --depth "$depth" && git -C "$dest" reset --hard origin/HEAD || error "git 更新失败: $dest"
+            fi
         else
             info "源码目录已存在，跳过克隆: $dest"
         fi
@@ -59,8 +86,12 @@ git_clone() {
         if ! command -v git &>/dev/null; then
             error "git 未安装，无法克隆仓库"
         fi
-        info "克隆 $url ..."
-        git clone --depth "$depth" "$url" "$dest" || error "克隆失败: $url"
+        local clone_args=(--depth "$depth")
+        if [[ -n "$ref" ]]; then
+            clone_args+=(--branch "$ref")
+        fi
+        info "克隆 $url${ref:+ (ref=$ref)} ..."
+        git clone "${clone_args[@]}" "$url" "$dest" || error "克隆失败: $url"
     fi
 }
 

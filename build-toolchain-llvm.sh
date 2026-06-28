@@ -38,7 +38,6 @@ THREADS=${THREADS}
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
-GIT_UPDATE=false
 FRESH_BUILD=false
 
 usage() {
@@ -48,7 +47,7 @@ usage() {
 交叉编译 LLVM/Clang 工具链
 
   --arch              目标架构 (必填, 例如: aarch64, riscv64, x86_64, loongarch64)
-  --llvm-ver          LLVM 版本 (默认: $LLVM_VER, 支持 'git' 使用最新开发版)
+  --llvm-ver          LLVM 版本 (默认: $LLVM_VER, 支持 git[:REF][:update])
   --src-dir           LLVM 源码目录 (直接指定已解压的源码路径，跳过下载/解压)
   --work-dir          工作目录前缀 (默认: 当前目录)
   --download-dir      源码下载目录 (默认: WORK_DIR/downloads)
@@ -62,7 +61,6 @@ usage() {
   --mirror            下载镜像源 (默认: $MIRROR)
 
 构建后处理选项:
-  --git-update        当版本为 'git' 且仓库已存在时，拉取最新代码
   --fresh             构建前删除已有的 build/log/install 目录
   --clean             构建完成后删除构建目录和日志目录
   --archive           构建完成后将工具链打包成 tar.xz 并删除原目录
@@ -71,7 +69,8 @@ usage() {
 
 示例:
   $(basename "$0") --arch riscv64
-  $(basename "$0") --arch riscv64 --llvm-ver git --git-update
+  $(basename "$0") --arch riscv64 --llvm-ver git:update
+  $(basename "$0") --arch riscv64 --llvm-ver git:llvmorg-22.1.8
   $(basename "$0") --arch aarch64 --src-dir ./llvm-project
   $(basename "$0") --arch aarch64 --target-gcc-toolchain ./cross-aarch64-linux-gnu --target-sysroot ./cross-aarch64-linux-gnu/aarch64-linux-gnu
 EOF
@@ -93,7 +92,6 @@ while [[ $# -gt 0 ]]; do
         --link-jobs)             LINK_JOBS="$2"; shift 2;;
         -j|--threads)            THREADS="$2"; shift 2;;
         --mirror)                MIRROR="$2"; shift 2;;
-        --git-update)            GIT_UPDATE=true; shift;;
         --fresh)                 FRESH_BUILD=true; shift;;
         --clean)                 CLEAN_BUILD=true; shift;;
         --archive)               ARCHIVE_RESULT=true; shift;;
@@ -149,9 +147,10 @@ if [[ -n "$SRC_DIR" ]]; then
         error "源码目录不存在: $SRC_DIR"
     fi
 else
-    if [[ "$LLVM_VER" == "git" ]]; then
+    if [[ "$LLVM_VER" == git* ]]; then
         SRC_DIR="$DOWNLOAD_DIR/llvm-project"
-        git_clone "https://${MIRROR}/git/llvm-project.git" "$SRC_DIR" 1 "$GIT_UPDATE"
+        parse_git_ver "$LLVM_VER"
+        git_clone "https://${MIRROR}/git/llvm-project.git" "$SRC_DIR" 1 "$_GIT_UPDATE" "$_GIT_REF"
     else
         LLVM_TAR="llvm-project-${LLVM_VER}.src.tar.xz"
         LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VER}/${LLVM_TAR}"
