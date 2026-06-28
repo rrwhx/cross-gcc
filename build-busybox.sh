@@ -38,7 +38,7 @@ usage() {
   --cross-compile   交叉编译前缀，可为完整路径或仅前缀
                     (例如: riscv64-linux-gnu- 或 /path/to/bin/riscv64-linux-gnu-)
   --work-dir        工作目录前缀 (默认: 当前目录)
-  --busybox-ver     BusyBox 版本 (默认: ${BUSYBOX_VER})
+  --busybox-ver     BusyBox 版本 (默认: ${BUSYBOX_VER}, 支持 git[:REF][:update])
   --output          输出 initramfs 路径 (默认: <work-dir>/initrd-<arch>.cpio)
   -j,--threads      并行编译线程数 (默认: ${THREADS})
   --clean           构建完成后删除构建目录和日志目录
@@ -94,49 +94,46 @@ BUILD_DIR="${WORK_DIR}/build-busybox-${ARCH}"
 LOG_DIR="${WORK_DIR}/logs-busybox-${ARCH}"
 OUTPUT="${OUTPUT:-${WORK_DIR}/initrd-${ARCH}.cpio}"
 
-# 替换 URL 模板中的版本占位符
-BUSYBOX_URL="${BUSYBOX_URL//\{VER\}/$BUSYBOX_VER}"
-
-# 从 URL 末尾提取归档文件扩展名
-if [[ "$BUSYBOX_URL" =~ \.(tar\.[a-z0-9]+)$ ]]; then
-    ARCHIVE_EXT="${BASH_REMATCH[1]}"
-else
-    ARCHIVE_EXT="tar.gz"
-fi
-
 mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR"
+
+# ---------------------------------------------------------------------------
+# 获取源码
+# ---------------------------------------------------------------------------
+step "=== 获取 BusyBox 源码 ==="
+if [[ "$BUSYBOX_VER" == git* ]]; then
+    BUSYBOX_SRC="$SRC_DIR/busybox"
+    parse_git_ver "$BUSYBOX_VER"
+    git_clone "https://git.busybox.net/busybox/" "$BUSYBOX_SRC" 1 "$_GIT_UPDATE" "$_GIT_REF"
+else
+    BUSYBOX_URL="${BUSYBOX_URL//\{VER\}/$BUSYBOX_VER}"
+    if [[ "$BUSYBOX_URL" =~ \.(tar\.[a-z0-9]+)$ ]]; then
+        ARCHIVE_EXT="${BASH_REMATCH[1]}"
+    else
+        ARCHIVE_EXT="tar.gz"
+    fi
+    ARCHIVE_FILE="$DOWNLOAD_DIR/busybox-${BUSYBOX_VER}.${ARCHIVE_EXT}"
+    download "$BUSYBOX_URL" "$ARCHIVE_FILE"
+
+    BUSYBOX_SRC="$SRC_DIR/busybox-${BUSYBOX_VER}"
+    if [[ ! -d "$BUSYBOX_SRC" ]]; then
+        info "解压: busybox-${BUSYBOX_VER}.${ARCHIVE_EXT}"
+        tar -xf "$ARCHIVE_FILE" -C "$SRC_DIR"
+    else
+        info "源码目录已存在，跳过解压"
+    fi
+fi
 
 info "ARCH=$ARCH"
 info "CROSS_COMPILE=$CROSS_COMPILE"
 info "BusyBox 版本: $BUSYBOX_VER"
-info "下载目录: $DOWNLOAD_DIR"
-info "源码目录: $SRC_DIR"
+info "源码目录: $BUSYBOX_SRC"
 info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
 info "输出文件: $OUTPUT"
 
 # ---------------------------------------------------------------------------
-# 阶段 1: 下载源码
+# 配置与编译
 # ---------------------------------------------------------------------------
-step "=== 下载 BusyBox 源码 ==="
-ARCHIVE_FILE="$DOWNLOAD_DIR/busybox-${BUSYBOX_VER}.${ARCHIVE_EXT}"
-download "$BUSYBOX_URL" "$ARCHIVE_FILE"
-
-# ---------------------------------------------------------------------------
-# 阶段 2: 解压源码
-# ---------------------------------------------------------------------------
-step "=== 解压源码 ==="
-if [[ ! -d "$SRC_DIR/busybox-${BUSYBOX_VER}" ]]; then
-    info "解压: busybox-${BUSYBOX_VER}.${ARCHIVE_EXT}"
-    tar -xf "$ARCHIVE_FILE" -C "$SRC_DIR"
-else
-    info "源码目录已存在，跳过解压"
-fi
-
-# ---------------------------------------------------------------------------
-# 阶段 3: 配置与编译
-# ---------------------------------------------------------------------------
-BUSYBOX_SRC="$SRC_DIR/busybox-${BUSYBOX_VER}"
 
 step "=== 配置 BusyBox ==="
 rm -rf "$BUILD_DIR" && mkdir -p "$BUILD_DIR"

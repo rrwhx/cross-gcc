@@ -100,8 +100,16 @@
 ./build-busybox.sh --arch riscv64 \
     --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
 
+# BusyBox 使用 git 源码
+./build-busybox.sh --arch riscv64 --busybox-ver git:1_37_0 \
+    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+
 # Linux 内核
 ./build-kernel.sh --arch riscv64 \
+    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+
+# Linux 内核使用 git 源码
+./build-kernel.sh --arch riscv64 --linux-ver git:v6.12 \
     --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
 ```
 

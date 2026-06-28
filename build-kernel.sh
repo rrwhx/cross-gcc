@@ -40,7 +40,7 @@ usage() {
   --cross-compile   交叉编译前缀，可为完整路径或仅前缀
                     (例如: riscv64-linux-gnu- 或 /path/to/bin/riscv64-linux-gnu-)
   --work-dir        工作目录前缀 (默认: 当前目录)
-  --linux-ver       Linux 内核版本 (默认: ${LINUX_VER})
+  --linux-ver       Linux 内核版本 (默认: ${LINUX_VER}, 支持 git[:REF][:update])
   --linux-src       直接指定已解压的内核源码路径 (跳过下载/解压)
   --output          输出目录 (默认: <work-dir>/kernel-<arch>)
   --mirror          下载镜像源 (默认: ${MIRROR})
@@ -129,6 +129,11 @@ if [[ -n "$LINUX_SRC" ]]; then
         error "指定的内核源码目录不存在: $LINUX_SRC"
     fi
     info "使用已有内核源码: $LINUX_SRC"
+elif [[ "$LINUX_VER" == git* ]]; then
+    step "=== 克隆 Linux 内核源码 ==="
+    LINUX_SRC="$DOWNLOAD_DIR/linux"
+    parse_git_ver "$LINUX_VER"
+    git_clone "https://${MIRROR}/git/linux.git" "$LINUX_SRC" 1 "$_GIT_UPDATE" "$_GIT_REF"
 else
     step "=== 下载 Linux 内核源码 ==="
     LINUX_MAJOR_VER="${LINUX_VER%%.*}"
