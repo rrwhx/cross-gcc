@@ -129,6 +129,32 @@ build_step() {
     fi
 }
 
+# 危险路径护栏：校验目标目录可安全执行 rm -rf
+# 拒绝空值、根目录、家目录及常见共享/系统目录，避免 --fresh 误删无关文件
+# 用法: assert_safe_to_delete "$dir"
+assert_safe_to_delete() {
+    local target="$1"
+    if [[ -z "$target" ]]; then
+        error "拒绝删除空路径"
+    fi
+
+    local abs
+    if command -v realpath >/dev/null 2>&1; then
+        abs="$(realpath -m "$target")"
+    else
+        abs="$target"
+    fi
+    # 去除末尾斜杠（根目录 / 除外）
+    [[ "$abs" != "/" ]] && abs="${abs%/}"
+
+    local danger
+    for danger in "/" "/usr" "/usr/local" "/bin" "/sbin" "/lib" "/lib64" "/etc" "/var" "/opt" "/boot" "/root" "${HOME%/}" "${HOME%/}/.local" "${HOME%/}/.config" "${HOME%/}/.cache"; do
+        if [[ "$abs" == "$danger" ]]; then
+            error "拒绝删除敏感/共享目录: $abs（--fresh 应指向独立的构建/安装目录，请为其指定专用子目录）"
+        fi
+    done
+}
+
 # 清理构建和日志目录
 clean_build_dir() {
     local build_dir="$1"

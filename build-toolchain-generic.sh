@@ -199,6 +199,9 @@ mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
 if [[ "$FRESH_BUILD" == true ]]; then
     step "=== 清理已有的 build/log/install 目录 ==="
+    assert_safe_to_delete "$BUILD_DIR"
+    assert_safe_to_delete "$LOG_DIR"
+    assert_safe_to_delete "$INSTALL_DIR"
     rm -rf "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
     mkdir -p "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 fi
