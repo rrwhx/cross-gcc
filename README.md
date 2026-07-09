@@ -58,6 +58,9 @@
 # 使用 git 最新开发版 + 拉取更新
 ./build-toolchain-generic.sh --arch riscv64 --libc glibc --gcc-ver git:update
 
+# 同时编译 gdb (默认不编译, 需 binutils 使用 git 源)
+./build-toolchain-generic.sh --arch riscv64 --libc glibc --binutils-ver git --enable-gdb
+
 # 全新构建（清除旧 build/log/install 目录）
 ./build-toolchain-generic.sh --arch aarch64 --libc glibc --fresh
 

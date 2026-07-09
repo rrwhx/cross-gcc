@@ -32,6 +32,7 @@ MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
 ENABLE_SANITIZER=false
+ENABLE_GDB=false
 FRESH_BUILD=false
 
 # 显示用法
@@ -59,6 +60,7 @@ usage() {
 
 构建后处理选项:
   --enable-sanitizer 开启 GCC sanitizer (默认关闭)
+  --enable-gdb / --disable-gdb 是否编译 gdb (默认关闭, 需 binutils 使用 git 源)
   --fresh          构建前删除已有的 build/log/install 目录
   --clean          构建完成后删除构建目录和日志目录
   --archive        构建完成后将工具链打包成 tar.xz 并删除原目录
@@ -91,6 +93,8 @@ while [[ $# -gt 0 ]]; do
         --musl-ver)    MUSL_VER="$2"; shift 2;;
         --linux-ver)   LINUX_VER="$2"; shift 2;;
         --enable-sanitizer) ENABLE_SANITIZER=true; shift;;
+        --enable-gdb)  ENABLE_GDB=true; shift;;
+        --disable-gdb) ENABLE_GDB=false; shift;;
         --fresh)       FRESH_BUILD=true; shift;;
         --clean)       CLEAN_BUILD=true; shift;;
         --archive)     ARCHIVE_RESULT=true; shift;;
@@ -178,6 +182,19 @@ case "$ARCH" in
     mips64el) musl_extra_args+=(--libdir=/usr/lib64) ;;
     mips64) musl_extra_args+=(--libdir=/usr/lib64) ;;
 esac
+
+# 根据 --enable-gdb/--disable-gdb 决定 binutils 是否编译 gdb
+# gdb 仅存在于 binutils git 源 (binutils-gdb.git) 中，release tarball 不含 gdb
+binutils_gdb_args=()
+if [[ "$BINUTILS_VER" == git* ]]; then
+    if [[ "$ENABLE_GDB" == true ]]; then
+        binutils_gdb_args+=(--enable-gdb)
+    else
+        binutils_gdb_args+=(--disable-gdb --disable-sim)
+    fi
+elif [[ "$ENABLE_GDB" == true ]]; then
+    warn "启用 gdb 需要 binutils 使用 git 源 (--binutils-ver git[:REF][:update])，当前为 release tarball(不含 gdb)，gdb 将不会被编译"
+fi
 
 # 设置默认目录
 if [[ -n "$WORK_DIR" ]]; then
@@ -320,7 +337,8 @@ build_step "configure" "${LOG_DIR_BINUTILS}" \
     --disable-multilib \
     --enable-gold=yes \
     --enable-plugins \
-    --disable-gprofng
+    --disable-gprofng \
+    "${binutils_gdb_args[@]}"
 
 build_step "build" "${LOG_DIR_BINUTILS}" \
     make -j${THREADS}
