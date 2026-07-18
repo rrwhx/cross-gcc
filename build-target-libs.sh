@@ -34,7 +34,6 @@ TOOLCHAIN_DIR=""
 WORK_DIR=$(pwd)
 SKIP_LIBS=""   # 逗号分隔的字符串，避免空数组在 set -u 下的兼容性问题
 ONLY_LIBS=""
-THREADS=${THREADS}
 CLEAN_BUILD=false
 
 usage() {
@@ -50,8 +49,10 @@ usage() {
   -h,--help        显示帮助
 示例:
   $(basename "$0") --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu
+  $(basename "$0") --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu --only zlib --only zstd
+  $(basename "$0") --target aarch64-linux-gnu --toolchain-dir ./cross-aarch64-linux-gnu --skip jemalloc
 EOF
-    exit 1
+    exit 0
 }
 
 while [[ $# -gt 0 ]]; do
@@ -165,6 +166,7 @@ build_package() {
 
     step "=== 编译并安装 ${lib_name} ==="
     local build_pkg_dir="$BUILD_DIR/${lib_name}"
+    assert_safe_to_delete "$build_pkg_dir"
     rm -rf "$build_pkg_dir" && mkdir -p "$build_pkg_dir"
 
     local src_pkg_dir="$SRC_DIR/${lib_name}-${lib_ver}"

@@ -24,7 +24,6 @@ GCC_VER="${GCC_VER:-16.1.0}"
 
 # 初始化参数
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
-THREADS=${THREADS}  # 默认并行构建线程数
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
@@ -69,7 +68,7 @@ usage() {
   $(basename "$0") --gcc-ver 16.1.0 --binutils-ver 2.43
   $(basename "$0") --gcc-ver git:update --languages c,c++ --fresh
 EOF
-    exit 1
+    exit 0
 }
 
 # 解析参数
@@ -126,22 +125,9 @@ SRC_DIR="${SRC_DIR:-$DOWNLOAD_DIR}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build-native-$HOST_TRIPLE}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs-native-$HOST_TRIPLE}"
 INSTALL_DIR="${INSTALL_DIR:-$BASE_DIR/native-$HOST_TRIPLE}"
+canonicalize_dirs DOWNLOAD_DIR SRC_DIR BUILD_DIR LOG_DIR INSTALL_DIR
 
-DOWNLOAD_DIR=$(realpath "$DOWNLOAD_DIR")
-SRC_DIR=$(realpath "$SRC_DIR")
-BUILD_DIR=$(realpath "$BUILD_DIR")
-LOG_DIR=$(realpath "$LOG_DIR")
-INSTALL_DIR=$(realpath "$INSTALL_DIR")
-mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-
-if [[ "$FRESH_BUILD" == true ]]; then
-    step "=== 清理已有的 build/log/install 目录 ==="
-    assert_safe_to_delete "$BUILD_DIR"
-    assert_safe_to_delete "$LOG_DIR"
-    assert_safe_to_delete "$INSTALL_DIR"
-    rm -rf "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-    mkdir -p "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-fi
+fresh_clean_dirs "$FRESH_BUILD" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
 # 设置各组件源码目录
 if [[ "$BINUTILS_VER" == git* ]]; then
@@ -188,41 +174,14 @@ fi
 step "下载源代码"
 dl_files=()
 
-fetch_source() {
-    local name=$1
-    local ver=$2
-    local src_dir=$3
-    local git_url=$4
-    local tar_url=$5
+fetch_source "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://${MIRROR}/git/binutils-gdb.git" "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
+fetch_source "$GCC_VER" "$SRC_DIR_GCC" "https://${MIRROR}/git/gcc.git" "https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
 
-    if [[ "$ver" == git* ]]; then
-        parse_git_ver "$ver"
-        git_clone "$git_url" "$src_dir" 1 "$_GIT_UPDATE" "$_GIT_REF"
-    else
-        dl_files+=("$tar_url")
-    fi
-}
-
-fetch_source "Binutils" "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://${MIRROR}/git/binutils-gdb.git" "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
-fetch_source "GCC" "$GCC_VER" "$SRC_DIR_GCC" "https://${MIRROR}/git/gcc.git" "https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
-
-for url in "${dl_files[@]}"; do
-    filename=$(basename "${url}")
-    download "$url" "$DOWNLOAD_DIR/$filename"
-done
+download_dl_files "$DOWNLOAD_DIR"
 
 # 解压源码
 step "解压源代码"
-for url in "${dl_files[@]}"; do
-    filename=$(basename "${url}")
-    info "解压: ${filename}"
-    srcdir="$SRC_DIR/${filename%.tar*}"
-    if [[ -d "$srcdir" ]]; then
-        info "$srcdir 已解压"
-    else
-        tar -xf ${DOWNLOAD_DIR}/${filename} -C "$SRC_DIR" || error "解压失败"
-    fi
-done
+extract_dl_files "$DOWNLOAD_DIR" "$SRC_DIR"
 
 # 让后续 GCC 构建优先使用本次编译安装的 binutils（as/ld/ar 等）
 export PATH="${INSTALL_PREFIX}/bin:${PATH}"

@@ -28,6 +28,11 @@ Options:
   --json          Output in JSON format
   --shell         Output as shell variable assignments (can be used with eval)
   -h, --help      Show this help message
+
+Examples:
+  $(basename "$0")                        # 表格形式显示最新版本
+  $(basename "$0") --json                 # JSON 格式输出
+  eval "$($(basename "$0") --shell)"       # 将最新版本导入当前 shell 环境
 EOF
     exit 0
 }

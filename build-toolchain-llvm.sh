@@ -34,7 +34,6 @@ BUILD_DIR=""
 INSTALL_DIR=""
 LOG_DIR=""
 LINK_JOBS=""
-THREADS=${THREADS}
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
@@ -74,7 +73,7 @@ usage() {
   $(basename "$0") --arch aarch64 --src-dir ./llvm-project
   $(basename "$0") --arch aarch64 --target-gcc-toolchain ./cross-aarch64-linux-gnu --target-sysroot ./cross-aarch64-linux-gnu/aarch64-linux-gnu
 EOF
-    exit 1
+    exit 0
 }
 
 while [[ $# -gt 0 ]]; do
@@ -118,27 +117,12 @@ fi
 
 WORK_DIR=$(realpath "$WORK_DIR")
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-${WORK_DIR}/downloads}"
-mkdir -p "$DOWNLOAD_DIR"
-DOWNLOAD_DIR=$(realpath "$DOWNLOAD_DIR")
-
 BUILD_DIR="${BUILD_DIR:-${WORK_DIR}/build-llvm-${ARCH}}"
 INSTALL_DIR="${INSTALL_DIR:-${WORK_DIR}/install-llvm-${ARCH}}"
 LOG_DIR="${LOG_DIR:-${WORK_DIR}/logs-llvm-${ARCH}}"
+canonicalize_dirs DOWNLOAD_DIR BUILD_DIR INSTALL_DIR LOG_DIR
 
-mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${LOG_DIR}"
-
-BUILD_DIR=$(realpath "$BUILD_DIR")
-INSTALL_DIR=$(realpath "$INSTALL_DIR")
-LOG_DIR=$(realpath "$LOG_DIR")
-
-if [[ "$FRESH_BUILD" == true ]]; then
-    step "=== 清理已有的 build/log/install 目录 ==="
-    assert_safe_to_delete "$BUILD_DIR"
-    assert_safe_to_delete "$LOG_DIR"
-    assert_safe_to_delete "$INSTALL_DIR"
-    rm -rf "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-    mkdir -p "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-fi
+fresh_clean_dirs "$FRESH_BUILD" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
 # ==============================================================================
 # 获取源码

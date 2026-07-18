@@ -27,7 +27,6 @@ CROSS_COMPILE=""
 WORK_DIR=$(pwd)
 LINUX_SRC=""
 OUTPUT=""
-THREADS=${THREADS}
 CLEAN_BUILD=false
 
 usage() {
@@ -51,8 +50,9 @@ usage() {
 示例:
   $(basename "$0") --arch riscv64 --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
   $(basename "$0") --arch riscv64 --cross-compile riscv64-linux-gnu- --linux-src ./downloads/linux-7.1.1
+  $(basename "$0") --arch riscv64 --linux-ver git:v6.12 --cross-compile riscv64-linux-gnu-
 EOF
-    exit 1
+    exit 0
 }
 
 while [[ $# -gt 0 ]]; do
@@ -155,6 +155,7 @@ fi
 # 阶段 2: 配置内核
 # ---------------------------------------------------------------------------
 step "=== 配置内核 ==="
+assert_safe_to_delete "$BUILD_DIR"
 rm -rf "$BUILD_DIR" && mkdir -p "$BUILD_DIR"
 
 info "工作目录: $LINUX_SRC"

@@ -142,7 +142,7 @@ for arch in "${ARCHS[@]}"; do
     cmd_fn="cmd_qemu_${arch}"
     if ! declare -f "$cmd_fn" >/dev/null 2>&1; then
         warn "未知架构: $arch，跳过"
-        ((SKIP++))
+        ((++SKIP))
         continue
     fi
 
@@ -150,7 +150,7 @@ for arch in "${ARCHS[@]}"; do
     $cmd_fn
 
     if ! preflight_check "$arch"; then
-        ((SKIP++))
+        ((++SKIP))
         continue
     fi
 
@@ -169,13 +169,13 @@ for arch in "${ARCHS[@]}"; do
 
     if [[ $ret -eq 0 ]]; then
         ok "$arch: 启动并正常关机 (${elapsed}s)"
-        ((PASS++))
+        ((++PASS))
     elif [[ $ret -eq 124 ]]; then
         warn "$arch: 超时 (${TIMEOUT}s)"
-        ((FAIL++))
+        ((++FAIL))
     else
         warn "$arch: 退出码 $ret (${elapsed}s)"
-        ((FAIL++))
+        ((++FAIL))
     fi
 done
 

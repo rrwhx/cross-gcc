@@ -99,6 +99,61 @@ git_clone() {
     fi
 }
 
+# 获取源码：git 版本克隆，release 版本追加到全局 dl_files 下载列表
+# 参数: ver src_dir git_url tar_url
+fetch_source() {
+    local ver=$1
+    local src_dir=$2
+    local git_url=$3
+    local tar_url=$4
+
+    if [[ "$ver" == git* ]]; then
+        parse_git_ver "$ver"
+        git_clone "$git_url" "$src_dir" 1 "$_GIT_UPDATE" "$_GIT_REF"
+    else
+        dl_files+=("$tar_url")
+    fi
+}
+
+# 下载 dl_files 中的所有归档
+# 参数: download_dir
+download_dl_files() {
+    local download_dir="$1"
+    local url filename
+    for url in "${dl_files[@]}"; do
+        filename=$(basename "${url}")
+        download "$url" "$download_dir/$filename"
+    done
+}
+
+# 解压 dl_files 中的所有归档 (解压目录名为去掉 .tar.* 后缀的文件名)
+# 参数: download_dir src_dir
+extract_dl_files() {
+    local download_dir="$1"
+    local src_dir="$2"
+    local url filename srcdir
+    for url in "${dl_files[@]}"; do
+        filename=$(basename "${url}")
+        info "解压: ${filename}"
+        srcdir="$src_dir/${filename%.tar*}"
+        if [[ -d "$srcdir" ]]; then
+            info "$srcdir 已解压"
+        else
+            tar -xf "$download_dir/$filename" -C "$src_dir" || error "解压失败"
+        fi
+    done
+}
+
+# 将目录变量规范化为绝对路径并创建 (先 mkdir 保证 realpath 不会因路径不存在而失败)
+# 参数: 目录变量名列表 (通过间接引用读写调用方变量)
+canonicalize_dirs() {
+    local var
+    for var in "$@"; do
+        mkdir -p "${!var}"
+        printf -v "$var" '%s' "$(realpath "${!var}")"
+    done
+}
+
 # 打印构建日志中的错误上下文
 print_build_error_context() {
     local log_file="$1"
@@ -165,12 +220,30 @@ clean_build_dir() {
         step "=== 清理构建目录和日志目录 ==="
         if [[ -d "$build_dir" ]]; then
             info "删除构建目录和日志目录: $build_dir $log_dir"
+            assert_safe_to_delete "$build_dir"
+            assert_safe_to_delete "$log_dir"
             rm -rf "$build_dir"
             rm -rf "$log_dir"
             ok "构建目录和日志目录清理完成"
         else
             warn "构建目录和日志目录不存在，跳过清理"
         fi
+    fi
+}
+
+# --fresh 构建前清理：带危险路径护栏
+# 参数: fresh_flag dir...
+fresh_clean_dirs() {
+    local fresh_flag="$1"
+    shift
+    if [[ "$fresh_flag" == true ]]; then
+        step "=== 清理已有的 build/log/install 目录 ==="
+        local d
+        for d in "$@"; do
+            assert_safe_to_delete "$d"
+        done
+        rm -rf "$@"
+        mkdir -p "$@"
     fi
 }
 
@@ -194,6 +267,7 @@ archive_toolchain() {
                 ok "工具链打包完成: $archive_name"
 
                 # 删除原目录
+                assert_safe_to_delete "$prefix_dir"
                 info "删除原工具链目录: $prefix_dir"
                 rm -rf "$prefix_dir"
                 ok "原目录删除完成"

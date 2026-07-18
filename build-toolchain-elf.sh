@@ -20,7 +20,6 @@ NEWLIB_VER="${NEWLIB_VER:-4.6.0.20260123}"
 # 初始化参数
 ARCH=""
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
-THREADS=${THREADS}
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
@@ -37,7 +36,7 @@ usage() {
   --build-dir    构建工作目录 (默认: WORK_DIR/build-TARGET)
   --log-dir      日志目录 (默认: WORK_DIR/logs-TARGET)
   --install-dir  工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
-  --threads      构建线程数 (默认: $THREADS)
+  -j,--threads   构建线程数 (默认: $THREADS)
   --mirror       下载镜像源 (默认: $MIRROR)
 
 版本控制选项(支持 'git[:REF][:update]' 格式):
@@ -55,8 +54,9 @@ usage() {
 示例:
   $(basename "$0") --arch aarch64
   $(basename "$0") --arch riscv64 --gcc-ver 14.2.0
+  $(basename "$0") --arch arm --binutils-ver git --gcc-ver git:update --newlib-ver git
 EOF
-    exit 1
+    exit 0
 }
 
 # 解析参数
@@ -69,7 +69,7 @@ while [[ $# -gt 0 ]]; do
         --build-dir)   BUILD_DIR="$2"; shift 2;;
         --log-dir)     LOG_DIR="$2"; shift 2;;
         --install-dir) INSTALL_DIR="$2"; shift 2;;
-        --threads)     THREADS="$2"; shift 2;;
+        --threads|-j)  THREADS="$2"; shift 2;;
         --mirror)      MIRROR="$2"; shift 2;;
         --binutils-ver)BINUTILS_VER="$2"; shift 2;;
         --gcc-ver)     GCC_VER="$2"; shift 2;;
@@ -137,34 +137,28 @@ SRC_DIR="${SRC_DIR:-$DOWNLOAD_DIR}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build-$TARGET}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs-$TARGET}"
 INSTALL_DIR="${INSTALL_DIR:-$BASE_DIR/cross-$TARGET}"
+canonicalize_dirs DOWNLOAD_DIR SRC_DIR BUILD_DIR LOG_DIR INSTALL_DIR
 
-DOWNLOAD_DIR=$(realpath "$DOWNLOAD_DIR")
-SRC_DIR=$(realpath "$SRC_DIR")
-BUILD_DIR=$(realpath "$BUILD_DIR")
-LOG_DIR=$(realpath "$LOG_DIR")
-INSTALL_DIR=$(realpath "$INSTALL_DIR")
-mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-
-if [[ "$FRESH_BUILD" == true ]]; then
-    step "=== 清理已有的 build/log/install 目录 ==="
-    assert_safe_to_delete "$BUILD_DIR"
-    assert_safe_to_delete "$LOG_DIR"
-    assert_safe_to_delete "$INSTALL_DIR"
-    rm -rf "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-    mkdir -p "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-fi
-
-# 设置 GCC 源码目录
-if [[ "$GCC_VER" == git* ]]; then
-    GCC_SRC_DIR="gcc"
-else
-    GCC_SRC_DIR="gcc-${GCC_VER}"
-fi
+fresh_clean_dirs "$FRESH_BUILD" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
 # 设置各组件源码目录
-SRC_DIR_BINUTILS="$SRC_DIR/binutils-${BINUTILS_VER}"
-SRC_DIR_GCC="$SRC_DIR/$GCC_SRC_DIR"
-SRC_DIR_NEWLIB="$SRC_DIR/newlib-${NEWLIB_VER}"
+if [[ "$BINUTILS_VER" == git* ]]; then
+    SRC_DIR_BINUTILS="$SRC_DIR/binutils"
+else
+    SRC_DIR_BINUTILS="$SRC_DIR/binutils-${BINUTILS_VER}"
+fi
+
+if [[ "$GCC_VER" == git* ]]; then
+    SRC_DIR_GCC="$SRC_DIR/gcc"
+else
+    SRC_DIR_GCC="$SRC_DIR/gcc-${GCC_VER}"
+fi
+
+if [[ "$NEWLIB_VER" == git* ]]; then
+    SRC_DIR_NEWLIB="$SRC_DIR/newlib"
+else
+    SRC_DIR_NEWLIB="$SRC_DIR/newlib-${NEWLIB_VER}"
+fi
 
 # 设置各组件构建目录
 BUILD_DIR_BINUTILS="$BUILD_DIR/build-binutils"
@@ -190,57 +184,26 @@ info "日志目录: $LOG_DIR"
 info "构建线程数: $THREADS"
 
 step "获取源代码"
-dl_files=(
-    "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
-)
+dl_files=()
 
-if [[ "$GCC_VER" != git* ]]; then
-    dl_files+=("https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz")
-fi
+fetch_source "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://${MIRROR}/git/binutils-gdb.git" "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
+fetch_source "$GCC_VER" "$SRC_DIR_GCC" "https://${MIRROR}/git/gcc.git" "https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
+fetch_source "$NEWLIB_VER" "$SRC_DIR_NEWLIB" "https://sourceware.org/git/newlib-cygwin.git" "https://sourceware.org/pub/newlib/newlib-${NEWLIB_VER}.tar.gz"
 
-for url in "${dl_files[@]}"; do
-    filename=$(basename "${url}")
-    download "$url" "$DOWNLOAD_DIR/$filename"
-done
-
-if [[ "$GCC_VER" == git* ]]; then
-    parse_git_ver "$GCC_VER"
-    git_clone "https://${MIRROR}/git/gcc.git" "$SRC_DIR_GCC" 1 "$_GIT_UPDATE" "$_GIT_REF"
-fi
-
-# 处理 newlib 的特殊路径
-NEWLIB_ARCHIVE=${NEWLIB_ARCHIVE:-"newlib-${NEWLIB_VER}.tar.gz"}
-if [[ -f "$NEWLIB_ARCHIVE" ]]; then
-    if [[ ! -f "$DOWNLOAD_DIR/newlib-${NEWLIB_VER}.tar.gz" ]]; then
+# newlib 支持通过 NEWLIB_ARCHIVE 环境变量使用本地归档 (仅 release 版本)
+if [[ "$NEWLIB_VER" != git* ]]; then
+    NEWLIB_ARCHIVE=${NEWLIB_ARCHIVE:-"newlib-${NEWLIB_VER}.tar.gz"}
+    if [[ -f "$NEWLIB_ARCHIVE" && ! -f "$DOWNLOAD_DIR/newlib-${NEWLIB_VER}.tar.gz" ]]; then
         info "从 ${NEWLIB_ARCHIVE} 复制文件到 ${DOWNLOAD_DIR}"
         cp "${NEWLIB_ARCHIVE}" "$DOWNLOAD_DIR/newlib-${NEWLIB_VER}.tar.gz"
-    else
-        info "已存在: $DOWNLOAD_DIR/newlib-${NEWLIB_VER}.tar.gz，跳过复制"
     fi
-else
-    download "https://sourceware.org/pub/newlib/newlib-${NEWLIB_VER}.tar.gz" "$DOWNLOAD_DIR/newlib-${NEWLIB_VER}.tar.gz"
 fi
+
+download_dl_files "$DOWNLOAD_DIR"
 
 # 解压源码
 step "解压源代码"
-for url in "${dl_files[@]}"; do
-    filename=$(basename "${url}")
-    info "解压: ${filename}"
-    srcdir="$SRC_DIR/${filename%.tar*}"
-    if [[ -d "$srcdir" ]]; then
-        info "$srcdir 已解压"
-    else
-        tar -xf ${DOWNLOAD_DIR}/${filename} -C "$SRC_DIR" || error "解压失败"
-    fi
-done
-
-# 解压 newlib
-info "解压: newlib-${NEWLIB_VER}.tar.gz"
-if [[ -d "$SRC_DIR_NEWLIB" ]]; then
-    info "$SRC_DIR_NEWLIB 已解压"
-else
-    tar -xf "$DOWNLOAD_DIR/newlib-${NEWLIB_VER}.tar.gz" -C "$SRC_DIR" || error "解压 newlib 失败"
-fi
+extract_dl_files "$DOWNLOAD_DIR" "$SRC_DIR"
 
 # 导出环境变量以便工具链之间找到
 export PATH="${CROSS_PREFIX}/bin:${PATH}"

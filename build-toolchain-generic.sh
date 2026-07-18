@@ -27,7 +27,6 @@ LINUX_VER="${LINUX_VER:-7.1.1}"
 # 初始化参数
 ARCH=""; LIBC=""
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
-THREADS=${THREADS}  # 默认并行构建线程数
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
@@ -39,7 +38,7 @@ FRESH_BUILD=false
 usage() {
     cat <<EOF
 用法: $(basename "$0") --arch ARCH --libc LIBC [选项]
-  --arch         目标架构 (aarch64|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el)
+  --arch         目标架构 (arm|aarch64|loongarch32|loongarch64|riscv32|riscv64|i686|x86_64|mips|mipsel|mips64|mips64el)
   --libc         libc 类型 (glibc|musl)
   --work-dir     工作目录前缀 (默认: 当前目录)
   --download-dir 源码下载目录 (默认: WORK_DIR/downloads)
@@ -47,7 +46,7 @@ usage() {
   --build-dir    构建工作目录 (默认: WORK_DIR/build-TARGET)
   --log-dir      日志目录 (默认: WORK_DIR/logs-TARGET)
   --install-dir  工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
-  --threads      构建线程数 (默认: $THREADS)
+  -j,--threads   构建线程数 (默认: $THREADS)
   --mirror       下载镜像源 (默认: $MIRROR, 推荐: mirrors.tuna.tsinghua.edu.cn, mirrors.bfsu.edu.cn, mirror.nju.edu.cn)
 
 版本控制选项(支持 'git[:REF][:update]' 格式):
@@ -71,7 +70,7 @@ usage() {
   $(basename "$0") --arch riscv64 --libc glibc --gcc-ver git:update
   $(basename "$0") --arch riscv64 --libc musl --gcc-ver git:releases/gcc-16.1.0:update
 EOF
-    exit 1
+    exit 0
 }
 
 # 解析参数
@@ -85,7 +84,7 @@ while [[ $# -gt 0 ]]; do
         --build-dir)   BUILD_DIR="$2"; shift 2;;
         --log-dir)     LOG_DIR="$2"; shift 2;;
         --install-dir) INSTALL_DIR="$2"; shift 2;;
-        --threads)     THREADS="$2"; shift 2;;
+        --threads|-j)  THREADS="$2"; shift 2;;
         --mirror)      MIRROR="$2"; shift 2;;
         --binutils-ver)BINUTILS_VER="$2"; shift 2;;
         --gcc-ver)     GCC_VER="$2"; shift 2;;
@@ -206,22 +205,9 @@ SRC_DIR="${SRC_DIR:-$DOWNLOAD_DIR}"
 BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build-$TARGET}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs-$TARGET}"
 INSTALL_DIR="${INSTALL_DIR:-$BASE_DIR/cross-$TARGET}"
+canonicalize_dirs DOWNLOAD_DIR SRC_DIR BUILD_DIR LOG_DIR INSTALL_DIR
 
-DOWNLOAD_DIR=$(realpath "$DOWNLOAD_DIR")
-SRC_DIR=$(realpath "$SRC_DIR")
-BUILD_DIR=$(realpath "$BUILD_DIR")
-LOG_DIR=$(realpath "$LOG_DIR")
-INSTALL_DIR=$(realpath "$INSTALL_DIR")
-mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-
-if [[ "$FRESH_BUILD" == true ]]; then
-    step "=== 清理已有的 build/log/install 目录 ==="
-    assert_safe_to_delete "$BUILD_DIR"
-    assert_safe_to_delete "$LOG_DIR"
-    assert_safe_to_delete "$INSTALL_DIR"
-    rm -rf "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-    mkdir -p "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-fi
+fresh_clean_dirs "$FRESH_BUILD" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
 if [[ "$BINUTILS_VER" == git* ]]; then
     SRC_DIR_BINUTILS="$SRC_DIR/binutils"
@@ -281,49 +267,22 @@ info "构建线程数: $THREADS"
 step "下载源代码"
 dl_files=()
 
-fetch_source() {
-    local name=$1
-    local ver=$2
-    local src_dir=$3
-    local git_url=$4
-    local tar_url=$5
-
-    if [[ "$ver" == git* ]]; then
-        parse_git_ver "$ver"
-        git_clone "$git_url" "$src_dir" 1 "$_GIT_UPDATE" "$_GIT_REF"
-    else
-        dl_files+=("$tar_url")
-    fi
-}
-
-fetch_source "Binutils" "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://${MIRROR}/git/binutils-gdb.git" "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
-fetch_source "GCC" "$GCC_VER" "$SRC_DIR_GCC" "https://${MIRROR}/git/gcc.git" "https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
+fetch_source "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://${MIRROR}/git/binutils-gdb.git" "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
+fetch_source "$GCC_VER" "$SRC_DIR_GCC" "https://${MIRROR}/git/gcc.git" "https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
 LINUX_MAJOR_VER="${LINUX_VER%%.*}"
-fetch_source "Linux" "$LINUX_VER" "$SRC_DIR_LINUX" "https://${MIRROR}/git/linux.git" "https://${MIRROR}/kernel/v${LINUX_MAJOR_VER}.x/linux-${LINUX_VER}.tar.xz"
+fetch_source "$LINUX_VER" "$SRC_DIR_LINUX" "https://${MIRROR}/git/linux.git" "https://${MIRROR}/kernel/v${LINUX_MAJOR_VER}.x/linux-${LINUX_VER}.tar.xz"
 
 if [[ "$LIBC" == "glibc" ]]; then
-    fetch_source "Glibc" "$GLIBC_VER" "$SRC_DIR_GLIBC" "https://${MIRROR}/git/glibc.git" "https://${MIRROR}/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
+    fetch_source "$GLIBC_VER" "$SRC_DIR_GLIBC" "https://${MIRROR}/git/glibc.git" "https://${MIRROR}/gnu/glibc/glibc-${GLIBC_VER}.tar.xz"
 elif [[ "$LIBC" == "musl" ]]; then
-    fetch_source "Musl" "$MUSL_VER" "$SRC_DIR_MUSL" "https://github.com/kraj/musl" "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
+    fetch_source "$MUSL_VER" "$SRC_DIR_MUSL" "https://github.com/kraj/musl" "https://musl.libc.org/releases/musl-${MUSL_VER}.tar.gz"
 fi
 
-for url in "${dl_files[@]}"; do
-    filename=$(basename "${url}")
-    download "$url" "$DOWNLOAD_DIR/$filename"
-done
+download_dl_files "$DOWNLOAD_DIR"
 
 # 解压源码
 step "解压源代码"
-for url in "${dl_files[@]}"; do
-    filename=$(basename "${url}")
-    info "解压: ${filename}"
-    srcdir="$SRC_DIR/${filename%.tar*}"
-    if [[ -d "$srcdir" ]]; then
-        info "$srcdir 已解压"
-    else
-        tar -xf ${DOWNLOAD_DIR}/${filename} -C "$SRC_DIR" || error "解压失败"
-    fi
-done
+extract_dl_files "$DOWNLOAD_DIR" "$SRC_DIR"
 
 # 构建Binutils
 step "=== 构建 Binutils ==="

@@ -25,7 +25,6 @@ ARCH=""
 CROSS_COMPILE=""
 WORK_DIR=$(pwd)
 OUTPUT=""
-THREADS=${THREADS}
 CLEAN_BUILD=false
 
 usage() {
@@ -47,8 +46,9 @@ usage() {
 示例:
   $(basename "$0") --arch riscv64 --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
   $(basename "$0") --arch aarch64 --cross-compile aarch64-linux-gnu-
+  $(basename "$0") --arch riscv64 --busybox-ver git:1_37_0 --cross-compile riscv64-linux-gnu-
 EOF
-    exit 1
+    exit 0
 }
 
 while [[ $# -gt 0 ]]; do
@@ -136,6 +136,7 @@ info "输出文件: $OUTPUT"
 # ---------------------------------------------------------------------------
 
 step "=== 配置 BusyBox ==="
+assert_safe_to_delete "$BUILD_DIR"
 rm -rf "$BUILD_DIR" && mkdir -p "$BUILD_DIR"
 
 info "工作目录: $BUSYBOX_SRC"

@@ -35,7 +35,6 @@ BUILD_DIR=""
 INSTALL_DIR=""
 LOG_DIR=""
 LINK_JOBS=""
-THREADS=${THREADS}
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 # 默认后端集合（与 build-toolchain-llvm.sh 对称，native clang 亦可交叉到这些后端）
 LLVM_TARGETS="AArch64;LoongArch;RISCV;X86"
@@ -56,7 +55,7 @@ usage() {
   --work-dir          工作目录前缀 (默认: 当前目录)
   --download-dir      源码下载目录 (默认: WORK_DIR/downloads)
   --build-dir         构建目录 (默认: WORK_DIR/build-native-llvm-HOST)
-  --install-dir       安装目录 (默认: WORK_DIR/native-llvm-HOST)
+  --install-dir       安装目录 (默认: WORK_DIR/native-HOST, 与 build-native-gcc.sh 同前缀，GCC/LLVM 可共存共用一条 PATH)
   --log-dir           日志目录 (默认: WORK_DIR/logs-native-llvm-HOST)
   --targets           LLVM 构建的后端 (默认: $LLVM_TARGETS)
   --projects          LLVM 启用的项目 (默认: $LLVM_PROJECTS)
@@ -77,7 +76,7 @@ usage() {
   $(basename "$0") --llvm-ver 22.1.8 --targets X86
   $(basename "$0") --llvm-ver git:update --projects clang,lld --fresh
 EOF
-    exit 1
+    exit 0
 }
 
 while [[ $# -gt 0 ]]; do
@@ -130,27 +129,12 @@ fi
 
 WORK_DIR=$(realpath "$WORK_DIR")
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-${WORK_DIR}/downloads}"
-mkdir -p "$DOWNLOAD_DIR"
-DOWNLOAD_DIR=$(realpath "$DOWNLOAD_DIR")
-
 BUILD_DIR="${BUILD_DIR:-${WORK_DIR}/build-native-llvm-${HOST_TRIPLE}}"
-INSTALL_DIR="${INSTALL_DIR:-${WORK_DIR}/native-llvm-${HOST_TRIPLE}}"
+INSTALL_DIR="${INSTALL_DIR:-${WORK_DIR}/native-${HOST_TRIPLE}}"
 LOG_DIR="${LOG_DIR:-${WORK_DIR}/logs-native-llvm-${HOST_TRIPLE}}"
+canonicalize_dirs DOWNLOAD_DIR BUILD_DIR INSTALL_DIR LOG_DIR
 
-mkdir -p "${BUILD_DIR}" "${INSTALL_DIR}" "${LOG_DIR}"
-
-BUILD_DIR=$(realpath "$BUILD_DIR")
-INSTALL_DIR=$(realpath "$INSTALL_DIR")
-LOG_DIR=$(realpath "$LOG_DIR")
-
-if [[ "$FRESH_BUILD" == true ]]; then
-    step "=== 清理已有的 build/log/install 目录 ==="
-    assert_safe_to_delete "$BUILD_DIR"
-    assert_safe_to_delete "$LOG_DIR"
-    assert_safe_to_delete "$INSTALL_DIR"
-    rm -rf "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-    mkdir -p "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
-fi
+fresh_clean_dirs "$FRESH_BUILD" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
 
 # ==============================================================================
 # 获取源码

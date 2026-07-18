@@ -46,6 +46,8 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "示例:"
             echo "  $0 --arch aarch64,riscv64 --libc glibc --gcc-ver 14.2.0 --clean"
+            echo "  $0 --arch aarch64 --libc musl --fresh"
+            echo "  $0 --libc glibc --archive"
             exit 0
             ;;
         *)
@@ -67,6 +69,8 @@ info "目标 libc: ${libc_list[*]}"
 info "==============================================="
 
 # 遍历每个架构和 libc 组合
+declare -a failed_list=()
+
 for arch in "${arch_list[@]}"; do
     for libc in "${libc_list[@]}"; do
         step "======================================================================"
@@ -77,9 +81,20 @@ for arch in "${arch_list[@]}"; do
             ok "构建成功：ARCH=$arch, LIBC=$libc"
         else
             warn "构建失败：ARCH=$arch, LIBC=$libc"
+            failed_list+=("ARCH=$arch, LIBC=$libc")
         fi
     done
 done
+
+if [[ ${#failed_list[@]} -gt 0 ]]; then
+    warn "==============================================="
+    warn "以下构建任务失败 (${#failed_list[@]}):"
+    for item in "${failed_list[@]}"; do
+        warn "  - $item"
+    done
+    warn "==============================================="
+    exit 1
+fi
 
 ok "==============================================="
 info "全部构建任务已完成！"

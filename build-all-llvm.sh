@@ -35,15 +35,15 @@ usage() {
   -h,--help              显示帮助
 
 其他选项将直接传递给 build-toolchain-llvm.sh，例如：
-  --mirror, --fresh, --git-update, --clean, --archive, --link-jobs, -j, --work-dir
+  --mirror, --fresh, --clean, --archive, --link-jobs, -j, --work-dir
 
 示例:
   $(basename "$0") -v 22.1.8 -a riscv64,aarch64
   $(basename "$0") -v 22.1.8,21.1.8 -a aarch64,loongarch64,riscv64,x86_64
-  $(basename "$0") -v git -a riscv64 --git-update --fresh
+  $(basename "$0") -v git:update -a riscv64 --fresh
   $(basename "$0") -v 22.1.8 -a riscv64 --gcc-dir ./gcc_161/cross-{ARCH}-linux-gnu
 EOF
-    exit 1
+    exit 0
 }
 
 while [[ $# -gt 0 ]]; do
@@ -73,6 +73,8 @@ fi
 # ---------------------------------------------------------------------------
 # 构建
 # ---------------------------------------------------------------------------
+declare -a failed_list=()
+
 info "==============================================="
 info "LLVM 版本: ${version_list[*]}"
 info "目标架构: ${arch_list[*]}"
@@ -96,9 +98,20 @@ for ver in "${version_list[@]}"; do
             ok "构建成功：LLVM $ver / $arch"
         else
             warn "构建失败：LLVM $ver / $arch"
+            failed_list+=("LLVM $ver / $arch")
         fi
     done
 done
+
+if [[ ${#failed_list[@]} -gt 0 ]]; then
+    warn "==============================================="
+    warn "以下构建任务失败 (${#failed_list[@]}):"
+    for item in "${failed_list[@]}"; do
+        warn "  - $item"
+    done
+    warn "==============================================="
+    exit 1
+fi
 
 ok "==============================================="
 info "全部 LLVM 构建任务已完成！"

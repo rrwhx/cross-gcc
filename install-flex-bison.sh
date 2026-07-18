@@ -78,6 +78,7 @@ TEXINFO_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/texinfo/texinfo-${TEXINFO_
 cleanup() {
   if [[ "$KEEP_BUILD" == false && -d "$BUILD_DIR" ]]; then
     info "清理构建目录: $BUILD_DIR"
+    assert_safe_to_delete "$BUILD_DIR"
     rm -rf "$BUILD_DIR"
   fi
 }
