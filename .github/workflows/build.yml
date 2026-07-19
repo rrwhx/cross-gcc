@@ -10,6 +10,7 @@ on:
       - 'prepare-gcc.sh'
       - 'install-prerequisites.sh'
       - 'get-latest-versions.sh'
+      - 'test-toolchain.sh'
       - '.github/workflows/build.yml'
   pull_request:
     branches: [main, master]
@@ -20,6 +21,7 @@ on:
       - 'prepare-gcc.sh'
       - 'install-prerequisites.sh'
       - 'get-latest-versions.sh'
+      - 'test-toolchain.sh'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
@@ -64,13 +66,34 @@ jobs:
 
       - name: Build toolchain
         run: |
-          ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc ${{ matrix.libc }} --clean --archive
+          ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc ${{ matrix.libc }} --clean
         env:
           GCC_VER: ${{ steps.versions.outputs.gcc_ver }}
           BINUTILS_VER: ${{ steps.versions.outputs.binutils_ver }}
           GLIBC_VER: ${{ steps.versions.outputs.glibc_ver }}
           MUSL_VER: ${{ steps.versions.outputs.musl_ver }}
           LINUX_VER: ${{ steps.versions.outputs.linux_ver }}
+
+      - name: Compute target triple
+        id: triple
+        run: |
+          if [ "${{ matrix.libc }}" = "musl" ]; then suf=musl; else suf=gnu; fi
+          echo "target=${{ matrix.arch }}-linux-$suf" >> "$GITHUB_OUTPUT"
+
+      - name: Install qemu-user (for smoke test)
+        run: |
+          sudo apt-get install -y --no-install-recommends qemu-user qemu-user-static
+
+      - name: Smoke test toolchain
+        run: |
+          ./test-toolchain.sh \
+            --toolchain-dir ./cross-${{ steps.triple.outputs.target }} \
+            --target ${{ steps.triple.outputs.target }} \
+            --run-mode static
+
+      - name: Package toolchain
+        run: |
+          tar -cJf cross-${{ steps.triple.outputs.target }}.tar.xz cross-${{ steps.triple.outputs.target }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7

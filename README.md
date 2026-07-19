@@ -29,6 +29,9 @@
 | `env-macos.sh` | macOS 环境适配封装（自动设置 GNU 工具路径） |
 | `build-all-llvm.sh` | 批量构建多版本 × 多架构 LLVM 工具链 |
 | `run-build-all.sh` | 批量构建多版本 GCC 的配方脚本 |
+| `test-toolchain.sh` | 工具链冒烟测试：编译 C/C++/Fortran 并经 qemu-user 运行 |
+| `test/test-qemu-run.sh` | QEMU 系统模拟冒烟测试：启动内核 + initramfs |
+| `build-qemu.sh` | 从源码构建 QEMU（系统模拟 + 用户态模拟），供测试脚本使用 |
 
 ---
 
@@ -188,11 +191,36 @@ brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
 
 ---
 
+### 测试
+
+构建产物可通过 QEMU 做冒烟测试：
+
+```bash
+# 1) 编译器冒烟测试：编译 C/C++/Fortran 并在 qemu-user 下运行
+#    需要 qemu-<arch>（系统包 qemu-user，或用 build-qemu.sh 构建）
+./test-toolchain.sh --toolchain-dir ./cross-riscv64-linux-gnu --target riscv64-linux-gnu
+
+# 仅编译（无 qemu 环境）/ 额外测试动态链接与共享库加载
+./test-toolchain.sh --toolchain-dir ./cross-aarch64-linux-gnu \
+    --target aarch64-linux-gnu --run-mode none
+./test-toolchain.sh --toolchain-dir ./cross-aarch64-linux-gnu \
+    --target aarch64-linux-gnu --run-mode all --qemu-dir ./qemu-install/bin
+
+# 2) 系统模拟冒烟测试：启动交叉编译的内核 + initramfs
+./test/test-qemu-run.sh riscv64 aarch64 --qemu-dir ./qemu-install/bin
+
+# 从源码构建 QEMU（当系统未提供所需版本/架构时）
+# 默认不安装系统依赖；首次构建可加 --deps 自动装依赖（需 sudo）
+./build-qemu.sh --arch aarch64,loongarch64,riscv64,x86_64 --deps
+```
+
+---
+
 ### CI/CD
 
 项目包含两个 GitHub Actions 工作流：
 
-- **`build.yml`**：构建 GCC 工具链并发布到 GitHub Release
+- **`build.yml`**：构建 GCC 工具链，经 `test-toolchain.sh` 冒烟测试后发布到 GitHub Release
 - **`build-images.yml`**：构建 BusyBox initramfs 和 Linux 内核，上传到 Release
 
 产物包含：
