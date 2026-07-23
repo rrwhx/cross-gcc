@@ -21,14 +21,15 @@ setup_error_trap
 # 默认版本设置（支持环境变量覆盖）
 BINUTILS_VER="${BINUTILS_VER:-2.46.1}"
 GCC_VER="${GCC_VER:-16.1.0}"
+GDB_VER="${GDB_VER:-17.2}"
 
 # 初始化参数
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
 MIRROR="mirrors.tuna.tsinghua.edu.cn"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
-ENABLE_SANITIZER=false
-ENABLE_GDB=false
+ENABLE_SANITIZER=true
+ENABLE_GDB=true
 FRESH_BUILD=false
 
 # 支持的语言（可通过 --languages 覆盖）
@@ -54,10 +55,13 @@ usage() {
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
   --gcc-ver      gcc 版本 (默认: $GCC_VER)
                  git 格式: git | git:TAG | git:update | git:TAG:update
+  --gdb-ver      gdb 版本 (默认: $GDB_VER, 支持 git[:REF][:update])
+                 仅当 binutils 为 release 源码包且开启 gdb 时用于单独编译 gdb
 
 构建后处理选项:
-  --enable-sanitizer 开启 GCC sanitizer (默认关闭)
-  --enable-gdb / --disable-gdb 是否编译 gdb (默认关闭, 需 binutils 使用 git 源)
+  --enable-sanitizer / --disable-sanitizer 是否构建 GCC sanitizer 运行库 (默认开启)
+  --enable-gdb / --disable-gdb 是否编译 gdb (默认关闭)
+                 binutils 为 git 源时随 binutils 一起编译；为 release 源码包时单独下载 gdb 编译
   --fresh          构建前删除已有的 build/log/install 目录
   --clean          构建完成后删除构建目录和日志目录
   --archive        构建完成后将工具链打包成 tar.xz 并删除原目录
@@ -85,7 +89,9 @@ while [[ $# -gt 0 ]]; do
         --languages)   GCC_LANGUAGES="$2"; shift 2;;
         --binutils-ver)BINUTILS_VER="$2"; shift 2;;
         --gcc-ver)     GCC_VER="$2"; shift 2;;
+        --gdb-ver)     GDB_VER="$2"; shift 2;;
         --enable-sanitizer) ENABLE_SANITIZER=true; shift;;
+        --disable-sanitizer) ENABLE_SANITIZER=false; shift;;
         --enable-gdb)  ENABLE_GDB=true; shift;;
         --disable-gdb) ENABLE_GDB=false; shift;;
         --fresh)       FRESH_BUILD=true; shift;;
@@ -108,6 +114,7 @@ info "=== 组件版本信息 ==="
 info "Binutils 版本: $BINUTILS_VER"
 info "GCC 版本: $GCC_VER"
 info "启用语言: $GCC_LANGUAGES"
+info "sanitizer: $([[ "$ENABLE_SANITIZER" == true ]] && echo 开启 || echo 关闭)"
 
 # sanitizer 处理
 gcc_extra_args=()
@@ -145,9 +152,11 @@ fi
 # 设置各组件构建目录
 BUILD_DIR_BINUTILS="$BUILD_DIR/build-binutils"
 BUILD_DIR_GCC="$BUILD_DIR/build-gcc"
+BUILD_DIR_GDB="$BUILD_DIR/build-gdb"
 
 LOG_DIR_BINUTILS="$LOG_DIR/binutils"
 LOG_DIR_GCC="$LOG_DIR/gcc"
+LOG_DIR_GDB="$LOG_DIR/gdb"
 
 # 设置安装前缀
 INSTALL_PREFIX="$INSTALL_DIR"
@@ -158,9 +167,11 @@ info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
 info "构建线程数: $THREADS"
 
-# 根据 --enable-gdb/--disable-gdb 决定 binutils 是否编译 gdb
-# gdb 仅存在于 binutils git 源 (binutils-gdb.git) 中，release tarball 不含 gdb
+# 根据 --enable-gdb/--disable-gdb 决定 gdb 的编译方式:
+# - binutils 为 git 源 (binutils-gdb.git) 时, gdb 随 binutils 一起编译;
+# - binutils 为 release 源码包 (不含 gdb) 时, 单独下载 gdb 源码包并独立编译。
 binutils_gdb_args=()
+BUILD_GDB_SEPARATE=false
 if [[ "$BINUTILS_VER" == git* ]]; then
     if [[ "$ENABLE_GDB" == true ]]; then
         binutils_gdb_args+=(--enable-gdb)
@@ -168,7 +179,13 @@ if [[ "$BINUTILS_VER" == git* ]]; then
         binutils_gdb_args+=(--disable-gdb --disable-sim)
     fi
 elif [[ "$ENABLE_GDB" == true ]]; then
-    warn "启用 gdb 需要 binutils 使用 git 源 (--binutils-ver git[:REF][:update])，当前为 release tarball(不含 gdb)，gdb 将不会被编译"
+    BUILD_GDB_SEPARATE=true
+    if [[ "$GDB_VER" == git* ]]; then
+        SRC_DIR_GDB="$SRC_DIR/binutils-gdb"
+    else
+        SRC_DIR_GDB="$SRC_DIR/gdb-${GDB_VER}"
+    fi
+    info "binutils 为 release 源码包(不含 gdb)，将单独下载并编译 gdb ${GDB_VER}"
 fi
 
 step "下载源代码"
@@ -176,6 +193,9 @@ dl_files=()
 
 fetch_source "$BINUTILS_VER" "$SRC_DIR_BINUTILS" "https://${MIRROR}/git/binutils-gdb.git" "https://${MIRROR}/gnu/binutils/binutils-${BINUTILS_VER}.tar.xz"
 fetch_source "$GCC_VER" "$SRC_DIR_GCC" "https://${MIRROR}/git/gcc.git" "https://${MIRROR}/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz"
+if [[ "$BUILD_GDB_SEPARATE" == true ]]; then
+    fetch_source "$GDB_VER" "$SRC_DIR_GDB" "https://${MIRROR}/git/binutils-gdb.git" "https://${MIRROR}/gnu/gdb/gdb-${GDB_VER}.tar.xz"
+fi
 
 download_dl_files "$DOWNLOAD_DIR"
 
@@ -206,6 +226,25 @@ build_step "build" "${LOG_DIR_BINUTILS}" \
 
 build_step "install" "${LOG_DIR_BINUTILS}" \
     make install-strip
+
+# 使用 release 源码包时单独编译 gdb (git 源已随 binutils 编译)
+if [[ "$BUILD_GDB_SEPARATE" == true ]]; then
+    step "=== 构建 GDB (独立) ==="
+    mkdir -p "$BUILD_DIR_GDB"
+    cd "$BUILD_DIR_GDB" || error "无法进入构建目录"
+    build_step "configure" "${LOG_DIR_GDB}" \
+        "$SRC_DIR_GDB/configure" \
+        --prefix="$INSTALL_PREFIX" \
+        --disable-multilib \
+        --disable-nls \
+        --disable-werror \
+        --disable-sim
+    # 仅构建/安装 gdb 组件, 避免覆盖 binutils 已安装的 bfd/opcodes 等
+    build_step "build" "${LOG_DIR_GDB}" \
+        make -j${THREADS} all-gdb
+    build_step "install" "${LOG_DIR_GDB}" \
+        make install-gdb
+fi
 
 # 准备 GCC 源码并下载依赖库
 step "==== 准备 GCC 源码 ==="

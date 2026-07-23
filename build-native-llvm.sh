@@ -43,6 +43,7 @@ LLVM_RUNTIMES="flang-rt;compiler-rt"
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
 FRESH_BUILD=false
+ENABLE_SANITIZER=true
 
 usage() {
     cat <<EOF
@@ -60,6 +61,7 @@ usage() {
   --targets           LLVM 构建的后端 (默认: $LLVM_TARGETS)
   --projects          LLVM 启用的项目 (默认: $LLVM_PROJECTS)
   --runtimes          LLVM 启用的运行时 (默认: $LLVM_RUNTIMES)
+  --enable-sanitizer / --disable-sanitizer 是否构建 compiler-rt sanitizer 运行库 (默认开启)
   --link-jobs         并行链接作业数 (LLVM_PARALLEL_LINK_JOBS)
   -j,--threads        并行编译线程数 (默认: ${THREADS})
   --mirror            下载镜像源 (默认: $MIRROR)
@@ -91,6 +93,8 @@ while [[ $# -gt 0 ]]; do
         --targets)               LLVM_TARGETS="$2"; shift 2;;
         --projects)              LLVM_PROJECTS="$2"; shift 2;;
         --runtimes)              LLVM_RUNTIMES="$2"; shift 2;;
+        --enable-sanitizer)      ENABLE_SANITIZER=true; shift;;
+        --disable-sanitizer)     ENABLE_SANITIZER=false; shift;;
         --link-jobs)             LINK_JOBS="$2"; shift 2;;
         -j|--threads)            THREADS="$2"; shift 2;;
         --mirror)                MIRROR="$2"; shift 2;;
@@ -169,6 +173,7 @@ info "LLVM 版本: ${LLVM_VER}"
 info "构建后端: ${LLVM_TARGETS}"
 info "启用项目: ${LLVM_PROJECTS}"
 info "启用运行时: ${LLVM_RUNTIMES}"
+info "sanitizer: $([[ "$ENABLE_SANITIZER" == true ]] && echo 开启 || echo 关闭)"
 info "源码目录: ${SRC_DIR}"
 info "工作目录: ${WORK_DIR}"
 info "构建目录: ${BUILD_DIR}"
@@ -186,6 +191,16 @@ if [[ -n "$LINK_JOBS" ]]; then
     CMAKE_EXTRA_ARGS+=("-DLLVM_PARALLEL_LINK_JOBS=${LINK_JOBS}")
 fi
 
+# sanitizer 由 compiler-rt 提供，默认开启
+SANITIZER_ONOFF=OFF
+if [[ "$ENABLE_SANITIZER" == true ]]; then
+    SANITIZER_ONOFF=ON
+    case ";${LLVM_RUNTIMES};" in
+        *";compiler-rt;"*) ;;
+        *) warn "已启用 sanitizer 但 --runtimes 未包含 compiler-rt，sanitizer 运行库不会被构建" ;;
+    esac
+fi
+
 cd "${BUILD_DIR}"
 
 # native: 不设置 LLVM_DEFAULT_TARGET_TRIPLE，默认即 host 三元组
@@ -200,7 +215,7 @@ build_step "configure" "${LOG_DIR}" \
     -DLLVM_TARGETS_TO_BUILD="${LLVM_TARGETS}" \
     -DLLVM_ENABLE_PROJECTS="${LLVM_PROJECTS}" \
     -DLLVM_ENABLE_RUNTIMES="${LLVM_RUNTIMES}" \
-    -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
+    -DCOMPILER_RT_BUILD_SANITIZERS=${SANITIZER_ONOFF} \
     -DLLVM_ENABLE_ZLIB=FORCE_ON \
     "${CMAKE_EXTRA_ARGS[@]}"
 
