@@ -51,6 +51,22 @@ jobs:
           ./build-toolchain-generic.sh \
             --arch ${{ matrix.arch }} --libc glibc --clean
 
+      - name: Resolve build versions
+        run: |
+          # 内核：取 kernel.org 最新稳定发布版（仅拉取版本号 JSON，非执行远程脚本）
+          LINUX_VER=$(curl -sSL --retry 3 https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
+          if [ -z "$LINUX_VER" ] || [ "$LINUX_VER" = "null" ]; then
+            echo "::error::无法获取最新稳定内核版本" >&2
+            exit 1
+          fi
+          # BusyBox：沿用脚本内置默认版本
+          BUSYBOX_VER=$(sed -n 's/^BUSYBOX_VER=.*:-\([0-9.]*\)}.*/\1/p' build-busybox.sh)
+          [ -z "$BUSYBOX_VER" ] && BUSYBOX_VER=unknown
+          echo "LINUX_VER=$LINUX_VER" >> "$GITHUB_ENV"
+          echo "BUSYBOX_VER=$BUSYBOX_VER" >> "$GITHUB_ENV"
+          echo "内核最新稳定版: $LINUX_VER"
+          echo "BusyBox 版本: $BUSYBOX_VER"
+
       - name: Build BusyBox
         run: |
           ./build-busybox.sh \
@@ -67,6 +83,7 @@ jobs:
           ./build-kernel.sh \
             --arch ${{ matrix.arch }} \
             --cross-compile ./cross-${{ matrix.target }}/bin/${{ matrix.target }}- \
+            --linux-ver "$LINUX_VER" \
             --clean
 
       - name: List build artifacts
@@ -100,6 +117,21 @@ jobs:
           path: kernel-${{ matrix.arch }}/
           retention-days: 7
 
+      - name: Save version info (once)
+        if: matrix.arch == 'riscv64'
+        run: |
+          mkdir -p versioninfo
+          printf 'KERNEL_VER=%s\nBUSYBOX_VER=%s\n' "$LINUX_VER" "$BUSYBOX_VER" > versioninfo/versions.txt
+          cat versioninfo/versions.txt
+
+      - name: Upload version info (once)
+        if: matrix.arch == 'riscv64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: versions
+          path: versioninfo/versions.txt
+          retention-days: 7
+
   release:
     needs: build-images
     runs-on: ubuntu-22.04
@@ -113,24 +145,57 @@ jobs:
         with:
           path: artifacts/
 
+      - name: Load versions
+        run: |
+          if [ -f artifacts/versions/versions.txt ]; then
+            cat artifacts/versions/versions.txt >> "$GITHUB_ENV"
+          else
+            echo "KERNEL_VER=unknown" >> "$GITHUB_ENV"
+            echo "BUSYBOX_VER=unknown" >> "$GITHUB_ENV"
+          fi
+
       - name: Prepare release files
         run: |
           mkdir -p release
-          # 复制 busybox 二进制
-          for f in artifacts/busybox-*/busybox-*; do
-            [ -f "$f" ] && cp "$f" release/
-          done
-          # 复制 initramfs
-          for f in artifacts/initrd-*/*.cpio; do
-            [ -f "$f" ] && cp "$f" release/
-          done
-          # 复制内核文件
-          for dir in artifacts/kernel-*/; do
-            arch=$(basename "$dir" | sed 's/kernel-//')
-            for img in vmlinux Image Image.gz bzImage zImage; do
-              [ -f "$dir/$img" ] && cp "$dir/$img" "release/${arch}-${img}"
+          # 版本说明文件（一并纳入 SHA256SUMS）
+          {
+            echo "Linux kernel : ${KERNEL_VER:-unknown} (最新稳定发布版)"
+            echo "BusyBox      : ${BUSYBOX_VER:-unknown}"
+            echo "Built (UTC)  : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > release/VERSIONS.txt
+          ARCHES="riscv64 aarch64 x86_64 loongarch64"
+          KIMGS="vmlinux Image Image.gz bzImage zImage"
+          for arch in $ARCHES; do
+            bundle="bundle-$arch"
+            mkdir -p "$bundle"
+            # BusyBox 二进制 -> <arch>-busybox（统一为“架构在前”）
+            bb="artifacts/busybox-$arch/busybox-$arch"
+            if [ -f "$bb" ]; then
+              cp "$bb" "release/${arch}-busybox"
+              cp "$bb" "$bundle/busybox"
+            fi
+            # initramfs -> <arch>-initrd.cpio
+            ini="artifacts/initrd-$arch/initrd-$arch.cpio"
+            if [ -f "$ini" ]; then
+              cp "$ini" "release/${arch}-initrd.cpio"
+              cp "$ini" "$bundle/initrd.cpio"
+            fi
+            # 内核镜像：架构在前，保留原始镜像文件名 -> <arch>-<img>
+            kdir="artifacts/kernel-$arch"
+            for img in $KIMGS; do
+              if [ -f "$kdir/$img" ]; then
+                cp "$kdir/$img" "release/${arch}-${img}"
+                cp "$kdir/$img" "$bundle/$img"
+              fi
             done
+            # 每架构整包 tar.gz（包内保留原始文件名）
+            if [ -n "$(ls -A "$bundle" 2>/dev/null)" ]; then
+              tar -czf "release/${arch}-boot.tar.gz" -C "$bundle" .
+            fi
+            rm -rf "$bundle"
           done
+          # 生成所有文件的 SHA256 校验和
+          ( cd release && rm -f SHA256SUMS.txt && sha256sum -- * > SHA256SUMS.txt )
           echo "=== Release files ==="
           ls -lh release/
 
@@ -144,13 +209,25 @@ jobs:
 
             自动构建的 BusyBox initramfs 和 Linux 内核镜像。
 
-            ### 产物说明
+            ### 构建版本
+            | 组件 | 版本 |
+            |------|------|
+            | Linux Kernel | `${{ env.KERNEL_VER }}` (最新稳定发布版) |
+            | BusyBox | `${{ env.BUSYBOX_VER }}` |
+
+            ### 产物说明（统一“架构在前”命名，同架构文件在列表中相邻）
             | 文件 | 说明 |
             |------|------|
-            | `busybox-<arch>` | BusyBox 静态链接二进制 |
-            | `initrd-<arch>.cpio` | BusyBox initramfs (cpio 格式) |
-            | `<arch>-vmlinux` | 未压缩内核 ELF |
-            | `<arch>-Image` / `<arch>-Image.gz` | 压缩内核镜像 |
+            | `<arch>-boot.tar.gz` | 该架构整包：内核镜像 + initrd.cpio + busybox |
+            | `<arch>-busybox` | BusyBox 静态链接二进制 |
+            | `<arch>-initrd.cpio` | BusyBox initramfs (cpio 格式) |
+            | `<arch>-vmlinux` | 未压缩内核 ELF（调试/部分架构可直接启动） |
+            | `<arch>-Image` / `<arch>-Image.gz` | arm64/riscv64 可启动内核镜像 |
+            | `<arch>-bzImage` | x86_64 可启动内核镜像 |
+            | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
+            | `VERSIONS.txt` | 内核与 BusyBox 版本及构建时间 |
+
+            > 每个架构既提供可单独下载的分立文件，也提供 `<arch>-boot.tar.gz` 整包（包内保留原始文件名）。
 
             ### 支持架构
             riscv64, aarch64, x86_64, loongarch64
