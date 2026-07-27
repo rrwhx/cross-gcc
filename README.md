@@ -117,6 +117,11 @@
 # Linux 内核使用 git 源码
 ./build-kernel.sh --arch riscv64 --linux-ver git:v6.12 \
     --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+
+# Linux 内核使用自定义最小配置 (configs/kernel/ 内置各架构 qemu-virt 最小 config，默认不使用)
+./build-kernel.sh --arch riscv64 \
+    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu- \
+    --defconfig configs/kernel/riscv64_qemu_virt_min_defconfig
 ```
 
 #### 5. 交叉编译第三方库
@@ -218,13 +223,19 @@ brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
 
 ### CI/CD
 
-项目包含两个 GitHub Actions 工作流：
+项目包含三个 GitHub Actions 工作流：
 
 - **`build.yml`**：构建 GCC 工具链，经 `test-toolchain.sh` 冒烟测试后发布到 GitHub Release
 - **`build-images.yml`**：构建 BusyBox initramfs 和 Linux 内核，上传到 Release
+- **`build-mini-kernel.yml`**：用系统交叉编译器构建 qemu-virt 最小内核（configs/kernel/），
+  经系统 QEMU 启动+关机验证后发布到独立 Release（tag: latest-mini-kernels，资产带 `-min` 后缀）
+- **`build-mini-kernel.yml`**：用系统交叉编译器构建 qemu-virt 最小内核（configs/kernel/），
+  经系统 QEMU 启动+关机验证后发布到独立 Release（tag: latest-mini-kernels，资产带 `-min` 后缀）
 
 产物包含：
 - `cross-<arch>-linux-<libc>.tar.xz` — GCC 交叉编译工具链
 - `busybox-<arch>` — BusyBox 静态链接二进制
 - `initrd-<arch>.cpio` — BusyBox initramfs
 - `<arch>-vmlinux` / `<arch>-Image` — Linux 内核镜像
+- `<arch>-Image-min` / `<arch>-bzImage-min` / `<arch>-vmlinux-min` — qemu-virt 最小内核（含验证用 `<arch>-initrd-min.cpio`）
+- `<arch>-Image-min` / `<arch>-bzImage-min` / `<arch>-vmlinux-min` — qemu-virt 最小内核（含验证用 `<arch>-initrd-min.cpio`）

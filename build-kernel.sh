@@ -26,6 +26,7 @@ ARCH=""
 CROSS_COMPILE=""
 WORK_DIR=$(pwd)
 LINUX_SRC=""
+DEFCONFIG=""
 OUTPUT=""
 CLEAN_BUILD=false
 
@@ -41,6 +42,8 @@ usage() {
   --work-dir        工作目录前缀 (默认: 当前目录)
   --linux-ver       Linux 内核版本 (默认: ${LINUX_VER}, 支持 git[:REF][:update])
   --linux-src       直接指定已解压的内核源码路径 (跳过下载/解压)
+  --defconfig       使用指定的内核 config 文件 (复制为 .config 后 make olddefconfig)
+                    默认不使用，仍为 defconfig + kvm_guest.config
   --output          输出目录 (默认: <work-dir>/kernel-<arch>)
   --mirror          下载镜像源 (默认: ${MIRROR})
   -j,--threads      并行编译线程数 (默认: ${THREADS})
@@ -51,6 +54,7 @@ usage() {
   $(basename "$0") --arch riscv64 --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
   $(basename "$0") --arch riscv64 --cross-compile riscv64-linux-gnu- --linux-src ./downloads/linux-7.1.1
   $(basename "$0") --arch riscv64 --linux-ver git:v6.12 --cross-compile riscv64-linux-gnu-
+  $(basename "$0") --arch riscv64 --cross-compile riscv64-linux-gnu- --defconfig configs/kernel/riscv_qemu_virt_min_defconfig
 EOF
     exit 0
 }
@@ -62,6 +66,7 @@ while [[ $# -gt 0 ]]; do
         --work-dir)       WORK_DIR="$2"; shift 2;;
         --linux-ver)      LINUX_VER="$2"; shift 2;;
         --linux-src)      LINUX_SRC="$2"; shift 2;;
+        --defconfig)      DEFCONFIG="$2"; shift 2;;
         --output)         OUTPUT="$2"; shift 2;;
         --mirror)         MIRROR="$2"; shift 2;;
         -j|--threads)     THREADS="$2"; shift 2;;
@@ -73,6 +78,11 @@ done
 
 if [[ -z "$ARCH" || -z "$CROSS_COMPILE" ]]; then
     error "--arch 和 --cross-compile 参数为必需。"
+fi
+
+if [[ -n "$DEFCONFIG" ]]; then
+    [[ -f "$DEFCONFIG" ]] || error "指定的内核 config 文件不存在: $DEFCONFIG"
+    DEFCONFIG=$(realpath "$DEFCONFIG")
 fi
 
 # ---------------------------------------------------------------------------
@@ -116,6 +126,7 @@ mkdir -p "$DOWNLOAD_DIR" "$BUILD_DIR" "$LOG_DIR" "$OUTPUT"
 info "ARCH=$ARCH (KERNEL_ARCH=$KERNEL_ARCH)"
 info "CROSS_COMPILE=$CROSS_COMPILE"
 info "Linux 版本: $LINUX_VER"
+info "内核配置: ${DEFCONFIG:-defconfig + kvm_guest.config}"
 info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
 info "输出目录: $OUTPUT"
@@ -163,15 +174,24 @@ info "清理源码树 (mrproper)"
 build_step "kernel_mrproper" "$LOG_DIR" \
     make -C "$LINUX_SRC" ARCH="$KERNEL_ARCH" mrproper
 
-info "生成 defconfig (ARCH=$KERNEL_ARCH CROSS_COMPILE=$CROSS_COMPILE)"
-build_step "kernel_defconfig" "$LOG_DIR" \
-    make -C "$LINUX_SRC" O="$BUILD_DIR" \
-    ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" defconfig
+if [[ -n "$DEFCONFIG" ]]; then
+    # 自定义 config: 复制为 .config 后用 olddefconfig 补齐缺省项 (不改动内核源码树)
+    info "使用自定义内核配置: $DEFCONFIG"
+    cp "$DEFCONFIG" "$BUILD_DIR/.config"
+    build_step "kernel_olddefconfig" "$LOG_DIR" \
+        make -C "$LINUX_SRC" O="$BUILD_DIR" \
+        ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
+else
+    info "生成 defconfig (ARCH=$KERNEL_ARCH CROSS_COMPILE=$CROSS_COMPILE)"
+    build_step "kernel_defconfig" "$LOG_DIR" \
+        make -C "$LINUX_SRC" O="$BUILD_DIR" \
+        ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" defconfig
 
-info "合并 kvm_guest.config 片段"
-build_step "kernel_kvm_guest_config" "$LOG_DIR" \
-    make -C "$LINUX_SRC" O="$BUILD_DIR" \
-    ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" kvm_guest.config
+    info "合并 kvm_guest.config 片段"
+    build_step "kernel_kvm_guest_config" "$LOG_DIR" \
+        make -C "$LINUX_SRC" O="$BUILD_DIR" \
+        ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" kvm_guest.config
+fi
 
 # ---------------------------------------------------------------------------
 # 阶段 3: 编译内核
@@ -187,11 +207,15 @@ build_step "kernel_build" "$LOG_DIR" \
 # 阶段 4: 安装模块与复制产物
 # ---------------------------------------------------------------------------
 step "=== 安装模块 ==="
-info "安装模块到: $OUTPUT"
-build_step "kernel_modules_install" "$LOG_DIR" \
-    make -C "$BUILD_DIR" modules_install \
-    ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" \
-    INSTALL_MOD_PATH="$OUTPUT"
+if grep -q '^CONFIG_MODULES=y' "$BUILD_DIR/.config"; then
+    info "安装模块到: $OUTPUT"
+    build_step "kernel_modules_install" "$LOG_DIR" \
+        make -C "$BUILD_DIR" modules_install \
+        ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" \
+        INSTALL_MOD_PATH="$OUTPUT"
+else
+    info "内核未启用模块 (CONFIG_MODULES 未开启)，跳过 modules_install"
+fi
 
 step "=== 复制内核镜像 ==="
 # 复制 vmlinux

@@ -1,0 +1,219 @@
+name: Build Mini Kernel Images
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'build-kernel.sh'
+      - 'build-busybox.sh'
+      - 'lib.sh'
+      - 'configs/kernel/**'
+      - 'test/test-qemu-run.sh'
+      - '.github/workflows/build-mini-kernel.yml'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-mini-kernel:
+    runs-on: ubuntu-26.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: riscv64
+            cross: riscv64-linux-gnu-
+            gcc_pkg: gcc-riscv64-linux-gnu
+            libc_pkg: libc6-dev-riscv64-cross
+            qemu_pkg: qemu-system-misc
+          - arch: aarch64
+            cross: aarch64-linux-gnu-
+            gcc_pkg: gcc-aarch64-linux-gnu
+            libc_pkg: libc6-dev-arm64-cross
+            qemu_pkg: qemu-system-arm
+          - arch: x86_64
+            cross: x86_64-linux-gnu-
+            gcc_pkg: ''
+            libc_pkg: ''
+            qemu_pkg: qemu-system-x86
+          - arch: loongarch64
+            cross: loongarch64-linux-gnu-
+            gcc_pkg: gcc-loongarch64-linux-gnu
+            libc_pkg: libc6-dev-loong64-cross
+            qemu_pkg: qemu-system-misc
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install dependencies (system compiler & qemu)
+        run: |
+          sudo apt-get update
+          # libc6-dev-*-cross: 目标架构 libc 头文件与静态库 (busybox 静态链接必需,
+          # --no-install-recommends 不会随 gcc-<arch>-linux-gnu 自动带入)
+          sudo apt-get install -y --no-install-recommends \
+            build-essential flex bison bc cpio bzip2 \
+            libssl-dev libelf-dev jq curl \
+            ${{ matrix.qemu_pkg }} ${{ matrix.gcc_pkg }} ${{ matrix.libc_pkg }}
+          ${{ matrix.cross }}gcc --version | head -1
+          qemu-system-${{ matrix.arch }} --version | head -1
+          # 预检: 目标 libc 可用且能静态链接, 提前暴露环境缺失
+          printf 'int main(void){return 0;}\n' > /tmp/cc-test.c
+          ${{ matrix.cross }}gcc -static /tmp/cc-test.c -o /tmp/cc-test
+          echo "libc 预检通过"
+
+      - name: Resolve versions
+        run: |
+          # 内核: kernel.org 最新稳定发布版 (仅拉取版本号 JSON)
+          LINUX_VER=$(curl -sSL --retry 3 https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
+          if [ -z "$LINUX_VER" ] || [ "$LINUX_VER" = "null" ]; then
+            echo "::error::无法获取最新稳定内核版本" >&2
+            exit 1
+          fi
+          # BusyBox: 脚本内置默认版本
+          BUSYBOX_VER=$(sed -n 's/^BUSYBOX_VER=.*:-\([0-9.]*\)}.*/\1/p' build-busybox.sh)
+          echo "LINUX_VER=$LINUX_VER" >> "$GITHUB_ENV"
+          echo "BUSYBOX_VER=${BUSYBOX_VER:-unknown}" >> "$GITHUB_ENV"
+          echo "内核最新稳定版: $LINUX_VER, BusyBox: $BUSYBOX_VER"
+
+      - name: Build BusyBox initramfs (system cross compiler)
+        run: |
+          ./build-busybox.sh \
+            --arch ${{ matrix.arch }} \
+            --cross-compile ${{ matrix.cross }} \
+            --clean
+
+      - name: Build mini kernel (--defconfig)
+        run: |
+          ./build-kernel.sh \
+            --arch ${{ matrix.arch }} \
+            --cross-compile ${{ matrix.cross }} \
+            --linux-ver "$LINUX_VER" \
+            --defconfig configs/kernel/${{ matrix.arch }}_qemu_virt_min_defconfig \
+            --output kernel-min-${{ matrix.arch }} \
+            --clean
+
+      - name: Boot test with system QEMU
+        run: |
+          mkdir -p images
+          cp initrd-${{ matrix.arch }}.cpio images/
+          for img in Image bzImage vmlinux; do
+            if [ -f "kernel-min-${{ matrix.arch }}/$img" ]; then
+              cp "kernel-min-${{ matrix.arch }}/$img" "images/${{ matrix.arch }}-$img"
+            fi
+          done
+          ls -lh images/
+          ./test/test-qemu-run.sh --qemu-dir /usr/bin --images-dir ./images \
+            --timeout 120 --verbose ${{ matrix.arch }}
+
+      - name: Package artifacts (-min naming)
+        run: |
+          mkdir -p mini
+          for img in Image bzImage vmlinux; do
+            if [ -f "kernel-min-${{ matrix.arch }}/$img" ]; then
+              cp "kernel-min-${{ matrix.arch }}/$img" "mini/${{ matrix.arch }}-${img}-min"
+            fi
+          done
+          cp initrd-${{ matrix.arch }}.cpio "mini/${{ matrix.arch }}-initrd-min.cpio"
+          ls -lh mini/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: mini-kernel-${{ matrix.arch }}
+          path: mini/
+          retention-days: 7
+
+      - name: Save version info (once)
+        if: matrix.arch == 'riscv64'
+        run: |
+          mkdir -p versioninfo
+          printf 'KERNEL_VER=%s\nBUSYBOX_VER=%s\n' "$LINUX_VER" "$BUSYBOX_VER" > versioninfo/versions.txt
+          cat versioninfo/versions.txt
+
+      - name: Upload version info (once)
+        if: matrix.arch == 'riscv64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: mini-versions
+          path: versioninfo/versions.txt
+          retention-days: 7
+
+  release:
+    needs: build-mini-kernel
+    runs-on: ubuntu-26.04
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+
+      - name: Load versions
+        run: |
+          if [ -f artifacts/mini-versions/versions.txt ]; then
+            cat artifacts/mini-versions/versions.txt >> "$GITHUB_ENV"
+          else
+            echo "KERNEL_VER=unknown" >> "$GITHUB_ENV"
+            echo "BUSYBOX_VER=unknown" >> "$GITHUB_ENV"
+          fi
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          {
+            echo "Linux kernel : ${KERNEL_VER:-unknown} (最新稳定发布版, qemu-virt 最小配置)"
+            echo "BusyBox      : ${BUSYBOX_VER:-unknown} (验证用 initramfs)"
+            echo "Built (UTC)  : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > release/VERSIONS.txt
+          cp artifacts/mini-kernel-*/* release/
+          # 生成所有文件的 SHA256 校验和
+          ( cd release && rm -f SHA256SUMS.txt && sha256sum -- * > SHA256SUMS.txt )
+          echo "=== Release files ==="
+          ls -lh release/
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-mini-kernels
+          name: "Mini Kernel Images (qemu-virt)"
+          body: |
+            ## Mini Kernel Images (qemu-virt 最小配置)
+
+            基于 `configs/kernel/<arch>_qemu_virt_min_defconfig` 构建的最小内核，
+            使用 Ubuntu 系统交叉编译器构建，并已通过系统 QEMU 启动 + 关机验证（4 架构全覆盖）。
+
+            ### 构建版本
+            | 组件 | 版本 |
+            |------|------|
+            | Linux Kernel | `${{ env.KERNEL_VER }}` (最新稳定发布版) |
+            | BusyBox | `${{ env.BUSYBOX_VER }}` (验证用 initramfs) |
+
+            ### 产物说明
+            | 文件 | 说明 |
+            |------|------|
+            | `<arch>-Image-min` / `<arch>-bzImage-min` | 可启动内核镜像 (arm64/riscv64 为 Image, x86_64 为 bzImage) |
+            | `<arch>-vmlinux-min` | 未压缩内核 ELF (含符号; loongarch64 直接以此启动) |
+            | `<arch>-initrd-min.cpio` | 启动验证用 BusyBox initramfs |
+            | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
+            | `VERSIONS.txt` | 内核与 BusyBox 版本及构建时间 |
+
+            ### 启动示例 (更多见 test/test-qemu-run.sh)
+            ```
+            qemu-system-riscv64 -M virt -nographic -m 1G -no-reboot \
+              -kernel riscv64-Image-min -initrd riscv64-initrd-min.cpio \
+              -append "console=ttyS0 rdinit=/sbin/poweroff -- -f"
+            ```
+
+            ### 支持架构
+            riscv64, aarch64, x86_64, loongarch64
+          files: release/*
+          overwrite_files: true
+          make_latest: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
