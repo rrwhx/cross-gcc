@@ -26,7 +26,8 @@ jobs:
             cross: riscv64-linux-gnu-
             gcc_pkg: gcc-riscv64-linux-gnu
             libc_pkg: libc6-dev-riscv64-cross
-            qemu_pkg: qemu-system-misc
+            # ubuntu 26.04 起 riscv 从 qemu-system-misc 拆为独立包
+            qemu_pkg: qemu-system-riscv
           - arch: aarch64
             cross: aarch64-linux-gnu-
             gcc_pkg: gcc-aarch64-linux-gnu
@@ -57,7 +58,10 @@ jobs:
             libssl-dev libelf-dev jq curl \
             ${{ matrix.qemu_pkg }} ${{ matrix.gcc_pkg }} ${{ matrix.libc_pkg }}
           ${{ matrix.cross }}gcc --version | head -1
-          qemu-system-${{ matrix.arch }} --version | head -1
+          # 存在性检查不可用 "cmd --version | head": 无 pipefail 时管道退出码取 head 的 0,
+          # 会掩盖 command not found (riscv64 曾因此假阳性通过安装检查)
+          QEMU_CHECK=$(command -v qemu-system-${{ matrix.arch }}) || { echo "::error::qemu-system-${{ matrix.arch }} 未安装成功 (检查 qemu_pkg 包名)"; exit 1; }
+          "$QEMU_CHECK" --version | head -1
           # 预检: 目标 libc 可用且能静态链接, 提前暴露环境缺失
           printf 'int main(void){return 0;}\n' > /tmp/cc-test.c
           ${{ matrix.cross }}gcc -static /tmp/cc-test.c -o /tmp/cc-test
@@ -96,6 +100,16 @@ jobs:
 
       - name: Boot test with system QEMU
         run: |
+          # 优先取本 workflow 安装的 apt 包内的 qemu-system 二进制;
+          # runner 镜像可能预装了更旧的同名二进制抢占 PATH (不认新 CPU 型号),
+          # 故 command -v 仅作回退, 并打印两者便于诊断
+          PKG_BIN=$(dpkg -L ${{ matrix.qemu_pkg }} 2>/dev/null | grep -m1 "/qemu-system-${{ matrix.arch }}$" || true)
+          PATH_BIN=$(command -v qemu-system-${{ matrix.arch }} || true)
+          QEMU_BIN="${PKG_BIN:-$PATH_BIN}"
+          echo "apt 包内二进制: ${PKG_BIN:-无}"
+          echo "PATH 解析:     ${PATH_BIN:-无}"
+          [ -n "$QEMU_BIN" ] || { echo "::error::未找到 qemu-system-${{ matrix.arch }}"; exit 1; }
+          echo "选用 QEMU: $QEMU_BIN ($("$QEMU_BIN" --version | head -1))"
           mkdir -p images
           cp initrd-${{ matrix.arch }}.cpio images/
           for img in Image bzImage vmlinux; do
@@ -104,8 +118,9 @@ jobs:
             fi
           done
           ls -lh images/
-          ./test/test-qemu-run.sh --qemu-dir /usr/bin --images-dir ./images \
-            --timeout 120 --verbose ${{ matrix.arch }}
+          # --strict: 环境缺失导致的 SKIP 也视为失败, 防止假阳性绿
+          ./test/test-qemu-run.sh --qemu-dir "$(dirname "$QEMU_BIN")" --images-dir ./images \
+            --timeout 120 --verbose --strict ${{ matrix.arch }}
 
       - name: Package artifacts (-min naming)
         run: |
