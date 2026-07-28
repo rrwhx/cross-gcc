@@ -235,4 +235,4 @@ brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
 - `busybox-<arch>` — BusyBox 静态链接二进制
 - `initrd-<arch>.cpio` — BusyBox initramfs
 - `<arch>-vmlinux` / `<arch>-Image` — Linux 内核镜像
-- `<arch>-boot-min.tar.gz` — qemu-virt 最小内核整包（包内为原始文件名: 内核镜像 + initrd.cpio + busybox）
+- `<arch>-boot-min.tar.gz` — qemu-virt 最小内核整包（解压出 `<arch>-boot-min/` 目录: 内核镜像 + initrd.cpio + busybox）

@@ -166,7 +166,7 @@ jobs:
           ARCHES="riscv64 aarch64 x86_64 loongarch64"
           KIMGS="vmlinux Image Image.gz bzImage zImage"
           for arch in $ARCHES; do
-            bundle="bundle-$arch"
+            bundle="${arch}-boot"
             mkdir -p "$bundle"
             # BusyBox 二进制 -> <arch>-busybox（统一为“架构在前”）
             bb="artifacts/busybox-$arch/busybox-$arch"
@@ -188,9 +188,9 @@ jobs:
                 cp "$kdir/$img" "$bundle/$img"
               fi
             done
-            # 每架构整包 tar.gz（包内保留原始文件名）
+            # 每架构整包 tar.gz（含同名顶层目录 <arch>-boot/，包内保留原始文件名）
             if [ -n "$(ls -A "$bundle" 2>/dev/null)" ]; then
-              tar -czf "release/${arch}-boot.tar.gz" -C "$bundle" .
+              tar -czf "release/${arch}-boot.tar.gz" "$bundle"
             fi
             rm -rf "$bundle"
           done
@@ -218,7 +218,7 @@ jobs:
             ### 产物说明（统一“架构在前”命名，同架构文件在列表中相邻）
             | 文件 | 说明 |
             |------|------|
-            | `<arch>-boot.tar.gz` | 该架构整包：内核镜像 + initrd.cpio + busybox |
+            | `<arch>-boot.tar.gz` | 该架构整包（解压出 `<arch>-boot/` 目录）: 内核镜像 + initrd.cpio + busybox |
             | `<arch>-busybox` | BusyBox 静态链接二进制 |
             | `<arch>-initrd.cpio` | BusyBox initramfs (cpio 格式) |
             | `<arch>-vmlinux` | 未压缩内核 ELF（调试/部分架构可直接启动） |

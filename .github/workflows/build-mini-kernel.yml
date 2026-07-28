@@ -126,17 +126,18 @@ jobs:
 
       - name: Package bundle (<arch>-boot-min.tar.gz)
         run: |
-          # 仅发布整包: 包名带 -min 区分, 包内保留原始文件名
-          mkdir -p bundle mini
+          # 仅发布整包: 包名带 -min 区分, 含同名顶层目录, 包内保留原始文件名
+          top="${{ matrix.arch }}-boot-min"
+          mkdir -p "$top" mini
           for img in Image Image.gz bzImage vmlinux; do
             if [ -f "kernel-min-${{ matrix.arch }}/$img" ]; then
-              cp "kernel-min-${{ matrix.arch }}/$img" "bundle/$img"
+              cp "kernel-min-${{ matrix.arch }}/$img" "$top/$img"
             fi
           done
-          cp initrd-${{ matrix.arch }}.cpio bundle/initrd.cpio
-          cp busybox-${{ matrix.arch }} bundle/busybox
-          tar -czf "mini/${{ matrix.arch }}-boot-min.tar.gz" -C bundle .
-          rm -rf bundle
+          cp initrd-${{ matrix.arch }}.cpio "$top/initrd.cpio"
+          cp busybox-${{ matrix.arch }} "$top/busybox"
+          tar -czf "mini/${top}.tar.gz" "$top"
+          rm -rf "$top"
           echo "=== 包内文件 ==="
           tar -tzf "mini/${{ matrix.arch }}-boot-min.tar.gz"
           ls -lh mini/
@@ -219,13 +220,13 @@ jobs:
             ### 产物说明（仅提供整包，包内为原始文件名）
             | 文件 | 说明 |
             |------|------|
-            | `<arch>-boot-min.tar.gz` | 该架构整包: 内核镜像 (Image/bzImage/vmlinux 原名) + initrd.cpio + busybox |
+            | `<arch>-boot-min.tar.gz` | 解压出 `<arch>-boot-min/` 目录: 内核镜像 (Image/bzImage/vmlinux 原名) + initrd.cpio + busybox |
             | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
             | `VERSIONS.txt` | 内核与 BusyBox 版本及构建时间 |
 
             ### 启动示例 (更多见 test/test-qemu-run.sh)
             ```
-            tar -xzf riscv64-boot-min.tar.gz
+            tar -xzf riscv64-boot-min.tar.gz && cd riscv64-boot-min
             qemu-system-riscv64 -M virt -nographic -m 1G -no-reboot -nic none \
               -kernel Image -initrd initrd.cpio \
               -append "console=ttyS0 rdinit=/sbin/poweroff -- -f"
