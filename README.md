@@ -228,14 +228,11 @@ brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
 - **`build.yml`**：构建 GCC 工具链，经 `test-toolchain.sh` 冒烟测试后发布到 GitHub Release
 - **`build-images.yml`**：构建 BusyBox initramfs 和 Linux 内核，上传到 Release
 - **`build-mini-kernel.yml`**：用系统交叉编译器构建 qemu-virt 最小内核（configs/kernel/），
-  经系统 QEMU 启动+关机验证后发布到独立 Release（tag: latest-mini-kernels，资产带 `-min` 后缀）
-- **`build-mini-kernel.yml`**：用系统交叉编译器构建 qemu-virt 最小内核（configs/kernel/），
-  经系统 QEMU 启动+关机验证后发布到独立 Release（tag: latest-mini-kernels，资产带 `-min` 后缀）
+  经系统 QEMU 启动+关机验证后发布到独立 Release（tag: latest-mini-kernels，仅提供 `<arch>-boot-min.tar.gz` 整包）
 
 产物包含：
 - `cross-<arch>-linux-<libc>.tar.xz` — GCC 交叉编译工具链
 - `busybox-<arch>` — BusyBox 静态链接二进制
 - `initrd-<arch>.cpio` — BusyBox initramfs
 - `<arch>-vmlinux` / `<arch>-Image` — Linux 内核镜像
-- `<arch>-Image-min` / `<arch>-bzImage-min` / `<arch>-vmlinux-min` — qemu-virt 最小内核（含验证用 `<arch>-initrd-min.cpio`）
-- `<arch>-Image-min` / `<arch>-bzImage-min` / `<arch>-vmlinux-min` — qemu-virt 最小内核（含验证用 `<arch>-initrd-min.cpio`）
+- `<arch>-boot-min.tar.gz` — qemu-virt 最小内核整包（包内为原始文件名: 内核镜像 + initrd.cpio + busybox）

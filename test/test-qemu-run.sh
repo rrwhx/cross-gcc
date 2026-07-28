@@ -17,6 +17,7 @@ QEMU_DIR="${QEMU_DIR:-$HOME/qemu_upstream/build}"
 IMAGES_DIR="${IMAGES_DIR:-$(pwd)}"
 TIMEOUT="${TIMEOUT:-30}"
 VERBOSE=false
+STRICT=false
 
 # ---------------------------------------------------------------------------
 # 架构配置：每个函数构造 cmd 数组
@@ -25,7 +26,7 @@ ALL_ARCHS=(aarch64 loongarch64 riscv64 x86_64)
 
 cmd_qemu_aarch64() {
     cmd=("$QEMU_DIR/qemu-system-aarch64"
-        -nographic -m 1G -no-reboot
+        -nographic -m 1G -no-reboot -nic none
         -M virt -cpu neoverse-n2
         -kernel "$IMAGES_DIR/aarch64-Image"
         -initrd "$IMAGES_DIR/initrd-aarch64.cpio"
@@ -34,7 +35,7 @@ cmd_qemu_aarch64() {
 
 cmd_qemu_loongarch64() {
     cmd=("$QEMU_DIR/qemu-system-loongarch64"
-        -nographic -m 1G -no-reboot
+        -nographic -m 1G -no-reboot -nic none
         -M virt -cpu la464
         -kernel "$IMAGES_DIR/loongarch64-vmlinux"
         -initrd "$IMAGES_DIR/initrd-loongarch64.cpio"
@@ -43,7 +44,7 @@ cmd_qemu_loongarch64() {
 
 cmd_qemu_riscv64() {
     cmd=("$QEMU_DIR/qemu-system-riscv64"
-        -nographic -m 1G -no-reboot
+        -nographic -m 1G -no-reboot -nic none
         -M virt -cpu rva23s64
         -kernel "$IMAGES_DIR/riscv64-Image"
         -initrd "$IMAGES_DIR/initrd-riscv64.cpio"
@@ -52,7 +53,7 @@ cmd_qemu_riscv64() {
 
 cmd_qemu_x86_64() {
     cmd=("$QEMU_DIR/qemu-system-x86_64"
-        -nographic -m 1G -no-reboot
+        -nographic -m 1G -no-reboot -nic none
         -M q35 -cpu Haswell
         -kernel "$IMAGES_DIR/x86_64-bzImage"
         -initrd "$IMAGES_DIR/initrd-x86_64.cpio"
@@ -77,6 +78,7 @@ usage() {
   --images-dir    内核/initramfs 所在目录 (默认: 当前目录)
   --timeout       单次启动超时秒数 (默认: $TIMEOUT)
   --verbose       显示 QEMU 输出（用于调试）
+  --strict        严格模式: 跳过(SKIP)也视为失败 (CI 用, 防止环境缺失时假阳性通过)
   -h,--help       显示帮助
 
 示例:
@@ -94,6 +96,7 @@ while [[ $# -gt 0 ]]; do
         --images-dir)  IMAGES_DIR="$2"; shift 2;;
         --timeout)     TIMEOUT="$2"; shift 2;;
         --verbose)     VERBOSE=true; shift;;
+        --strict)      STRICT=true; shift;;
         -h|--help)     usage;;
         *)             ARCHS+=("$1"); shift;;
     esac
@@ -185,4 +188,8 @@ done
 echo ""
 info "=== 测试汇总 ==="
 info "通过: $PASS  失败: $FAIL  跳过: $SKIP"
-[[ $FAIL -eq 0 ]] && ok "全部通过" || error "存在失败的测试"
+if [[ "$STRICT" == true ]]; then
+    [[ $FAIL -eq 0 && $SKIP -eq 0 && $PASS -gt 0 ]] && ok "全部通过" || error "存在失败或被跳过的测试 (--strict)"
+else
+    [[ $FAIL -eq 0 ]] && ok "全部通过" || error "存在失败的测试"
+fi

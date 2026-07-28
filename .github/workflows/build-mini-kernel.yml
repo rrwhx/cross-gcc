@@ -26,7 +26,8 @@ jobs:
             cross: riscv64-linux-gnu-
             gcc_pkg: gcc-riscv64-linux-gnu
             libc_pkg: libc6-dev-riscv64-cross
-            qemu_pkg: qemu-system-misc
+            # ubuntu 26.04 起 riscv 从 qemu-system-misc 拆为独立包
+            qemu_pkg: qemu-system-riscv
           - arch: aarch64
             cross: aarch64-linux-gnu-
             gcc_pkg: gcc-aarch64-linux-gnu
@@ -57,7 +58,10 @@ jobs:
             libssl-dev libelf-dev jq curl \
             ${{ matrix.qemu_pkg }} ${{ matrix.gcc_pkg }} ${{ matrix.libc_pkg }}
           ${{ matrix.cross }}gcc --version | head -1
-          qemu-system-${{ matrix.arch }} --version | head -1
+          # 存在性检查不可用 "cmd --version | head": 无 pipefail 时管道退出码取 head 的 0,
+          # 会掩盖 command not found (riscv64 曾因此假阳性通过安装检查)
+          QEMU_CHECK=$(command -v qemu-system-${{ matrix.arch }}) || { echo "::error::qemu-system-${{ matrix.arch }} 未安装成功 (检查 qemu_pkg 包名)"; exit 1; }
+          "$QEMU_CHECK" --version | head -1
           # 预检: 目标 libc 可用且能静态链接, 提前暴露环境缺失
           printf 'int main(void){return 0;}\n' > /tmp/cc-test.c
           ${{ matrix.cross }}gcc -static /tmp/cc-test.c -o /tmp/cc-test
@@ -81,8 +85,10 @@ jobs:
         run: |
           ./build-busybox.sh \
             --arch ${{ matrix.arch }} \
-            --cross-compile ${{ matrix.cross }} \
-            --clean
+            --cross-compile ${{ matrix.cross }}
+          # 保留 busybox 二进制用于打包, 再清理构建/日志目录
+          cp build-busybox-${{ matrix.arch }}/busybox busybox-${{ matrix.arch }}
+          rm -rf build-busybox-${{ matrix.arch }} logs-busybox-${{ matrix.arch }}
 
       - name: Build mini kernel (--defconfig)
         run: |
@@ -96,6 +102,16 @@ jobs:
 
       - name: Boot test with system QEMU
         run: |
+          # 优先取本 workflow 安装的 apt 包内的 qemu-system 二进制;
+          # runner 镜像可能预装了更旧的同名二进制抢占 PATH (不认新 CPU 型号),
+          # 故 command -v 仅作回退, 并打印两者便于诊断
+          PKG_BIN=$(dpkg -L ${{ matrix.qemu_pkg }} 2>/dev/null | grep -m1 "/qemu-system-${{ matrix.arch }}$" || true)
+          PATH_BIN=$(command -v qemu-system-${{ matrix.arch }} || true)
+          QEMU_BIN="${PKG_BIN:-$PATH_BIN}"
+          echo "apt 包内二进制: ${PKG_BIN:-无}"
+          echo "PATH 解析:     ${PATH_BIN:-无}"
+          [ -n "$QEMU_BIN" ] || { echo "::error::未找到 qemu-system-${{ matrix.arch }}"; exit 1; }
+          echo "选用 QEMU: $QEMU_BIN ($("$QEMU_BIN" --version | head -1))"
           mkdir -p images
           cp initrd-${{ matrix.arch }}.cpio images/
           for img in Image bzImage vmlinux; do
@@ -104,18 +120,25 @@ jobs:
             fi
           done
           ls -lh images/
-          ./test/test-qemu-run.sh --qemu-dir /usr/bin --images-dir ./images \
-            --timeout 120 --verbose ${{ matrix.arch }}
+          # --strict: 环境缺失导致的 SKIP 也视为失败, 防止假阳性绿
+          ./test/test-qemu-run.sh --qemu-dir "$(dirname "$QEMU_BIN")" --images-dir ./images \
+            --timeout 120 --verbose --strict ${{ matrix.arch }}
 
-      - name: Package artifacts (-min naming)
+      - name: Package bundle (<arch>-boot-min.tar.gz)
         run: |
-          mkdir -p mini
-          for img in Image bzImage vmlinux; do
+          # 仅发布整包: 包名带 -min 区分, 包内保留原始文件名
+          mkdir -p bundle mini
+          for img in Image Image.gz bzImage vmlinux; do
             if [ -f "kernel-min-${{ matrix.arch }}/$img" ]; then
-              cp "kernel-min-${{ matrix.arch }}/$img" "mini/${{ matrix.arch }}-${img}-min"
+              cp "kernel-min-${{ matrix.arch }}/$img" "bundle/$img"
             fi
           done
-          cp initrd-${{ matrix.arch }}.cpio "mini/${{ matrix.arch }}-initrd-min.cpio"
+          cp initrd-${{ matrix.arch }}.cpio bundle/initrd.cpio
+          cp busybox-${{ matrix.arch }} bundle/busybox
+          tar -czf "mini/${{ matrix.arch }}-boot-min.tar.gz" -C bundle .
+          rm -rf bundle
+          echo "=== 包内文件 ==="
+          tar -tzf "mini/${{ matrix.arch }}-boot-min.tar.gz"
           ls -lh mini/
 
       - name: Upload artifacts
@@ -191,21 +214,20 @@ jobs:
             | 组件 | 版本 |
             |------|------|
             | Linux Kernel | `${{ env.KERNEL_VER }}` (最新稳定发布版) |
-            | BusyBox | `${{ env.BUSYBOX_VER }}` (验证用 initramfs) |
+            | BusyBox | `${{ env.BUSYBOX_VER }}` (包内 initramfs 与静态二进制) |
 
-            ### 产物说明
+            ### 产物说明（仅提供整包，包内为原始文件名）
             | 文件 | 说明 |
             |------|------|
-            | `<arch>-Image-min` / `<arch>-bzImage-min` | 可启动内核镜像 (arm64/riscv64 为 Image, x86_64 为 bzImage) |
-            | `<arch>-vmlinux-min` | 未压缩内核 ELF (含符号; loongarch64 直接以此启动) |
-            | `<arch>-initrd-min.cpio` | 启动验证用 BusyBox initramfs |
+            | `<arch>-boot-min.tar.gz` | 该架构整包: 内核镜像 (Image/bzImage/vmlinux 原名) + initrd.cpio + busybox |
             | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
             | `VERSIONS.txt` | 内核与 BusyBox 版本及构建时间 |
 
             ### 启动示例 (更多见 test/test-qemu-run.sh)
             ```
-            qemu-system-riscv64 -M virt -nographic -m 1G -no-reboot \
-              -kernel riscv64-Image-min -initrd riscv64-initrd-min.cpio \
+            tar -xzf riscv64-boot-min.tar.gz
+            qemu-system-riscv64 -M virt -nographic -m 1G -no-reboot -nic none \
+              -kernel Image -initrd initrd.cpio \
               -append "console=ttyS0 rdinit=/sbin/poweroff -- -f"
             ```
 
