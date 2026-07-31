@@ -34,7 +34,7 @@ BUILD_DIR=""
 INSTALL_DIR=""
 LOG_DIR=""
 LINK_JOBS=""
-MIRROR="mirrors.tuna.tsinghua.edu.cn"
+# MIRROR 默认值由 lib.sh 提供，可通过 --mirror 覆盖
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
 FRESH_BUILD=false
