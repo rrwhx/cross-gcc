@@ -20,7 +20,7 @@ NEWLIB_VER="${NEWLIB_VER:-4.6.0.20260123}"
 # 初始化参数
 ARCH=""
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""
-MIRROR="mirrors.tuna.tsinghua.edu.cn"
+# MIRROR 默认值由 lib.sh 提供，可通过 --mirror 覆盖
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
 FRESH_BUILD=false

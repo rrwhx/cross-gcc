@@ -5,13 +5,16 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+source "$SCRIPT_DIR/lib.sh"
+
 if ! command -v python3 &>/dev/null; then
     echo "Error: python3 is required but not installed" >&2
     exit 1
 fi
 
-# Mirror / upstream URLs
-GNU_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/gnu"
+# Mirror / upstream URLs (MIRROR 默认值由 lib.sh 提供)
+GNU_MIRROR="https://${MIRROR}/gnu"
 KERNEL_API="https://www.kernel.org/releases.json"
 MUSL_TAGS="https://git.musl-libc.org/cgit/musl/refs/tags"
 

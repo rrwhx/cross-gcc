@@ -35,7 +35,7 @@ BUILD_DIR=""
 INSTALL_DIR=""
 LOG_DIR=""
 LINK_JOBS=""
-MIRROR="mirrors.tuna.tsinghua.edu.cn"
+# MIRROR 默认值由 lib.sh 提供，可通过 --mirror 覆盖
 # 默认后端集合（与 build-toolchain-llvm.sh 对称，native clang 亦可交叉到这些后端）
 LLVM_TARGETS="AArch64;LoongArch;RISCV;X86"
 LLVM_PROJECTS="lld;clang;flang"
