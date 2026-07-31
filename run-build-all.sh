@@ -11,8 +11,8 @@ else
 fi
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
-"$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver git:update    --glibc-ver 2.43  --binutils-ver git:update    --work-dir gcc_dev-glibc243
 "$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l musl  --gcc-ver 16.1.0 --musl-ver 1.2.6  --binutils-ver 2.46.1 --work-dir gcc_161-musl_126
+"$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver git:update    --glibc-ver 2.43  --binutils-ver git:update    --work-dir gcc_dev-glibc_243
 "$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 16.1.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --work-dir gcc_161-glibc_243
 "$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 15.3.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --work-dir gcc_153-glibc_243
 "$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 14.4.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --work-dir gcc_144-glibc_243
