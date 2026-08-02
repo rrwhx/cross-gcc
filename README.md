@@ -110,6 +110,16 @@
 ./build-busybox.sh --arch riscv64 --busybox-ver git:1_37_0 \
     --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
 
+# 同时编译 CoreMark 性能测试程序 (git master, 自带 Makefile, 静态链接)
+# 打包为 initramfs 内 /usr/bin/coremark, 并输出 coremark-<arch> 独立产物
+./build-busybox.sh --arch riscv64 --coremark \
+    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+
+# 打包额外静态二进制到 initramfs (可多次指定, 默认放入 /usr/bin/)
+./build-busybox.sh --arch riscv64 --coremark \
+    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu- \
+    --add-file ./my-bench:/usr/bin/my-bench
+
 # Linux 内核
 ./build-kernel.sh --arch riscv64 \
     --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
@@ -228,11 +238,12 @@ brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
 - **`build.yml`**：构建 GCC 工具链，经 `test-toolchain.sh` 冒烟测试后发布到 GitHub Release
 - **`build-images.yml`**：构建 BusyBox initramfs 和 Linux 内核，上传到 Release
 - **`build-mini-kernel.yml`**：用系统交叉编译器构建 qemu-virt 最小内核（configs/kernel/），
-  经系统 QEMU 启动+关机验证后发布到独立 Release（tag: latest-mini-kernels，仅提供 `<arch>-boot-min.tar.gz` 整包）
+  经系统 QEMU 启动+关机验证后发布到独立 Release（tag: latest-mini-kernels，提供 `<arch>-boot-min.tar.gz` 整包及 `<arch>-coremark` 分立文件）
 
 产物包含：
 - `cross-<arch>-linux-<libc>.tar.xz` — GCC 交叉编译工具链
 - `busybox-<arch>` — BusyBox 静态链接二进制
-- `initrd-<arch>.cpio` — BusyBox initramfs
+- `coremark-<arch>` — CoreMark 静态链接二进制 (git master)
+- `initrd-<arch>.cpio` — BusyBox initramfs (内置 /usr/bin/coremark)
 - `<arch>-vmlinux` / `<arch>-Image` — Linux 内核镜像
-- `<arch>-boot-min.tar.gz` — qemu-virt 最小内核整包（解压出 `<arch>-boot-min/` 目录: 内核镜像 + initrd.cpio + busybox）
+- `<arch>-boot-min.tar.gz` — qemu-virt 最小内核整包（解压出 `<arch>-boot-min/` 目录: 内核镜像 + initrd.cpio + busybox + coremark）

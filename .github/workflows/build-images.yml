@@ -67,15 +67,16 @@ jobs:
           echo "内核最新稳定版: $LINUX_VER"
           echo "BusyBox 版本: $BUSYBOX_VER"
 
-      - name: Build BusyBox
+      - name: Build BusyBox (with CoreMark)
         run: |
           ./build-busybox.sh \
-            --arch ${{ matrix.arch }} \
+            --arch ${{ matrix.arch }} --coremark \
             --cross-compile ./cross-${{ matrix.target }}/bin/${{ matrix.target }}-
 
       - name: Save BusyBox binary and clean
         run: |
           cp build-busybox-${{ matrix.arch }}/busybox busybox-${{ matrix.arch }}
+          # coremark-${{ matrix.arch }} 已由脚本输出到工作目录, 无需复制
           rm -rf build-busybox-${{ matrix.arch }} logs-busybox-${{ matrix.arch }}
 
       - name: Build Linux Kernel
@@ -93,6 +94,9 @@ jobs:
           file busybox-${{ matrix.arch }}
           echo "=== BusyBox initramfs ==="
           ls -lh initrd-${{ matrix.arch }}.cpio
+          echo "=== CoreMark binary ==="
+          ls -lh coremark-${{ matrix.arch }}
+          file coremark-${{ matrix.arch }}
           echo "=== Kernel images ==="
           ls -lh kernel-${{ matrix.arch }}/
 
@@ -108,6 +112,13 @@ jobs:
         with:
           name: initrd-${{ matrix.arch }}
           path: initrd-${{ matrix.arch }}.cpio
+          retention-days: 7
+
+      - name: Upload CoreMark binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: coremark-${{ matrix.arch }}
+          path: coremark-${{ matrix.arch }}
           retention-days: 7
 
       - name: Upload Kernel images
@@ -161,6 +172,7 @@ jobs:
           {
             echo "Linux kernel : ${KERNEL_VER:-unknown} (最新稳定发布版)"
             echo "BusyBox      : ${BUSYBOX_VER:-unknown}"
+            echo "CoreMark     : master (git 最新)"
             echo "Built (UTC)  : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > release/VERSIONS.txt
           ARCHES="riscv64 aarch64 x86_64 loongarch64"
@@ -179,6 +191,12 @@ jobs:
             if [ -f "$ini" ]; then
               cp "$ini" "release/${arch}-initrd.cpio"
               cp "$ini" "$bundle/initrd.cpio"
+            fi
+            # CoreMark 二进制 -> <arch>-coremark
+            cm="artifacts/coremark-$arch/coremark-$arch"
+            if [ -f "$cm" ]; then
+              cp "$cm" "release/${arch}-coremark"
+              cp "$cm" "$bundle/coremark"
             fi
             # 内核镜像：架构在前，保留原始镜像文件名 -> <arch>-<img>
             kdir="artifacts/kernel-$arch"
@@ -214,18 +232,20 @@ jobs:
             |------|------|
             | Linux Kernel | `${{ env.KERNEL_VER }}` (最新稳定发布版) |
             | BusyBox | `${{ env.BUSYBOX_VER }}` |
+            | CoreMark | `master` (git 最新, initrd 内置 /usr/bin/coremark) |
 
             ### 产物说明（统一“架构在前”命名，同架构文件在列表中相邻）
             | 文件 | 说明 |
             |------|------|
-            | `<arch>-boot.tar.gz` | 该架构整包（解压出 `<arch>-boot/` 目录）: 内核镜像 + initrd.cpio + busybox |
+            | `<arch>-boot.tar.gz` | 该架构整包（解压出 `<arch>-boot/` 目录）: 内核镜像 + initrd.cpio + busybox + coremark |
             | `<arch>-busybox` | BusyBox 静态链接二进制 |
-            | `<arch>-initrd.cpio` | BusyBox initramfs (cpio 格式) |
+            | `<arch>-coremark` | CoreMark 静态链接二进制 (git master) |
+            | `<arch>-initrd.cpio` | BusyBox initramfs (cpio 格式, 内置 /usr/bin/coremark) |
             | `<arch>-vmlinux` | 未压缩内核 ELF（调试/部分架构可直接启动） |
             | `<arch>-Image` / `<arch>-Image.gz` | arm64/riscv64 可启动内核镜像 |
             | `<arch>-bzImage` | x86_64 可启动内核镜像 |
             | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
-            | `VERSIONS.txt` | 内核与 BusyBox 版本及构建时间 |
+            | `VERSIONS.txt` | 内核、BusyBox 与 CoreMark 版本及构建时间 |
 
             > 每个架构既提供可单独下载的分立文件，也提供 `<arch>-boot.tar.gz` 整包（包内保留原始文件名）。
 

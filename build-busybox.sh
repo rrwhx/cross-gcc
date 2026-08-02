@@ -17,6 +17,8 @@ setup_error_trap
 # ---------------------------------------------------------------------------
 BUSYBOX_VER="${BUSYBOX_VER:-1.38.0}"
 BUSYBOX_URL="https://busybox.net/downloads/busybox-{VER}.tar.bz2"
+# CoreMark 固定使用 git master 最新代码
+COREMARK_GIT="https://github.com/eembc/coremark.git"
 
 # ---------------------------------------------------------------------------
 # 参数解析
@@ -26,6 +28,8 @@ CROSS_COMPILE=""
 WORK_DIR=$(pwd)
 OUTPUT=""
 CLEAN_BUILD=false
+WITH_COREMARK=false
+ADD_FILES=()
 
 usage() {
     cat <<EOF
@@ -39,6 +43,10 @@ usage() {
   --work-dir        工作目录前缀 (默认: 当前目录)
   --busybox-ver     BusyBox 版本 (默认: ${BUSYBOX_VER}, 支持 git[:REF][:update])
   --output          输出 initramfs 路径 (默认: <work-dir>/initrd-<arch>.cpio)
+  --coremark        编译 CoreMark 性能测试程序 (git master, 静态链接),
+                    打包为 /usr/bin/coremark 并输出 coremark-<arch> 产物
+  --add-file S[:D]  复制额外文件到 initramfs, D 为 initramfs 内路径
+                    (默认: /usr/bin/<文件名>, 可多次指定)
   -j,--threads      并行编译线程数 (默认: ${THREADS})
   --clean           构建完成后删除构建目录和日志目录
   -h,--help         显示帮助
@@ -47,6 +55,7 @@ usage() {
   $(basename "$0") --arch riscv64 --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
   $(basename "$0") --arch aarch64 --cross-compile aarch64-linux-gnu-
   $(basename "$0") --arch riscv64 --busybox-ver git:1_37_0 --cross-compile riscv64-linux-gnu-
+  $(basename "$0") --arch riscv64 --coremark --cross-compile riscv64-linux-gnu-
 EOF
     exit 0
 }
@@ -58,6 +67,8 @@ while [[ $# -gt 0 ]]; do
         --work-dir)       WORK_DIR="$2"; shift 2;;
         --busybox-ver)    BUSYBOX_VER="$2"; shift 2;;
         --output)         OUTPUT="$2"; shift 2;;
+        --coremark)       WITH_COREMARK=true; shift;;
+        --add-file)       ADD_FILES+=("$2"); shift 2;;
         -j|--threads)     THREADS="$2"; shift 2;;
         --clean)          CLEAN_BUILD=true; shift;;
         -h|--help)        usage;;
@@ -123,6 +134,14 @@ else
     fi
 fi
 
+# CoreMark 源码 (固定 git master 最新)
+COREMARK_SRC=""
+if [[ "$WITH_COREMARK" == true ]]; then
+    step "=== 获取 CoreMark 源码 (git master) ==="
+    COREMARK_SRC="$SRC_DIR/coremark"
+    git_clone "$COREMARK_GIT" "$COREMARK_SRC" 1
+fi
+
 info "ARCH=$ARCH"
 info "CROSS_COMPILE=$CROSS_COMPILE"
 info "BusyBox 版本: $BUSYBOX_VER"
@@ -170,6 +189,24 @@ ok "BusyBox 二进制: $BUSYBOX_BIN"
 info "$(file "$BUSYBOX_BIN")"
 
 # ---------------------------------------------------------------------------
+# 编译 CoreMark (静态链接, 使用同一交叉 gcc)
+# ---------------------------------------------------------------------------
+if [[ "$WITH_COREMARK" == true ]]; then
+    step "=== 编译 CoreMark (自带 Makefile, 静态链接) ==="
+    # 显式 PORT_DIR=posix: 默认按宿主 uname 检测, 交叉编译语义不符
+    # 显式 compile 目标: 默认 run 目标会执行二进制, 交叉编译下不可运行
+    # ITERATIONS 默认 0 (运行时自动校准); PERFORMANCE_RUN=1: 标准性能测试种子
+    COREMARK_OUT="$BUILD_DIR/coremark-bin"
+    build_step "coremark_build" "$LOG_DIR" \
+        make -C "$COREMARK_SRC" PORT_DIR=posix compile \
+        CC="${CROSS_COMPILE}gcc" OPATH="$COREMARK_OUT/" \
+        XCFLAGS="-static -DPERFORMANCE_RUN=1"
+    mv "$COREMARK_OUT/coremark.exe" "$BUILD_DIR/coremark"
+    ok "CoreMark 二进制: $BUILD_DIR/coremark"
+    info "$(file "$BUILD_DIR/coremark")"
+fi
+
+# ---------------------------------------------------------------------------
 # 阶段 4: 生成 initramfs
 # ---------------------------------------------------------------------------
 step "=== 生成 initramfs ==="
@@ -186,6 +223,30 @@ mkdir -p "$INITRAMFS_DIR"/{dev,etc,lib,lib64,mnt/root,proc,root,sys,tmp,usr/shar
 # 复制 udhcpc 默认脚本 (如果存在)
 if [[ -f "$BUSYBOX_SRC/examples/udhcp/simple.script" ]]; then
     cp "$BUSYBOX_SRC/examples/udhcp/simple.script" "$INITRAMFS_DIR/usr/share/udhcpc/default.script"
+fi
+
+# 打包 CoreMark
+if [[ "$WITH_COREMARK" == true ]]; then
+    install -D -m 755 "$BUILD_DIR/coremark" "$INITRAMFS_DIR/usr/bin/coremark"
+    info "已加入 CoreMark: /usr/bin/coremark"
+fi
+
+# 复制额外文件 (--add-file SRC[:DEST])
+if [[ ${#ADD_FILES[@]} -gt 0 ]]; then
+    info "复制额外文件到 initramfs"
+    for spec in "${ADD_FILES[@]}"; do
+        if [[ "$spec" == *:* ]]; then
+            AF_SRC="${spec%%:*}"
+            AF_DEST="${spec#*:}"
+        else
+            AF_SRC="$spec"
+            AF_DEST="/usr/bin/$(basename "$spec")"
+        fi
+        [[ -f "$AF_SRC" ]] || error "--add-file 源文件不存在: $AF_SRC"
+        mkdir -p "$INITRAMFS_DIR/$(dirname "$AF_DEST")"
+        cp -a "$AF_SRC" "$INITRAMFS_DIR/${AF_DEST#/}"
+        info "  $AF_SRC -> $AF_DEST"
+    done
 fi
 
 info "生成 /init 脚本"
@@ -228,6 +289,12 @@ info "打包 cpio: $OUTPUT"
 OUTPUT=$(realpath "$OUTPUT")
 ok "BusyBox ${BUSYBOX_VER} 交叉编译完成！"
 echo -e "initramfs: ${GREEN}${OUTPUT}${NC} ($(du -h "$OUTPUT" | cut -f1))"
+
+# CoreMark 发布产物: 与 initrd-<arch>.cpio 并列, 不受 --clean 影响
+if [[ "$WITH_COREMARK" == true ]]; then
+    cp "$BUILD_DIR/coremark" "${WORK_DIR}/coremark-${ARCH}"
+    echo -e "coremark : ${GREEN}${WORK_DIR}/coremark-${ARCH}${NC} ($(du -h "${WORK_DIR}/coremark-${ARCH}" | cut -f1))"
+fi
 
 # 构建后处理
 clean_build_dir "$BUILD_DIR" "$LOG_DIR" "$CLEAN_BUILD"
