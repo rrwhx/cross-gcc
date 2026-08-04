@@ -176,7 +176,7 @@ jobs:
             echo "Built (UTC)  : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > release/VERSIONS.txt
           ARCHES="riscv64 aarch64 x86_64 loongarch64"
-          KIMGS="vmlinux Image Image.gz bzImage zImage"
+          KIMGS="vmlinux Image Image.gz bzImage zImage config System.map"
           for arch in $ARCHES; do
             bundle="${arch}-boot"
             mkdir -p "$bundle"
@@ -198,11 +198,11 @@ jobs:
               cp "$cm" "release/${arch}-coremark"
               cp "$cm" "$bundle/coremark"
             fi
-            # 内核镜像：架构在前，保留原始镜像文件名 -> <arch>-<img>
+            # 内核产物 (镜像/config/System.map): 仅进整包, 不发分立文件
+            # (vmlinux 未压缩体积大, 且脱离 initrd 单独下载用途有限)
             kdir="artifacts/kernel-$arch"
             for img in $KIMGS; do
               if [ -f "$kdir/$img" ]; then
-                cp "$kdir/$img" "release/${arch}-${img}"
                 cp "$kdir/$img" "$bundle/$img"
               fi
             done
@@ -211,6 +211,18 @@ jobs:
               tar -czf "release/${arch}-boot.tar.gz" "$bundle"
             fi
             rm -rf "$bundle"
+            # 内核单独包 <arch>-kernel.tar.gz（镜像 + config + System.map, 不含 initrd/busybox）
+            kpkg="${arch}-kernel"
+            mkdir -p "$kpkg"
+            for img in $KIMGS; do
+              if [ -f "$kdir/$img" ]; then
+                cp "$kdir/$img" "$kpkg/$img"
+              fi
+            done
+            if [ -n "$(ls -A "$kpkg" 2>/dev/null)" ]; then
+              tar -czf "release/${kpkg}.tar.gz" "$kpkg"
+            fi
+            rm -rf "$kpkg"
           done
           # 生成所有文件的 SHA256 校验和
           ( cd release && rm -f SHA256SUMS.txt && sha256sum -- * > SHA256SUMS.txt )
@@ -234,20 +246,18 @@ jobs:
             | BusyBox | `${{ env.BUSYBOX_VER }}` |
             | CoreMark | `master` (git 最新, initrd 内置 /usr/bin/coremark) |
 
-            ### 产物说明（统一“架构在前”命名，同架构文件在列表中相邻）
+            ### 产物说明（内核产物仅随整包发布；busybox/coremark/initrd 另提供分立文件）
             | 文件 | 说明 |
             |------|------|
-            | `<arch>-boot.tar.gz` | 该架构整包（解压出 `<arch>-boot/` 目录）: 内核镜像 + initrd.cpio + busybox + coremark |
+            | `<arch>-boot.tar.gz` | 该架构整包（解压出 `<arch>-boot/` 目录）: 内核镜像 (vmlinux + Image/bzImage) + config + System.map + initrd.cpio + busybox + coremark |
+            | `<arch>-kernel.tar.gz` | 内核单独包（解压出 `<arch>-kernel/` 目录）: 内核镜像 + config + System.map |
             | `<arch>-busybox` | BusyBox 静态链接二进制 |
             | `<arch>-coremark` | CoreMark 静态链接二进制 (git master) |
             | `<arch>-initrd.cpio` | BusyBox initramfs (cpio 格式, 内置 /usr/bin/coremark) |
-            | `<arch>-vmlinux` | 未压缩内核 ELF（调试/部分架构可直接启动） |
-            | `<arch>-Image` / `<arch>-Image.gz` | arm64/riscv64 可启动内核镜像 |
-            | `<arch>-bzImage` | x86_64 可启动内核镜像 |
             | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
             | `VERSIONS.txt` | 内核、BusyBox 与 CoreMark 版本及构建时间 |
 
-            > 每个架构既提供可单独下载的分立文件，也提供 `<arch>-boot.tar.gz` 整包（包内保留原始文件名）。
+            > 内核镜像、config 与 System.map 仅在 `<arch>-boot.tar.gz` / `<arch>-kernel.tar.gz` 包内提供（包内保留原始文件名）。
 
             ### 支持架构
             riscv64, aarch64, x86_64, loongarch64

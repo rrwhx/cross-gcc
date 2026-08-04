@@ -44,6 +44,7 @@ usage() {
   --linux-src       直接指定已解压的内核源码路径 (跳过下载/解压)
   --defconfig       使用指定的内核 config 文件 (复制为 .config 后 make olddefconfig)
                     默认不使用，仍为 defconfig + kvm_guest.config
+                    x86_64 时无论哪种配置都会强制启用 CONFIG_PVH (vmlinux 可直接被 QEMU 加载)
   --output          输出目录 (默认: <work-dir>/kernel-<arch>)
   --mirror          下载镜像源 (默认: ${MIRROR})
   -j,--threads      并行编译线程数 (默认: ${THREADS})
@@ -193,6 +194,20 @@ else
         ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" kvm_guest.config
 fi
 
+# x86: 强制启用 CONFIG_PVH (依赖 HYPERVISOR_GUEST), 使 QEMU -kernel 可直接加载 vmlinux
+# 对任何配置来源 (defconfig / --defconfig) 都生效
+if [[ "$KERNEL_ARCH" == "x86" ]]; then
+    info "x86: 启用 CONFIG_HYPERVISOR_GUEST + CONFIG_PVH"
+    "$LINUX_SRC/scripts/config" --file "$BUILD_DIR/.config" \
+        -e HYPERVISOR_GUEST -e PVH
+    build_step "kernel_olddefconfig_pvh" "$LOG_DIR" \
+        make -C "$LINUX_SRC" O="$BUILD_DIR" \
+        ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
+    grep -q '^CONFIG_PVH=y' "$BUILD_DIR/.config" \
+        || error "CONFIG_PVH 启用失败, 请检查 .config 依赖 (HYPERVISOR_GUEST)"
+    ok "CONFIG_PVH=y 已启用"
+fi
+
 # ---------------------------------------------------------------------------
 # 阶段 3: 编译内核
 # ---------------------------------------------------------------------------
@@ -233,6 +248,16 @@ for img in Image Image.gz bzImage zImage; do
     fi
 done
 
+# 复制 .config 与 System.map (便于复现构建与符号调试)
+if [[ -f "$BUILD_DIR/.config" ]]; then
+    cp "$BUILD_DIR/.config" "$OUTPUT/config"
+    info "已复制: config"
+fi
+if [[ -f "$BUILD_DIR/System.map" ]]; then
+    cp "$BUILD_DIR/System.map" "$OUTPUT/System.map"
+    info "已复制: System.map"
+fi
+
 # ---------------------------------------------------------------------------
 # 输出产物信息
 # ---------------------------------------------------------------------------
@@ -245,7 +270,7 @@ if [[ -f "$OUTPUT/vmlinux" ]]; then
 fi
 
 echo -e "内核产物:"
-for f in vmlinux Image Image.gz bzImage zImage; do
+for f in vmlinux Image Image.gz bzImage zImage config System.map; do
     if [[ -f "$OUTPUT/$f" ]]; then
         echo -e "  ${GREEN}$(ls -lh "$OUTPUT/$f")${NC}"
     fi

@@ -130,7 +130,7 @@ jobs:
           # 仅发布整包: 包名带 -min 区分, 含同名顶层目录, 包内保留原始文件名
           top="${{ matrix.arch }}-boot-min"
           mkdir -p "$top" mini
-          for img in Image Image.gz bzImage vmlinux; do
+          for img in Image Image.gz bzImage vmlinux config System.map; do
             if [ -f "kernel-min-${{ matrix.arch }}/$img" ]; then
               cp "kernel-min-${{ matrix.arch }}/$img" "$top/$img"
             fi
@@ -142,8 +142,19 @@ jobs:
           cp coremark-${{ matrix.arch }} "mini/${{ matrix.arch }}-coremark"
           tar -czf "mini/${top}.tar.gz" "$top"
           rm -rf "$top"
+          # 内核单独包 <arch>-kernel-min.tar.gz（镜像 + config + System.map, 不含 initrd/busybox）
+          ktop="${{ matrix.arch }}-kernel-min"
+          mkdir -p "$ktop"
+          for img in Image Image.gz bzImage vmlinux config System.map; do
+            if [ -f "kernel-min-${{ matrix.arch }}/$img" ]; then
+              cp "kernel-min-${{ matrix.arch }}/$img" "$ktop/$img"
+            fi
+          done
+          tar -czf "mini/${ktop}.tar.gz" "$ktop"
+          rm -rf "$ktop"
           echo "=== 包内文件 ==="
           tar -tzf "mini/${{ matrix.arch }}-boot-min.tar.gz"
+          tar -tzf "mini/${{ matrix.arch }}-kernel-min.tar.gz"
           ls -lh mini/
 
       - name: Upload artifacts
@@ -226,7 +237,8 @@ jobs:
             ### 产物说明（内核/BusyBox 仅提供整包，包内为原始文件名；CoreMark 另提供分立文件）
             | 文件 | 说明 |
             |------|------|
-            | `<arch>-boot-min.tar.gz` | 解压出 `<arch>-boot-min/` 目录: 内核镜像 (Image/bzImage/vmlinux 原名) + initrd.cpio + busybox + coremark |
+            | `<arch>-boot-min.tar.gz` | 解压出 `<arch>-boot-min/` 目录: 内核镜像 (Image/bzImage/vmlinux 原名) + config + System.map + initrd.cpio + busybox + coremark |
+            | `<arch>-kernel-min.tar.gz` | 内核单独包（解压出 `<arch>-kernel-min/` 目录）: 内核镜像 + config + System.map |
             | `<arch>-coremark` | CoreMark 静态链接二进制 (git master) |
             | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
             | `VERSIONS.txt` | 内核、BusyBox 与 CoreMark 版本及构建时间 |

@@ -245,5 +245,6 @@ brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
 - `busybox-<arch>` — BusyBox 静态链接二进制
 - `coremark-<arch>` — CoreMark 静态链接二进制 (git master)
 - `initrd-<arch>.cpio` — BusyBox initramfs (内置 /usr/bin/coremark)
-- `<arch>-vmlinux` / `<arch>-Image` — Linux 内核镜像
-- `<arch>-boot-min.tar.gz` — qemu-virt 最小内核整包（解压出 `<arch>-boot-min/` 目录: 内核镜像 + initrd.cpio + busybox + coremark）
+- `<arch>-boot.tar.gz` — 标准内核整包（内核镜像 vmlinux/Image/bzImage + config + System.map + initrd.cpio + busybox + coremark，内核产物仅随整包发布）
+- `<arch>-kernel.tar.gz` / `<arch>-kernel-min.tar.gz` — 内核单独包（内核镜像 + config + System.map，不含 initrd/busybox）
+- `<arch>-boot-min.tar.gz` — qemu-virt 最小内核整包（解压出 `<arch>-boot-min/` 目录: 内核镜像 + config + System.map + initrd.cpio + busybox + coremark）
