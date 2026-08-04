@@ -36,6 +36,8 @@ usage() {
 用法: $(basename "$0") --arch ARCH --cross-compile PREFIX [选项]
 
 交叉编译 BusyBox 并生成 initramfs (cpio 格式)
+启动行为: 内核 cmdline "--" 后的内容会作为参数传给 /init 并经 shell -c 执行后关机,
+无参数时进入交互 shell, 优先 bash (例: qemu -append "console=ttyS0 -- coremark")
 
   --arch            目标架构 (例如: riscv64, aarch64, x86_64)
   --cross-compile   交叉编译前缀，可为完整路径或仅前缀
@@ -273,11 +275,27 @@ mount -t sysfs  none /sys
 
 echo "Welcome to BusyBox initramfs"
 
-if [ -f "/bin/bash" ]; then
-    setsid busybox cttyhack /bin/bash --login
+# Prefer bash when available
+if [ -x /bin/bash ]; then
+    SHELL=/bin/bash
 else
-    setsid busybox cttyhack /bin/sh --login
+    SHELL=/bin/sh
 fi
+export SHELL
+
+# Kernel passes cmdline content after "--" to /init as arguments.
+# With arguments: run them via $SHELL -c, then power off.
+# Without arguments: default to an interactive login shell.
+# Example: qemu -append "console=ttyS0 -- coremark"
+if [ $# -gt 0 ]; then
+    echo "init: $SHELL -c \"$*\""
+    set -- -c "$*"
+else
+    set -- --login
+fi
+
+setsid busybox cttyhack "$SHELL" "$@"
+echo "init: exit code: $?"
 
 busybox poweroff -f
 INIT_EOF
