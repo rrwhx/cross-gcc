@@ -111,14 +111,14 @@
     --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
 
 # 同时编译 CoreMark 性能测试程序 (git master, 自带 Makefile, 静态链接)
-# 打包为 initramfs 内 /usr/bin/coremark, 并输出 coremark-<arch> 独立产物
+# 打包为 initramfs 内 /root/coremark, 并输出 coremark-<arch> 独立产物
 ./build-busybox.sh --arch riscv64 --coremark \
     --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
 
-# 打包额外静态二进制到 initramfs (可多次指定, 默认放入 /usr/bin/)
+# 打包额外文件/目录到 initramfs (可多次指定, 默认放入 /root/)
 ./build-busybox.sh --arch riscv64 --coremark \
     --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu- \
-    --add-file ./my-bench:/usr/bin/my-bench
+    --add-file ./my-bench:/root/my-bench
 
 # Linux 内核
 ./build-kernel.sh --arch riscv64 \
@@ -244,7 +244,7 @@ brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
 - `cross-<arch>-linux-<libc>.tar.xz` — GCC 交叉编译工具链
 - `busybox-<arch>` — BusyBox 静态链接二进制
 - `coremark-<arch>` — CoreMark 静态链接二进制 (git master)
-- `initrd-<arch>.cpio` — BusyBox initramfs (内置 /usr/bin/coremark)
+- `initrd-<arch>.cpio` — BusyBox initramfs (内置 /root/coremark)
 - `<arch>-boot.tar.gz` — 标准内核整包（内核镜像 vmlinux/Image/bzImage + config + System.map + initrd.cpio + busybox + coremark，内核产物仅随整包发布）
 - `<arch>-kernel.tar.gz` / `<arch>-kernel-min.tar.gz` — 内核单独包（内核镜像 + config + System.map，不含 initrd/busybox）
 - `<arch>-boot-min.tar.gz` — qemu-virt 最小内核整包（解压出 `<arch>-boot-min/` 目录: 内核镜像 + config + System.map + initrd.cpio + busybox + coremark）
