@@ -244,7 +244,7 @@ jobs:
             |------|------|
             | Linux Kernel | `${{ env.KERNEL_VER }}` (最新稳定发布版) |
             | BusyBox | `${{ env.BUSYBOX_VER }}` |
-            | CoreMark | `master` (git 最新, initrd 内置 /usr/bin/coremark) |
+            | CoreMark | `master` (git 最新, initrd 内置 /root/coremark) |
 
             ### 产物说明（内核产物仅随整包发布；busybox/coremark/initrd 另提供分立文件）
             | 文件 | 说明 |
@@ -253,7 +253,7 @@ jobs:
             | `<arch>-kernel.tar.gz` | 内核单独包（解压出 `<arch>-kernel/` 目录）: 内核镜像 + config + System.map |
             | `<arch>-busybox` | BusyBox 静态链接二进制 |
             | `<arch>-coremark` | CoreMark 静态链接二进制 (git master) |
-            | `<arch>-initrd.cpio` | BusyBox initramfs (cpio 格式, 内置 /usr/bin/coremark) |
+            | `<arch>-initrd.cpio` | BusyBox initramfs (cpio 格式, 内置 /root/coremark) |
             | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
             | `VERSIONS.txt` | 内核、BusyBox 与 CoreMark 版本及构建时间 |
 

@@ -232,7 +232,7 @@ jobs:
             |------|------|
             | Linux Kernel | `${{ env.KERNEL_VER }}` (最新稳定发布版) |
             | BusyBox | `${{ env.BUSYBOX_VER }}` (包内 initramfs 与静态二进制) |
-            | CoreMark | `master` (git 最新, initrd 内置 /usr/bin/coremark) |
+            | CoreMark | `master` (git 最新, initrd 内置 /root/coremark) |
 
             ### 产物说明（内核/BusyBox 仅提供整包，包内为原始文件名；CoreMark 另提供分立文件）
             | 文件 | 说明 |

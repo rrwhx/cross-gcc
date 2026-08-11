@@ -37,7 +37,7 @@ usage() {
 
 交叉编译 BusyBox 并生成 initramfs (cpio 格式)
 启动行为: 内核 cmdline "--" 后的内容会作为参数传给 /init 并经 shell -c 执行后关机,
-无参数时进入交互 shell, 优先 bash (例: qemu -append "console=ttyS0 -- coremark")
+无参数时进入交互 shell, 优先 bash (例: qemu -append "console=ttyS0 -- /root/coremark")
 
   --arch            目标架构 (例如: riscv64, aarch64, x86_64)
   --cross-compile   交叉编译前缀，可为完整路径或仅前缀
@@ -46,9 +46,9 @@ usage() {
   --busybox-ver     BusyBox 版本 (默认: ${BUSYBOX_VER}, 支持 git[:REF][:update])
   --output          输出 initramfs 路径 (默认: <work-dir>/initrd-<arch>.cpio)
   --coremark        编译 CoreMark 性能测试程序 (git master, 静态链接),
-                    打包为 /usr/bin/coremark 并输出 coremark-<arch> 产物
-  --add-file S[:D]  复制额外文件到 initramfs, D 为 initramfs 内路径
-                    (默认: /usr/bin/<文件名>, 可多次指定)
+                    打包为 /root/coremark 并输出 coremark-<arch> 产物
+  --add-file S[:D]  复制额外文件/目录到 initramfs (目录递归拷贝),
+                    D 为 initramfs 内目标路径 (默认: /root/<名称>, 可多次指定)
   -j,--threads      并行编译线程数 (默认: ${THREADS})
   --clean           构建完成后删除构建目录和日志目录
   -h,--help         显示帮助
@@ -229,23 +229,23 @@ fi
 
 # 打包 CoreMark
 if [[ "$WITH_COREMARK" == true ]]; then
-    install -D -m 755 "$BUILD_DIR/coremark" "$INITRAMFS_DIR/usr/bin/coremark"
-    info "已加入 CoreMark: /usr/bin/coremark"
+    install -D -m 755 "$BUILD_DIR/coremark" "$INITRAMFS_DIR/root/coremark"
+    info "已加入 CoreMark: /root/coremark"
 fi
 
-# 复制额外文件 (--add-file SRC[:DEST])
+# 复制额外文件/目录 (--add-file SRC[:DEST], 目录递归拷贝)
 if [[ ${#ADD_FILES[@]} -gt 0 ]]; then
-    info "复制额外文件到 initramfs"
+    info "复制额外文件/目录到 initramfs"
     for spec in "${ADD_FILES[@]}"; do
         if [[ "$spec" == *:* ]]; then
             AF_SRC="${spec%%:*}"
             AF_DEST="${spec#*:}"
         else
             AF_SRC="$spec"
-            AF_DEST="/usr/bin/$(basename "$spec")"
+            AF_DEST="/root/$(basename "$spec")"
         fi
-        [[ -f "$AF_SRC" ]] || error "--add-file 源文件不存在: $AF_SRC"
-        mkdir -p "$INITRAMFS_DIR/$(dirname "$AF_DEST")"
+        [[ -e "$AF_SRC" ]] || error "--add-file 源不存在: $AF_SRC"
+        mkdir -p "$INITRAMFS_DIR/$(dirname "${AF_DEST#/}")"
         cp -a "$AF_SRC" "$INITRAMFS_DIR/${AF_DEST#/}"
         info "  $AF_SRC -> $AF_DEST"
     done
@@ -286,7 +286,7 @@ export SHELL
 # Kernel passes cmdline content after "--" to /init as arguments.
 # With arguments: run them via $SHELL -c, then power off.
 # Without arguments: default to an interactive login shell.
-# Example: qemu -append "console=ttyS0 -- coremark"
+# Example: qemu -append "console=ttyS0 -- /root/coremark"
 if [ $# -gt 0 ]; then
     echo "init: $SHELL -c \"$*\""
     set -- -c "$*"
