@@ -1,0 +1,205 @@
+name: Build Programs
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'cross-build.py'
+      - '.github/workflows/build-programs.yml'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: '要构建的包 (空格分隔, 留空则用矩阵默认值)'
+        required: false
+        default: ''
+
+jobs:
+  build-programs:
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: riscv64
+            target: riscv64-linux-gnu
+          - arch: aarch64
+            target: aarch64-linux-gnu
+          - arch: x86_64
+            target: x86_64-linux-gnu
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          ./install-prerequisites.sh
+          sudo apt-get install -y --no-install-recommends cmake
+
+      - name: Cache toolchain
+        id: cache-toolchain
+        uses: actions/cache@v6
+        with:
+          path: cross-${{ matrix.target }}
+          key: toolchain-${{ matrix.arch }}-${{ hashFiles('build-toolchain-generic.sh', 'lib.sh', 'prepare-gcc.sh') }}
+
+      - name: Build toolchain (if not cached)
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc glibc --clean
+
+      - name: List available packages
+        run: ./cross-build.py --list
+
+      # 默认发布集 (--release): zlib / lz4 / coremark —— 三个典型且构建简单的包,
+      # 覆盖 tarball+autotools / tarball+make / git+make 三种组合
+      # 静态链接是一等公民: 产物全静态, 可直接丢进 initramfs / QEMU 跑
+      # 重型包 (x264/x265 等) 不进默认集, 可用 workflow_dispatch 的 packages 输入指定
+      - name: Build packages (static)
+        run: |
+          PKGS="${{ github.event.inputs.packages }}"
+          if [ -n "$PKGS" ]; then
+            # shellcheck disable=SC2086
+            ./cross-build.py $PKGS \
+              --target ${{ matrix.target }} \
+              --toolchain-dir ./cross-${{ matrix.target }} \
+              --static \
+              --install-dir ./staging-${{ matrix.target }} \
+              --manifest manifests/${{ matrix.target }}.json
+          else
+            ./cross-build.py --release \
+              --target ${{ matrix.target }} \
+              --toolchain-dir ./cross-${{ matrix.target }} \
+              --static \
+              --install-dir ./staging-${{ matrix.target }} \
+              --manifest manifests/${{ matrix.target }}.json
+          fi
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist/${{ matrix.arch }}
+          # 从构建清单中提取产物 (清单已记录 path/size/sha256)
+          python3 - <<'PY'
+          import json, os, shutil, pathlib
+          arch = os.environ["ARCH"]
+          out = pathlib.Path("dist") / arch
+          out.mkdir(parents=True, exist_ok=True)
+          for m in pathlib.Path("manifests").glob("*.json"):
+              data = json.loads(m.read_text())
+              for pkg in data["packages"]:
+                  if not pkg["success"]:
+                      continue
+                  for o in pkg["outputs"]:
+                      src = pathlib.Path(o["path"])
+                      # 只收可执行产物与静态库, 跳过构建中间副本
+                      if not src.is_file():
+                          continue
+                      dest = out / f"{pkg['package']}-{src.name}"
+                      if dest.exists():
+                          continue
+                      shutil.copy2(src, dest)
+                      print(f"{dest}  ({o['size']} bytes)")
+          PY
+          cp manifests/*.json dist/${{ matrix.arch }}/ || true
+          ls -lhR dist/
+        env:
+          ARCH: ${{ matrix.arch }}
+
+      - name: Verify static linking
+        run: |
+          # 静态链接是硬要求: 任何动态可执行产物直接失败
+          fail=0
+          for f in dist/${{ matrix.arch }}/*; do
+            case "$f" in *.json|*.a) continue;; esac
+            [ -f "$f" ] || continue
+            desc=$(file -b "$f")
+            echo "$f: $desc"
+            case "$desc" in
+              *"ELF"*"executable"*)
+                case "$desc" in
+                  *"statically linked"*) ;;
+                  *) echo "::error::$f 不是静态链接"; fail=1;;
+                esac
+                ;;
+            esac
+          done
+          exit $fail
+
+      - name: Package
+        run: |
+          tar -czf ${{ matrix.arch }}-programs.tar.gz -C dist ${{ matrix.arch }}
+          ls -lh ${{ matrix.arch }}-programs.tar.gz
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: programs-${{ matrix.arch }}
+          path: ${{ matrix.arch }}-programs.tar.gz
+          retention-days: 7
+
+  release:
+    needs: build-programs
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          cp artifacts/programs-*/*.tar.gz release/
+          {
+            echo "Built (UTC) : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Linkage     : static (交叉编译产物全静态链接)"
+          } > release/VERSIONS.txt
+          ( cd release && rm -f SHA256SUMS.txt && sha256sum -- * > SHA256SUMS.txt )
+          ls -lh release/
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-programs
+          name: "Cross-built Programs & Libraries"
+          body: |
+            ## 交叉编译的程序与库
+
+            由 `cross-build.py` 构建，**全部静态链接**，可直接放入 initramfs 或经 QEMU 运行。
+
+            ### 默认发布集
+            | 包 | 类型 | 构建方式 |
+            |------|------|------|
+            | `zlib` | 库 | tarball + autotools |
+            | `lz4` | 库 + CLI | tarball + make |
+            | `coremark` | 可执行 | git + make |
+
+            > 其余包 (x264/x265/jemalloc/zstd/snappy/zlib-ng 等) 已内置定义，
+            > 可通过 workflow_dispatch 的 `packages` 输入指定构建。
+
+            ### 产物说明
+            | 文件 | 说明 |
+            |------|------|
+            | `<arch>-programs.tar.gz` | 该架构的可执行程序 + 静态库 + 构建清单 JSON |
+            | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
+            | `VERSIONS.txt` | 构建时间与链接方式 |
+
+            每个包内含 `*.json` 构建清单，记录了源码 URL/ref、编译器、
+            完整执行命令、产物 sha256 与耗时，可用于复现构建。
+
+            ### 支持架构
+            riscv64, aarch64, x86_64
+          files: release/*
+          overwrite_files: true
+          make_latest: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
