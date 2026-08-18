@@ -1,0 +1,228 @@
+name: Build Programs
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'cross-build.py'
+      - '.github/workflows/build-programs.yml'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: '要构建的包 (空格分隔, 留空则用矩阵默认值)'
+        required: false
+        default: ''
+
+jobs:
+  build-programs:
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: riscv64
+            target: riscv64-linux-gnu
+          - arch: aarch64
+            target: aarch64-linux-gnu
+          - arch: x86_64
+            target: x86_64-linux-gnu
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          ./install-prerequisites.sh
+          sudo apt-get install -y --no-install-recommends cmake
+
+      - name: Cache toolchain
+        id: cache-toolchain
+        uses: actions/cache@v6
+        with:
+          path: cross-${{ matrix.target }}
+          key: toolchain-${{ matrix.arch }}-${{ hashFiles('build-toolchain-generic.sh', 'lib.sh', 'prepare-gcc.sh') }}
+
+      - name: Build toolchain (if not cached)
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc glibc --clean
+
+      - name: List available packages
+        run: ./cross-build.py --list
+
+      # 默认发布集 (--release): zlib / lz4 / coremark —— 三个典型且构建简单的包,
+      # 覆盖 tarball+autotools / tarball+make / git+make 三种组合
+      # 静态链接是一等公民: 产物全静态, 可直接丢进 initramfs / QEMU 跑
+      # 重型包 (x264/x265 等) 不进默认集, 可用 workflow_dispatch 的 packages 输入指定
+      - name: Build packages (static)
+        run: |
+          PKGS="${{ github.event.inputs.packages }}"
+          if [ -n "$PKGS" ]; then
+            # shellcheck disable=SC2086
+            ./cross-build.py $PKGS \
+              --target ${{ matrix.target }} \
+              --toolchain-dir ./cross-${{ matrix.target }} \
+              --static \
+              --install-dir ./staging-${{ matrix.target }} \
+              --manifest manifests/${{ matrix.target }}.json
+          else
+            ./cross-build.py --release \
+              --target ${{ matrix.target }} \
+              --toolchain-dir ./cross-${{ matrix.target }} \
+              --static \
+              --install-dir ./staging-${{ matrix.target }} \
+              --manifest manifests/${{ matrix.target }}.json
+          fi
+
+      - name: Collect artifacts
+        run: |
+          DIST=dist/${{ matrix.arch }}
+          mkdir -p "$DIST"
+          # 已安装的内容: 原样保留安装后的目录层次。
+          # 库必须保持 usr/lib + usr/include + pkgconfig 的相对布局才能用;
+          # 可执行程序也因此天然位于 usr/bin/ 且保持原名 (无前缀)
+          if [ -d "staging-${{ matrix.target }}" ]; then
+            cp -a "staging-${{ matrix.target }}/." "$DIST/"
+          fi
+          # 未安装的构建 (--no-install): 直接拷贝目标程序到 bin/, 保留原名
+          python3 - <<'PY'
+          import json, os, pathlib, shutil
+          dist = pathlib.Path("dist") / os.environ["ARCH"]
+          for m in pathlib.Path("manifests").glob("*.json"):
+              for pkg in json.loads(m.read_text())["packages"]:
+                  if not pkg["success"] or pkg["inputs"].get("installed", True):
+                      continue
+                  for o in pkg["outputs"]:
+                      src = pathlib.Path(o["path"])
+                      if not src.is_file():
+                          continue
+                      sub = "lib" if src.suffix in (".a", ".so") or ".so." in src.name else "bin"
+                      dest_dir = dist / sub
+                      dest_dir.mkdir(parents=True, exist_ok=True)
+                      shutil.copy2(src, dest_dir / src.name)
+                      print(f"{dest_dir / src.name}  ({o['size']} bytes)")
+          PY
+          mkdir -p "$DIST/manifests"
+          cp manifests/*.json "$DIST/manifests/" || true
+          echo "=== 发布树 ==="
+          find "$DIST" -type f | sort
+        env:
+          ARCH: ${{ matrix.arch }}
+
+      - name: Verify static linking
+        run: |
+          # 静态链接是硬要求: 发布树中任何动态链接的 ELF 可执行文件直接失败。
+          # 只看 ELF executable: 库(.a/.so)、头文件、脚本、man 页都不适用
+          fail=0; checked=0
+          while IFS= read -r f; do
+            desc=$(file -b "$f")
+            case "$desc" in
+              *ELF*executable*)
+                checked=$((checked+1))
+                echo "$f: $desc"
+                case "$desc" in
+                  *"statically linked"*) ;;
+                  *) echo "::error::$f 不是静态链接"; fail=1 ;;
+                esac
+                ;;
+            esac
+          done < <(find dist/${{ matrix.arch }} -type f)
+          echo "已检查 $checked 个 ELF 可执行文件"
+          [ "$checked" -gt 0 ] || { echo "::error::未找到任何可执行产物, 构建可能异常"; exit 1; }
+          exit $fail
+
+      - name: Package
+        run: |
+          tar -czf ${{ matrix.arch }}-programs.tar.gz -C dist ${{ matrix.arch }}
+          ls -lh ${{ matrix.arch }}-programs.tar.gz
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: programs-${{ matrix.arch }}
+          path: ${{ matrix.arch }}-programs.tar.gz
+          retention-days: 7
+
+  release:
+    needs: build-programs
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          cp artifacts/programs-*/*.tar.gz release/
+          {
+            echo "Built (UTC) : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Linkage     : static (交叉编译产物全静态链接)"
+          } > release/VERSIONS.txt
+          ( cd release && rm -f SHA256SUMS.txt && sha256sum -- * > SHA256SUMS.txt )
+          ls -lh release/
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-programs
+          name: "Cross-built Programs & Libraries"
+          body: |
+            ## 交叉编译的程序与库
+
+            由 `cross-build.py` 构建，**全部静态链接**，可直接放入 initramfs 或经 QEMU 运行。
+
+            ### 默认发布集
+            | 包 | 类型 | 构建方式 |
+            |------|------|------|
+            | `zlib` | 库 | tarball + autotools |
+            | `lz4` | 库 + CLI | tarball + make |
+            | `coremark` | 可执行 | git + make |
+
+            > 其余包 (x264/x265/jemalloc/zstd/snappy/zlib-ng 等) 已内置定义，
+            > 可通过 workflow_dispatch 的 `packages` 输入指定构建。
+
+            ### 产物说明
+            | 文件 | 说明 |
+            |------|------|
+            | `<arch>-programs.tar.gz` | 该架构的安装树 + 构建清单 |
+            | `SHA256SUMS.txt` | 所有文件的 SHA256 校验和 |
+            | `VERSIONS.txt` | 构建时间与链接方式 |
+
+            ### 包内布局 (保留安装后的目录层次)
+            ```
+            <arch>/
+            ├── usr/bin/          可执行程序 (原名, 无前缀): fio、lz4、coremark ...
+            ├── usr/lib/          静态库 (.a) 与 pkgconfig
+            ├── usr/include/      头文件
+            ├── bin/              仅 --no-install 构建的程序会落在这里
+            └── manifests/*.json  构建清单
+            ```
+
+            库保留完整层次, 可直接当 sysroot 追加使用:
+            ```
+            tar -xzf riscv64-programs.tar.gz
+            riscv64-linux-gnu-gcc -I riscv64/usr/include -L riscv64/usr/lib prog.c -lz -static
+            ```
+
+            构建清单 (`manifests/*.json`) 记录了源码 URL/ref、编译器、
+            完整执行命令、产物 sha256 与耗时, 可用于复现构建。
+
+            ### 支持架构
+            riscv64, aarch64, x86_64
+          files: release/*
+          overwrite_files: true
+          make_latest: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
