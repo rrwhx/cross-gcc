@@ -17,6 +17,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -93,6 +94,9 @@ class PackageDef:
     # None = 按 pkg_type 推断; 同时产出库与 CLI 的包 (lz4/zstd 等) 应显式置 True
     static_link_exe: Optional[bool] = None
 
+    # 是否需要在 configure 前运行 autoreconf -fi
+    # (源码仓库里没有 configure 脚本, 只有 configure.ac)
+    autoreconf: bool = False
     # ---- configure 方言 (手写 configure 的项目标志名各异, 不应为此写 custom_builder) ----
     # 模板可用占位符: {target} {cc} {cxx} {prefix}
     # host_arg: 交叉编译时声明目标三元组的写法; "" = 不传 (zlib/fio 等不认 --host)
@@ -103,11 +107,23 @@ class PackageDef:
     cross_prefix_arg: str = ""
     # 项目是否有 make install 目标; 无则靠 install_files 手动安装
     has_install_target: bool = True
+    # 构建后的附加 make 步骤 (在子目录内执行)。两类用途:
+    #  - libtool 项目的静态重链: libtool 会吞掉 LDFLAGS=-static, 必须删掉已链
+    #    产物并用它自己的 -all-static 重链 (file)
+    #  - 主构建完成后再编 benchmark/工具子目标 (OpenBLAS)
+    # 格式: [{"dir": 子目录, "target": make 目标, "args": [额外变量],
+    #        "static_only": 仅静态时执行(默认 False),
+    #        "rm_first": 先删除同名产物(默认 False, 重链场景必须为 True)}]
+    post_build_steps: list = field(default_factory=list)
     # 声明式产物安装: {构建目录内相对路径: 安装根内绝对路径}
     # 给那些没有 install 目标的小项目用 (例: coremark)
     install_files: dict = field(default_factory=dict)
     # 自定义构建函数名 (注册到 CUSTOM_BUILDERS)
     custom_builder: str = ""
+    # build_system="script" 用: 项目自带的构建包装脚本 (在源码根执行)
+    # 例: WebKit 的 ["Tools/Scripts/build-jsc", "--jsc-only"]
+    # 不走 configure/make, 所以 static_args/shared_args 追加到它后面
+    build_script: list = field(default_factory=list)
     # 安装前缀
     install_prefix: str = "/usr"
     # 是否属于默认发布集 (--release): 选几个典型且构建简单的包,
@@ -295,6 +311,92 @@ register(PackageDef(
     # 交叉环境下这两个依赖基本不可能满足
     configure_args=["--disable-tcmalloc", "--disable-rdma"],
     release_default=True,
+))
+
+register(PackageDef(
+    name="file",
+    version="master",
+    description="file(1) 文件类型识别 (libmagic)",
+    git_url="https://github.com/file/file.git",
+    build_system="autotools",
+    pkg_type="executable",
+    # 仓库只有 configure.ac, 需先 autoreconf -fi 生成 configure
+    autoreconf=True,
+    link_args_auto=False,
+    static_args=["--disable-shared", "--enable-static"],
+    shared_args=["--enable-shared"],
+    # 链接由 libtool 代理, 它会吞掉 LDFLAGS=-static, 所以不走通用注入;
+    # 改为构建后用 libtool 自己的 -all-static 重链 (经 AM_LDFLAGS 传入,
+    # Makefile.am 未定义 AM_LDFLAGS, 命令行覆盖无副作用)
+    static_link_exe=False,
+    post_build_steps=[{"dir": "src", "target": "file", "static_only": True,
+                       "rm_first": True, "args": ["AM_LDFLAGS=-all-static"]}],
+))
+
+register(PackageDef(
+    name="openblas",
+    version="develop",
+    description="OpenBLAS 线性代数库 (含 benchmark)",
+    git_url="https://github.com/OpenMathLib/OpenBLAS.git",
+    build_system="make",
+    pkg_type="library",
+    # make 没有统一的"只建静态库"变量名: lz4/zstd 用 BUILD_SHARED=no,
+    # OpenBLAS 用 NO_SHARED=1。不关掉则它仍会去链 .so, 而 LDFLAGS=-static
+    # 会使共享库链接报 crtbeginT.o 重定位错误 (实测确认)
+    link_args_auto=False,
+    static_args=["NO_SHARED=1"],
+    # 主库构建不需 -static; benchmark 的静态链接由下面的 CFLAGS 负责
+    static_link_exe=False,
+    # 主库建好后再进 benchmark/ 编 goto 目标。
+    # 注: goto 是 make 目标名, 不是文件名 —— 它会产出 172 个 *.goto 基准程序
+    # 不硬编码 LIBNAME: 它含检测到的 CPU 微架构与版本号
+    # (如 libopenblas_nehalemp-r0.3.19.dev.a), 写死会在其他架构/版本下失效;
+    # benchmark/Makefile 会从 ../Makefile.conf 读到正确的 LIBNAME。
+    # 同理不带 -m32 (那是 32 位 x86 专用, 与交叉目标无关)
+    post_build_steps=[{"dir": "benchmark", "target": "goto",
+                       "args": ["CFLAGS=-static"]}],
+    # make install 只装库与头文件, benchmark 不在其中;
+    # 挑几个典型的进安装树 (全收 172 个会把发布包撑得太大)
+    install_files={
+        "benchmark/dgemm.goto": "/usr/bin/openblas-bench-dgemm",
+        "benchmark/sgemm.goto": "/usr/bin/openblas-bench-sgemm",
+        "benchmark/daxpy.goto": "/usr/bin/openblas-bench-daxpy",
+    },
+))
+
+register(PackageDef(
+    name="node",
+    version="main",
+    description="Node.js 运行时 (全静态)",
+    git_url="https://github.com/nodejs/node.git",
+    build_system="autotools",
+    pkg_type="executable",
+    # node 的 configure 是 Python 脚本, 不认 --host/--enable-static
+    host_arg="",
+    link_args_auto=False,
+    # --fully-static: node 自己的全静态开关
+    # --openssl-no-asm: 静态链接下绕开 OpenSSL 汇编导致的链接问题
+    static_args=["--fully-static", "--openssl-no-asm"],
+    static_link_exe=False,  # 已由 --fully-static 处理
+    supports_shared=False,
+))
+
+register(PackageDef(
+    name="jsc",
+    version="main",
+    description="JavaScriptCore (WebKit JSCOnly 端口)",
+    git_url="https://github.com/WebKit/WebKit.git",
+    build_system="script",
+    pkg_type="framework",
+    # WebKit 不走 configure/cmake 直调, 而是由自带脚本代理整个流程
+    build_script=["Tools/Scripts/build-jsc", "--jsc-only",
+                  "--build-dir=build_static"],
+    static_args=["--cmakeargs=-DENABLE_STATIC_JSC=ON"],
+    supports_shared=False,
+    static_link_exe=False,  # 链接由 build-jsc/cmake 接管
+    # build-jsc 无 install 目标, 产物靠声明式挑出
+    has_install_target=False,
+    install_files={"build_static/bin/jsc": "/usr/bin/jsc"},
 ))
 
 # ======================== 复杂框架 ========================
@@ -579,6 +681,8 @@ class BuildEngine:
                 self._build_make(pkg, src_path, build_dir, inst_dir, result)
             elif pkg.build_system == "meson":
                 self._build_meson(pkg, src_path, build_dir, inst_dir, result)
+            elif pkg.build_system == "script":
+                self._build_script(pkg, src_path, build_dir, inst_dir, result)
             elif pkg.build_system == "custom":
                 if pkg.custom_builder and pkg.custom_builder in CUSTOM_BUILDERS:
                     CUSTOM_BUILDERS[pkg.custom_builder](self, pkg, src_path, build_dir, inst_dir, result)
@@ -624,12 +728,37 @@ class BuildEngine:
         extra.update(pkg.static_env if self.static else pkg.shared_env)
         return dict(self.env, **{k: str(v) for k, v in extra.items()}) if extra else self.env
 
-    def _render(self, tmpl: str, pkg: PackageDef) -> str:
-        """渲染 configure 方言模板中的占位符"""
-        return tmpl.format(target=self.target or "",
-                           cc=self.env.get("CC", ""),
-                           cxx=self.env.get("CXX", ""),
-                           prefix=pkg.install_prefix)
+    def _render(self, tmpl: str, pkg: PackageDef) -> list:
+        """渲染 configure 方言模板, 返回 argv 片段
+
+        模板可展开为多个参数 (如 node 的
+        "--cross-compiling --dest-cpu={arch}"), 故用 shlex 切词。
+        """
+        rendered = tmpl.format(target=self.target or "",
+                               arch=(self.target or "").split("-")[0],
+                               cc=self.env.get("CC", ""),
+                               cxx=self.env.get("CXX", ""),
+                               prefix=pkg.install_prefix)
+        return shlex.split(rendered)
+
+    def _run_post_build_steps(self, pkg: PackageDef, build_dir: Path, result):
+        """执行 post_build_steps (静态重链 / benchmark 等子目标)"""
+        for spec in pkg.post_build_steps:
+            if spec.get("static_only") and not self.static:
+                continue
+            subdir = spec.get("dir", ".")
+            target = spec["target"]
+            produced = build_dir / subdir / target
+            if spec.get("rm_first") and produced.exists():
+                produced.unlink()
+            cmd = ["make", target] + list(spec.get("args", []))
+            result.commands.append(f"(cd {subdir} && " + " ".join(cmd) + ")")
+            r = run_cmd(cmd, cwd=build_dir / subdir, env=self._link_env(pkg),
+                        log_file=self.log_dir / f"{pkg.name}_post_{target}.log")
+            if r.returncode != 0:
+                raise RuntimeError(f"构建后步骤失败: {subdir}/{target}")
+            if spec.get("rm_first") and not produced.exists():
+                raise RuntimeError(f"重链后产物缺失: {produced}")
 
     def _snapshot_tree(self, root: Path) -> dict:
         """快照安装树现有文件 (用于区分本包新增了哪些文件)
@@ -743,14 +872,23 @@ class BuildEngine:
         # 多数 configure 项目需在源码目录内构建
         shutil.copytree(src_path, build_dir, dirs_exist_ok=True)
 
+        # 仓库只有 configure.ac 时先生成 configure
+        if pkg.autoreconf:
+            ar_cmd = ["autoreconf", "-fi"]
+            result.commands.append(" ".join(ar_cmd))
+            r = run_cmd(ar_cmd, cwd=build_dir, env=self.env,
+                        log_file=self.log_dir / f"{pkg.name}_autoreconf.log")
+            if r.returncode != 0:
+                raise RuntimeError("autoreconf -fi 失败 (需 autoconf/automake/libtool)")
+
         configure_args = ["./configure", f"--prefix={pkg.install_prefix}"]
         # 交叉编译相关方言 (空模板 = 该项目不认这个标志)
         if not self.native and self.target:
             for tmpl in (pkg.host_arg, pkg.cross_prefix_arg):
                 if tmpl:
-                    configure_args.append(self._render(tmpl, pkg))
+                    configure_args += self._render(tmpl, pkg)
         if pkg.cc_arg:
-            configure_args.append(self._render(pkg.cc_arg, pkg))
+            configure_args += self._render(pkg.cc_arg, pkg)
         # 链接方式: link_args_auto=False 时完全由 static_args/shared_args 接管
         if pkg.link_args_auto:
             if self.static:
@@ -777,6 +915,9 @@ class BuildEngine:
                     log_file=self.log_dir / f"{pkg.name}_build.log")
         if r.returncode != 0:
             raise RuntimeError("make 失败")
+
+        # 构建后附加步骤 (libtool 静态重链 / benchmark 等子目标)
+        self._run_post_build_steps(pkg, build_dir, result)
 
         if self.install:
             if pkg.has_install_target:
@@ -820,6 +961,9 @@ class BuildEngine:
                     log_file=self.log_dir / f"{pkg.name}_build.log")
         if r.returncode != 0:
             raise RuntimeError("make 失败")
+
+        # 构建后附加步骤 (例: OpenBLAS 主库建好后再编 benchmark/)
+        self._run_post_build_steps(pkg, build_dir, result)
 
         if self.install:
             if pkg.has_install_target:
@@ -871,6 +1015,29 @@ class BuildEngine:
                 raise RuntimeError("meson install 失败")
 
         self._collect_outputs(build_dir, inst_dir, result)
+
+    def _build_script(self, pkg, src_path, build_dir, inst_dir, result):
+        """项目自带构建包装脚本 (如 WebKit 的 Tools/Scripts/build-jsc)
+
+        这类项目既不走 configure 也不直接调 make, 而是由脚本代理整个流程。
+        在源码根就地构建 (脚本通常依赖仓库内的相对路径), 不拷到 build_dir;
+        产物靠 install_files 声明式挑出来 (这类脚本一般无 install 目标)。
+        """
+        if not pkg.build_script:
+            raise RuntimeError(f"{pkg.name}: build_system=script 但未声明 build_script")
+
+        cmd = list(pkg.build_script)
+        cmd += pkg.static_args if self.static else pkg.shared_args
+        result.commands.append(" ".join(cmd))
+        r = run_cmd(cmd, cwd=src_path, env=self._link_env(pkg),
+                    log_file=self.log_dir / f"{pkg.name}_build.log")
+        if r.returncode != 0:
+            raise RuntimeError(f"{pkg.name}: 构建脚本失败")
+
+        # install_files 的源路径相对于源码根 (就地构建)
+        if self.install:
+            self._install_declared_files(pkg, src_path, inst_dir, result)
+        self._collect_outputs(src_path, inst_dir, result)
 
     def _collect_outputs(self, build_dir, inst_dir, result):
         """收集产物, 记录路径/大小/sha256 (CI 发布可直接消费)
