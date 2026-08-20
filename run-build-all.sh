@@ -11,9 +11,9 @@ else
 fi
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
-"$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l musl  --gcc-ver 16.1.0 --musl-ver 1.2.6  --binutils-ver 2.46.1 --work-dir gcc_161-musl_126
+"$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l musl  --gcc-ver 16.2.0 --musl-ver 1.2.6  --binutils-ver 2.46.1 --work-dir gcc_162-musl_126
 "$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver git:update    --glibc-ver 2.43  --binutils-ver git:update    --work-dir gcc_dev-glibc_243
-"$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 16.1.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --work-dir gcc_161-glibc_243
+"$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 16.2.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --work-dir gcc_162-glibc_243
 "$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 15.3.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --work-dir gcc_153-glibc_243
 "$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 14.4.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --work-dir gcc_144-glibc_243
 "$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 13.4.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --work-dir gcc_134-glibc_243
@@ -23,11 +23,11 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 # ./build-all.sh "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 9.5.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --work-dir gcc_95-glibc_241
 
 
-"$SCRIPT_DIR/build-all-llvm.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_161-glibc_243/cross-{ARCH}-linux-gnu/ -v git:llvmorg-22.1.8:update --work-dir llvm_2218/
-"$SCRIPT_DIR/build-all-llvm.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_161-glibc_243/cross-{ARCH}-linux-gnu/ -v git:update --work-dir llvm_dev/
+"$SCRIPT_DIR/build-all-llvm.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ -v git:llvmorg-22.1.8:update --work-dir llvm_2218/
+"$SCRIPT_DIR/build-all-llvm.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ -v git:update --work-dir llvm_dev/
 
 
-# ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 16.1.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_161-glibc_243
+# ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 16.2.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_162-glibc_243
 # ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 15.3.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_153-glibc_243
 # ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 14.4.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_144-glibc_243
 # ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 13.4.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_134-glibc_243
@@ -37,7 +37,7 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 # ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver  9.5.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_95-glibc_241
 
 
-# ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 16.1.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_161-glibc_241
+# ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 16.2.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_162-glibc_241
 # ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 15.3.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_153-glibc_241
 # ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 14.4.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_144-glibc_241
 # ./build-toolchain-generic.sh "$@" --arch x86_64 --libc glibc --gcc-ver 13.4.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_134-glibc_241
