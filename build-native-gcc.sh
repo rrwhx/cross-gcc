@@ -31,6 +31,7 @@ ARCHIVE_RESULT=false
 ENABLE_SANITIZER=true
 ENABLE_GDB=true
 FRESH_BUILD=false
+STATIC_BUILD=false
 
 # 支持的语言（可通过 --languages 覆盖）
 GCC_LANGUAGES="c,c++,fortran,lto"
@@ -62,6 +63,13 @@ usage() {
   --enable-sanitizer / --disable-sanitizer 是否构建 GCC sanitizer 运行库 (默认开启)
   --enable-gdb / --disable-gdb 是否编译 gdb (默认关闭)
                  binutils 为 git 源时随 binutils 一起编译；为 release 源码包时单独下载 gdb 编译
+  --static         静态链接工具链自身的可执行文件 (gcc/as/ld/gdb 等)，
+                   产物不依赖 host 的 libc/libstdc++，可随意拷贝到同架构机器执行。
+                   需要 host 提供 libc.a 等静态库 (如 glibc-static / libc6-dev)。
+                   注意: 静态构建会关闭 gold 与 gprofng；LTO 插件仍编入，但静态 ld
+                   在异构机器上 dlopen 插件可能失败，此时链接期 LTO 不可用。
+                   与 --enable-gdb 同用时会额外静态编译 gmp/mpfr 依赖，并关闭
+                   gdb 的 TUI/python/gdbserver 以保证全静态链接。
   --fresh          构建前删除已有的 build/log/install 目录
   --clean          构建完成后删除构建目录和日志目录
   --archive        构建完成后将工具链打包成 tar.xz 并删除原目录
@@ -71,6 +79,7 @@ usage() {
   $(basename "$0")
   $(basename "$0") --gcc-ver 16.1.0 --binutils-ver 2.43
   $(basename "$0") --gcc-ver git:update --languages c,c++ --fresh
+  $(basename "$0") --disable-gdb --static --fresh
 EOF
     exit 0
 }
@@ -94,6 +103,7 @@ while [[ $# -gt 0 ]]; do
         --disable-sanitizer) ENABLE_SANITIZER=false; shift;;
         --enable-gdb)  ENABLE_GDB=true; shift;;
         --disable-gdb) ENABLE_GDB=false; shift;;
+        --static)      STATIC_BUILD=true; shift;;
         --fresh)       FRESH_BUILD=true; shift;;
         --clean)       CLEAN_BUILD=true; shift;;
         --archive)     ARCHIVE_RESULT=true; shift;;
@@ -115,11 +125,59 @@ info "Binutils 版本: $BINUTILS_VER"
 info "GCC 版本: $GCC_VER"
 info "启用语言: $GCC_LANGUAGES"
 info "sanitizer: $([[ "$ENABLE_SANITIZER" == true ]] && echo 开启 || echo 关闭)"
+info "静态链接: $([[ "$STATIC_BUILD" == true ]] && echo 开启 || echo 关闭)"
 
 # sanitizer 处理
 gcc_extra_args=()
 if [[ "$ENABLE_SANITIZER" == false ]]; then
     gcc_extra_args+=(--disable-libsanitizer)
+fi
+
+# 静态链接处理
+# 三个组件的静态链接方式不同, 原因如下:
+# - binutils/gdb 的可执行文件全部由 libtool 链接。libtool 会把 -static 降级理解为
+#   "优先选用静态库", 并不会真正传给链接器, 只有 -all-static 才会生成全静态可执行文件;
+#   而 configure 会把空的 LDFLAGS 写进 Makefile, 所以环境变量不生效, 必须用 make
+#   命令行覆盖 (优先级最高且会传递给子 make)。
+#   但 -all-static 又不能出现在 configure 阶段: gcc 不认识该选项, 会导致子目录
+#   configure 报 "C compiler cannot create executables"。
+#   因此采用两段式构建: 先用 make configure-host 跑完所有子目录 configure,
+#   再带 LDFLAGS=-all-static 执行真正的编译与链接。
+# - gcc 的 host 工具 (gcc/cc1/cc1plus/...) 由 gcc 自己直接链接, 不经过 libtool,
+#   因此 configure 阶段的 LDFLAGS=-static 即可生效; GCC 顶层会把 host 的 LDFLAGS 与
+#   target 的 LDFLAGS_FOR_TARGET 分开传递, 所以 target 运行库 (libgcc_s.so/
+#   libstdc++.so 等) 仍保持共享构建, 不受本选项影响。
+binutils_static_args=()
+gdb_static_args=()
+gcc_static_args=()
+binutils_make_args=()
+gdb_make_args=()
+gcc_configure_env=()
+# binutils 功能开关默认值 (动态构建): 启用 gold 与链接期 LTO 插件
+binutils_feature_args=(--enable-gold=yes --enable-plugins)
+STATIC_SUFFIX=""
+if [[ "$STATIC_BUILD" == true ]]; then
+    STATIC_SUFFIX="-static"
+    # 关闭 gold (C++/libtool, 静态链接易出问题) 与 gprofng (依赖共享 collector 库);
+    # 但保留 plugins: ar/ranlib/nm 及 libtool 安装 .a 时会用 `ranlib --plugin`,
+    # 关闭 plugins 会让静态 ranlib 不认识 --plugin 而导致安装失败。
+    binutils_feature_args=(--disable-gold --enable-plugins --disable-gprofng)
+    binutils_static_args+=(--disable-shared)
+    binutils_make_args=("LDFLAGS=-all-static")
+
+    gdb_static_args+=(--disable-shared --with-static-standard-libraries
+                      --without-python --disable-tui
+                      --disable-gdbserver --disable-gprofng)
+    gdb_make_args=("LDFLAGS=-all-static")
+
+    gcc_static_args+=(--disable-plugin)
+    gcc_configure_env=(env "LDFLAGS=-static")
+
+    # 简单前置检查：静态链接需要 host 提供 libc.a
+    host_libc_a="$(gcc -print-file-name=libc.a 2>/dev/null || true)"
+    if [[ ! -f "$host_libc_a" ]]; then
+        warn "未找到 libc.a，静态链接可能失败。请安装 glibc-static (RPM) 或 libc6-dev (DEB)。"
+    fi
 fi
 
 # 设置默认目录
@@ -129,9 +187,9 @@ fi
 BASE_DIR="${WORK_DIR:-$PWD}"
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-$BASE_DIR/downloads}"
 SRC_DIR="${SRC_DIR:-$DOWNLOAD_DIR}"
-BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build-native-$HOST_TRIPLE}"
-LOG_DIR="${LOG_DIR:-$BASE_DIR/logs-native-$HOST_TRIPLE}"
-INSTALL_DIR="${INSTALL_DIR:-$BASE_DIR/native-$HOST_TRIPLE}"
+BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build-native-$HOST_TRIPLE$STATIC_SUFFIX}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs-native-$HOST_TRIPLE$STATIC_SUFFIX}"
+INSTALL_DIR="${INSTALL_DIR:-$BASE_DIR/native-$HOST_TRIPLE$STATIC_SUFFIX}"
 canonicalize_dirs DOWNLOAD_DIR SRC_DIR BUILD_DIR LOG_DIR INSTALL_DIR
 
 fresh_clean_dirs "$FRESH_BUILD" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
@@ -166,6 +224,43 @@ info "源码目录: $SRC_DIR"
 info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
 info "构建线程数: $THREADS"
+
+# 确保 GCC 依赖 (gmp/mpfr/mpc/isl) 已下载并解压 (幂等, 由 prereq_done 标记守护)
+ensure_gcc_prerequisites() {
+    cd "$SRC_DIR_GCC" || error "无法进入 GCC 源码目录"
+    if [[ ! -f "prereq_done" ]]; then
+        build_step "gcc_download_prerequisites" "${LOG_DIR_GCC}" "${SCRIPT_DIR}/prepare-gcc.sh"
+        info "GCC 依赖下载完成 (日志: $LOG_DIR_GCC)"
+        touch prereq_done
+    fi
+}
+
+# 为静态 gdb 编译静态 gmp + mpfr, 安装到 $1 (deps 前缀)。
+# gdb 14+ 需要 GMP/MPFR, 而 host 通常只提供动态库; 这里复用 GCC 已下载的
+# gmp/mpfr 源码 (contrib/download_prerequisites 建立的 gmp、mpfr 符号链接),
+# 单独编译出 .a 供 gdb 全静态链接使用。
+build_static_gdb_deps() {
+    local pfx="$1"
+    if [[ -f "$pfx/lib/libgmp.a" && -f "$pfx/lib/libmpfr.a" ]]; then
+        info "gdb 静态依赖已存在, 跳过: $pfx"
+        return
+    fi
+    ensure_gcc_prerequisites
+    local gmp_src="$SRC_DIR_GCC/gmp" mpfr_src="$SRC_DIR_GCC/mpfr"
+    [[ -d "$gmp_src" && -d "$mpfr_src" ]] || error "未找到 gmp/mpfr 源码: $gmp_src, $mpfr_src"
+    local bdir="$BUILD_DIR/build-gdb-deps"
+    step "=== 为静态 GDB 构建 gmp/mpfr 依赖 ==="
+    mkdir -p "$bdir/gmp" && cd "$bdir/gmp" || error "无法进入 $bdir/gmp"
+    build_step "deps-gmp-configure" "${LOG_DIR_GDB}" \
+        "$gmp_src/configure" --prefix="$pfx" --disable-shared --enable-static
+    build_step "deps-gmp-build"   "${LOG_DIR_GDB}" make -j${THREADS}
+    build_step "deps-gmp-install" "${LOG_DIR_GDB}" make install
+    mkdir -p "$bdir/mpfr" && cd "$bdir/mpfr" || error "无法进入 $bdir/mpfr"
+    build_step "deps-mpfr-configure" "${LOG_DIR_GDB}" \
+        "$mpfr_src/configure" --prefix="$pfx" --with-gmp="$pfx" --disable-shared --enable-static
+    build_step "deps-mpfr-build"   "${LOG_DIR_GDB}" make -j${THREADS}
+    build_step "deps-mpfr-install" "${LOG_DIR_GDB}" make install
+}
 
 # 根据 --enable-gdb/--disable-gdb 决定 gdb 的编译方式:
 # - binutils 为 git 源 (binutils-gdb.git) 时, gdb 随 binutils 一起编译;
@@ -215,21 +310,33 @@ build_step "configure" "${LOG_DIR_BINUTILS}" \
     "$SRC_DIR_BINUTILS/configure" \
     --prefix="$INSTALL_PREFIX" \
     --disable-multilib \
-    --enable-gold=yes \
-    --enable-plugins \
+    "${binutils_feature_args[@]}" \
     --disable-nls \
     --disable-werror \
+    "${binutils_static_args[@]}" \
     "${binutils_gdb_args[@]}"
 
+# 静态构建时先跑完子目录 configure (不带 -all-static, 否则 gcc 无法识别该选项)
+if [[ "$STATIC_BUILD" == true ]]; then
+    build_step "configure-host" "${LOG_DIR_BINUTILS}" \
+        make -j${THREADS} configure-host
+fi
+
 build_step "build" "${LOG_DIR_BINUTILS}" \
-    make -j${THREADS}
+    make -j${THREADS} "${binutils_make_args[@]}"
 
 build_step "install" "${LOG_DIR_BINUTILS}" \
-    make install-strip
+    make install-strip "${binutils_make_args[@]}"
 
 # 使用 release 源码包时单独编译 gdb (git 源已随 binutils 编译)
 if [[ "$BUILD_GDB_SEPARATE" == true ]]; then
     step "=== 构建 GDB (独立) ==="
+    gdb_dep_args=()
+    if [[ "$STATIC_BUILD" == true ]]; then
+        GDB_DEPS_PREFIX="$BUILD_DIR/gdb-deps-prefix"
+        build_static_gdb_deps "$GDB_DEPS_PREFIX"
+        gdb_dep_args=(--with-gmp="$GDB_DEPS_PREFIX" --with-mpfr="$GDB_DEPS_PREFIX")
+    fi
     mkdir -p "$BUILD_DIR_GDB"
     cd "$BUILD_DIR_GDB" || error "无法进入构建目录"
     build_step "configure" "${LOG_DIR_GDB}" \
@@ -238,23 +345,23 @@ if [[ "$BUILD_GDB_SEPARATE" == true ]]; then
         --disable-multilib \
         --disable-nls \
         --disable-werror \
-        --disable-sim
+        --disable-sim \
+        "${gdb_static_args[@]}" \
+        "${gdb_dep_args[@]}"
     # 仅构建/安装 gdb 组件, 避免覆盖 binutils 已安装的 bfd/opcodes 等
+    if [[ "$STATIC_BUILD" == true ]]; then
+        build_step "configure-host" "${LOG_DIR_GDB}" \
+            make -j${THREADS} configure-host
+    fi
     build_step "build" "${LOG_DIR_GDB}" \
-        make -j${THREADS} all-gdb
+        make -j${THREADS} all-gdb "${gdb_make_args[@]}"
     build_step "install" "${LOG_DIR_GDB}" \
-        make install-gdb
+        make install-gdb "${gdb_make_args[@]}"
 fi
 
 # 准备 GCC 源码并下载依赖库
 step "==== 准备 GCC 源码 ==="
-cd "$SRC_DIR_GCC" || error "无法进入构建目录"
-# 下载 GMP/MPFR/MPC 等依赖（放入 gcc/ 目录）
-if [[ ! -f "prereq_done" ]]; then
-    build_step "gcc_download_prerequisites" "${LOG_DIR_GCC}" "${SCRIPT_DIR}/prepare-gcc.sh"
-    info "GCC 依赖下载完成 (日志: $LOG_DIR_GCC)"
-    touch prereq_done
-fi
+ensure_gcc_prerequisites
 
 # 构建 GCC（native: 单阶段，使用 host libc）
 step "=== 构建 GCC ==="
@@ -262,6 +369,7 @@ mkdir -p "$BUILD_DIR_GCC"
 cd "$BUILD_DIR_GCC" || error "无法进入构建目录"
 
 build_step "configure" "${LOG_DIR_GCC}" \
+    "${gcc_configure_env[@]}" \
     "$SRC_DIR_GCC/configure" \
     --prefix="$INSTALL_PREFIX" \
     --disable-multilib \
@@ -272,6 +380,7 @@ build_step "configure" "${LOG_DIR_GCC}" \
     --enable-shared \
     --disable-nls \
     --disable-werror \
+    "${gcc_static_args[@]}" \
     "${gcc_extra_args[@]}"
 
 build_step "build" "${LOG_DIR_GCC}" \
@@ -301,6 +410,15 @@ echo -e "  # 3) 编译时将库路径写入 rpath（免去每次设置环境变�
 echo -e "  ${GREEN}g++ prog.cpp -Wl,-rpath,${RUNTIME_LIBDIR}${NC}"
 echo -e "  # 4) 或静态链接运行时库"
 echo -e "  ${GREEN}g++ -static-libstdc++ -static-libgcc prog.cpp${NC}"
+
+# 静态链接校验：确认关键可执行文件不再依赖动态库
+if [[ "$STATIC_BUILD" == true ]]; then
+    libexec_dir="$(dirname "$("${INSTALL_PREFIX}/bin/gcc" -print-prog-name=cc1 2>/dev/null || true)")"
+    verify_static_binaries \
+        "${INSTALL_PREFIX}/bin/as" "${INSTALL_PREFIX}/bin/ld" "${INSTALL_PREFIX}/bin/ar" \
+        "${INSTALL_PREFIX}/bin/objdump" "${INSTALL_PREFIX}/bin/gcc" "${INSTALL_PREFIX}/bin/g++" \
+        "${INSTALL_PREFIX}/bin/gdb" "${libexec_dir}/cc1" "${libexec_dir}/cc1plus" || true
+fi
 
 # 构建后处理
 clean_build_dir "$BUILD_DIR" "$LOG_DIR" "$CLEAN_BUILD"

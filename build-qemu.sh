@@ -30,6 +30,7 @@ REPO="https://${MIRROR}/git/qemu.git"
 REF="v11.0.0"
 DO_INSTALL=true
 DO_DEPS=false
+STATIC_BUILD=false
 
 usage() {
     cat <<EOF
@@ -50,12 +51,18 @@ usage() {
      --no-install    跳过 make install
      --deps          安装系统依赖 (需 sudo)
      --no-deps       跳过系统依赖安装 (默认)
+     --static        静态链接 qemu 自身的可执行文件 (透传 QEMU 的 --static)，产物不依赖
+                     host 的共享库，可随意拷贝到同架构机器执行。需要系统提供静态库
+                     (libglib-2.0.a / libpixman-1.a / libz.a 等)；*-linux-user 目标最
+                     稳定，*-softmmu 在缺少静态库的发行版上可能配置失败。
+                     构建/安装目录会自动追加 -static 后缀，与动态构建互不干扰。
   -h,--help          显示帮助
 
 示例:
   $(basename "$0")                                  # riscv64 系统+用户态 -> ./qemu-install
   $(basename "$0") -a aarch64,loongarch64,riscv64,x86_64
   $(basename "$0") -t riscv64-linux-user -j 16 --deps         # 首次构建: 自动装依赖 (需 sudo)
+  $(basename "$0") -t riscv64-linux-user --static             # 静态 qemu-riscv64，可拷贝
   $(basename "$0") -s ~/qemu --ref master -p ~/qemu_upstream
 
 安装完成后，测试脚本可通过 --qemu-dir 指向 <prefix>/bin 使用:
@@ -80,6 +87,7 @@ while [[ $# -gt 0 ]]; do
         --no-install)  DO_INSTALL=false; shift  ;;
         --deps)        DO_DEPS=true;     shift  ;;
         --no-deps)     DO_DEPS=false;    shift  ;;
+        --static)      STATIC_BUILD=true; shift ;;
         -h|--help)     usage ;;
         *) error "未知选项: $1"; usage ;;
     esac
@@ -111,14 +119,19 @@ if [[ -z "$TARGETS" ]]; then
 fi
 
 SRC_DIR="${SRC_DIR:-$PWD/qemu}"
-BUILD_DIR="${BUILD_DIR:-$SRC_DIR/build}"
-PREFIX="${PREFIX:-$PWD/qemu-install}"
+STATIC_SUFFIX=""
+if [[ "$STATIC_BUILD" == true ]]; then
+    STATIC_SUFFIX="-static"
+fi
+BUILD_DIR="${BUILD_DIR:-$SRC_DIR/build$STATIC_SUFFIX}"
+PREFIX="${PREFIX:-$PWD/qemu-install$STATIC_SUFFIX}"
 
 info "源码目录: $SRC_DIR"
 info "构建目录: $BUILD_DIR"
 info "安装前缀: $PREFIX"
 info "target-list: $TARGETS"
 info "构建线程数: $JOBS"
+info "静态链接: $([[ "$STATIC_BUILD" == true ]] && echo 开启 || echo 关闭)"
 
 # ---------------------------------------------------------------------------
 # 权限助手
@@ -236,10 +249,16 @@ mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
 step "=== 配置 QEMU ==="
+configure_extra_args=()
+if [[ "$STATIC_BUILD" == true ]]; then
+    configure_extra_args+=(--static)
+fi
+
 "$SRC_DIR/configure" \
     --prefix="$PREFIX" \
     --target-list="$TARGETS" \
-    --disable-werror
+    --disable-werror \
+    "${configure_extra_args[@]}"
 
 step "=== 编译 QEMU (并行 $JOBS) ==="
 make -j"$JOBS"
@@ -248,6 +267,11 @@ if [[ "$DO_INSTALL" == true ]]; then
     step "=== 安装 QEMU 到 $PREFIX ==="
     make install
     PREFIX=$(realpath "$PREFIX")
+
+    if [[ "$STATIC_BUILD" == true ]]; then
+        verify_static_binaries "$PREFIX"/bin/qemu-* || true
+    fi
+
     ok "完成。二进制位于 ${GREEN}${PREFIX}/bin${NC}"
     info "测试脚本可使用: --qemu-dir ${PREFIX}/bin"
 else

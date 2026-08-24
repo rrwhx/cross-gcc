@@ -161,6 +161,13 @@
 | `--fresh` | 构建前清除已有 build/log/install 目录 |
 | `--clean` | 构建后删除构建目录和日志 |
 | `--archive` | 构建后打包为 tar.xz 并删除原目录 |
+| `--static` | 静态链接工具链自身的可执行文件，可拷贝到同架构其他机器执行 |
+
+`--static` 只影响工具链自身的 host 可执行文件（`gcc`/`as`/`ld`/`clang`/`lld` 等），
+目标侧库（glibc/musl/newlib/libgcc/compiler-rt）仍按原方式构建，不受影响。
+构建/日志/安装目录会自动追加 `-static` 后缀，与动态构建互不干扰。
+需要 host 提供 `libc.a`、`libstdc++.a`（LLVM 另需 `libz.a`）。
+`build-native-gcc.sh`、`build-native-llvm.sh` 与 `build-qemu.sh` 同样支持该选项。
 
 ### 版本参数 git 格式
 

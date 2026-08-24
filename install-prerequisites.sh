@@ -7,7 +7,7 @@ if command -v apt-get &> /dev/null; then
     sudo apt-get install -y \
         build-essential bison flex texinfo \
         python3 gawk git wget curl gzip bzip2 xz-utils \
-        libgmp-dev libmpfr-dev libmpc-dev libssl-dev libelf-dev \
+        libgmp-dev libmpfr-dev libmpc-dev libssl-dev libelf-dev zlib1g-dev \
         gettext file rsync cpio bc
 
 elif command -v dnf &> /dev/null || command -v yum &> /dev/null; then
@@ -17,7 +17,7 @@ elif command -v dnf &> /dev/null || command -v yum &> /dev/null; then
     sudo "$PKG_MANAGER" install -y \
         bison flex texinfo python3 gawk \
         git wget curl gzip bzip2 xz \
-        gmp-devel mpfr-devel libmpc-devel openssl-devel elfutils-libelf-devel \
+        gmp-devel mpfr-devel libmpc-devel openssl-devel elfutils-libelf-devel zlib-devel \
         gettext file rsync cpio bc
 
 elif command -v pacman &> /dev/null; then
@@ -25,7 +25,7 @@ elif command -v pacman &> /dev/null; then
     sudo pacman -S --needed --noconfirm \
         base-devel bison flex texinfo python \
         gawk git wget curl gzip bzip2 xz \
-        gmp mpfr libmpc openssl libelf \
+        gmp mpfr libmpc openssl libelf zlib \
         gettext file rsync cpio bc
 
 else

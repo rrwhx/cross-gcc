@@ -33,6 +33,7 @@ ARCHIVE_RESULT=false
 ENABLE_SANITIZER=false
 ENABLE_GDB=false
 FRESH_BUILD=false
+STATIC_BUILD=false
 
 # 显示用法
 usage() {
@@ -60,6 +61,14 @@ usage() {
 构建后处理选项:
   --enable-sanitizer 开启 GCC sanitizer (默认关闭)
   --enable-gdb / --disable-gdb 是否编译 gdb (默认关闭, 需 binutils 使用 git 源)
+  --static         静态链接工具链自身的可执行文件 (交叉 gcc/as/ld 等)，产物不依赖 host
+                   的 libc/libstdc++，可随意拷贝到同架构机器执行。需要 host 提供 libc.a
+                   (如 glibc-static / libc6-dev)。目标侧的 glibc/musl 与 libgcc_s/
+                   libstdc++ 运行库不受影响，仍按原方式构建。
+                   注意: 静态构建会关闭 gold 与 gprofng；liblto_plugin 只生成静态库
+                   (不生成 .so)，因此 ld 的 LTO 插件不可用，-flto 走 lto-wrapper
+                   路径 (已验证含静态库归档的 -flto 链接正常)。
+                   构建/日志/安装目录会自动追加 -static 后缀，与动态构建互不干扰。
   --fresh          构建前删除已有的 build/log/install 目录
   --clean          构建完成后删除构建目录和日志目录
   --archive        构建完成后将工具链打包成 tar.xz 并删除原目录
@@ -68,6 +77,7 @@ usage() {
 示例:
   $(basename "$0") --arch aarch64 --libc glibc
   $(basename "$0") --arch riscv64 --libc glibc --gcc-ver git:update
+  $(basename "$0") --arch riscv64 --libc musl --static --fresh
   $(basename "$0") --arch riscv64 --libc musl --gcc-ver git:releases/gcc-16.1.0:update
 EOF
     exit 0
@@ -95,6 +105,7 @@ while [[ $# -gt 0 ]]; do
         --enable-gdb)  ENABLE_GDB=true; shift;;
         --disable-gdb) ENABLE_GDB=false; shift;;
         --fresh)       FRESH_BUILD=true; shift;;
+        --static)      STATIC_BUILD=true; shift;;
         --clean)       CLEAN_BUILD=true; shift;;
         --archive)     ARCHIVE_RESULT=true; shift;;
         -h|--help)     usage;;
@@ -182,6 +193,46 @@ case "$ARCH" in
     mips64) musl_extra_args+=(--libdir=/usr/lib64) ;;
 esac
 
+# 静态链接处理
+# binutils 的可执行文件由 libtool 链接: libtool 会把 -static 降级理解为"优先选用静态库",
+# 只有 -all-static 才真正生成全静态可执行文件; 而 configure 会把空的 LDFLAGS 写进
+# Makefile, 环境变量不生效, 必须用 make 命令行覆盖 (优先级最高且传递给子 make)。
+# 但 -all-static 不能出现在 configure 阶段 (gcc 不认识该选项, 子目录 configure 会报
+# "C compiler cannot create executables"), 所以先 make configure-host 跑完全部子目录
+# configure, 再带 LDFLAGS=-all-static 编译链接。
+# gcc 的 host 工具 (xgcc/cc1/cc1plus) 不经 libtool, configure 阶段 LDFLAGS=-static 即可;
+# GCC 顶层把 host 的 LDFLAGS 与 target 的 LDFLAGS_FOR_TARGET 分开传递, 所以目标侧的
+# libgcc_s.so/libstdc++.so 仍按共享方式构建。glibc/musl 与 Linux 头文件各自独立配置,
+# 完全不读取这里的变量, 因此目标 C 库不受影响 (切勿改成 export LDFLAGS)。
+binutils_static_args=()
+binutils_make_args=()
+gcc_static_args=()
+gcc_configure_env=()
+# binutils 功能开关默认值 (动态构建): 启用 gold 与链接期 LTO 插件
+binutils_feature_args=(--enable-gold=yes --enable-plugins)
+STATIC_SUFFIX=""
+if [[ "$STATIC_BUILD" == true ]]; then
+    STATIC_SUFFIX="-static"
+    # 关闭 gold (C++/libtool, 静态链接易出问题); 保留 plugins: libtool 安装 .a 时会调用
+    # `ranlib --plugin`, 关闭 plugins 会让新装的静态 ranlib 不认识该选项而导致安装失败。
+    binutils_feature_args=(--disable-gold --enable-plugins)
+    binutils_static_args+=(--disable-shared)
+    binutils_make_args=("LDFLAGS=-all-static")
+
+    gcc_static_args+=(--disable-plugin)
+    gcc_configure_env=(env "LDFLAGS=-static")
+
+    if [[ "$ENABLE_GDB" == true ]]; then
+        warn "静态构建暂不支持交叉 gdb (需要 host 提供静态 gmp/mpfr)，已自动关闭 gdb"
+        ENABLE_GDB=false
+    fi
+
+    host_libc_a="$(gcc -print-file-name=libc.a 2>/dev/null || true)"
+    if [[ ! -f "$host_libc_a" ]]; then
+        warn "未找到 libc.a，静态链接可能失败。请安装 glibc-static (RPM) 或 libc6-dev (DEB)。"
+    fi
+fi
+
 # 根据 --enable-gdb/--disable-gdb 决定 binutils 是否编译 gdb
 # gdb 仅存在于 binutils git 源 (binutils-gdb.git) 中，release tarball 不含 gdb
 binutils_gdb_args=()
@@ -202,9 +253,9 @@ fi
 BASE_DIR="${WORK_DIR:-$PWD}"
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-$BASE_DIR/downloads}"
 SRC_DIR="${SRC_DIR:-$DOWNLOAD_DIR}"
-BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build-$TARGET}"
-LOG_DIR="${LOG_DIR:-$BASE_DIR/logs-$TARGET}"
-INSTALL_DIR="${INSTALL_DIR:-$BASE_DIR/cross-$TARGET}"
+BUILD_DIR="${BUILD_DIR:-$BASE_DIR/build-$TARGET$STATIC_SUFFIX}"
+LOG_DIR="${LOG_DIR:-$BASE_DIR/logs-$TARGET$STATIC_SUFFIX}"
+INSTALL_DIR="${INSTALL_DIR:-$BASE_DIR/cross-$TARGET$STATIC_SUFFIX}"
 canonicalize_dirs DOWNLOAD_DIR SRC_DIR BUILD_DIR LOG_DIR INSTALL_DIR
 
 fresh_clean_dirs "$FRESH_BUILD" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
@@ -263,6 +314,7 @@ info "源码目录: $SRC_DIR"
 info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
 info "构建线程数: $THREADS"
+info "静态链接: $([[ "$STATIC_BUILD" == true ]] && echo 开启 || echo 关闭)"
 
 step "下载源代码"
 dl_files=()
@@ -294,16 +346,21 @@ build_step "configure" "${LOG_DIR_BINUTILS}" \
     --target="$TARGET" \
     --prefix="$CROSS_PREFIX" \
     --disable-multilib \
-    --enable-gold=yes \
-    --enable-plugins \
+    "${binutils_feature_args[@]}" \
     --disable-gprofng \
-    "${binutils_gdb_args[@]}"
+    "${binutils_gdb_args[@]}" \
+    "${binutils_static_args[@]}"
+
+# 静态构建时先跑完子目录 configure (不带 -all-static, 否则 gcc 无法识别该选项)
+if [[ "$STATIC_BUILD" == true ]]; then
+    build_step "configure-host" "${LOG_DIR_BINUTILS}" make -j${THREADS} configure-host
+fi
 
 build_step "build" "${LOG_DIR_BINUTILS}" \
-    make -j${THREADS}
+    make -j${THREADS} "${binutils_make_args[@]}"
 
 build_step "install" "${LOG_DIR_BINUTILS}" \
-    make install-strip
+    make install-strip "${binutils_make_args[@]}"
 
 # 准备 GCC 源码并下载依赖库
 step "==== 准备 GCC 源码 ==="
@@ -321,6 +378,7 @@ mkdir -p "$BUILD_DIR_GCC_INITIAL"
 cd "$BUILD_DIR_GCC_INITIAL" || error "无法进入构建目录"
 
 build_step "configure" "${LOG_DIR_GCC_INITIAL}" \
+    "${gcc_configure_env[@]}" \
     "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
     --prefix="$CROSS_PREFIX" \
@@ -339,7 +397,8 @@ build_step "configure" "${LOG_DIR_GCC_INITIAL}" \
     --disable-libssp \
     --disable-libvtv \
     --disable-libstdcxx \
-    --disable-werror
+    --disable-werror \
+    "${gcc_static_args[@]}"
 
 build_step "build" "${LOG_DIR_GCC_INITIAL}" \
     make -j${THREADS}
@@ -445,6 +504,7 @@ cd "$BUILD_DIR_GCC_FINAL" || error "无法进入构建目录"
 # --with-cross-host="$(gcc -dumpmachine)"
 
 build_step "configure" "${LOG_DIR_GCC_FINAL}" \
+    "${gcc_configure_env[@]}" \
     "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
     --prefix="$CROSS_PREFIX" \
@@ -459,6 +519,7 @@ build_step "configure" "${LOG_DIR_GCC_FINAL}" \
     --disable-nls \
     --disable-gprofng \
     --disable-werror \
+    "${gcc_static_args[@]}" \
     "${gcc_extra_args[@]}"
 
 build_step "build" "${LOG_DIR_GCC_FINAL}" \
@@ -509,6 +570,17 @@ for libdir in "${CROSS_PREFIX}"/lib*; do
         fi
     fi
 done
+
+# 静态链接校验：确认关键可执行文件不再依赖动态库
+if [[ "$STATIC_BUILD" == true ]]; then
+    libexec_dir="$(dirname "$("${CROSS_PREFIX}/bin/${TARGET}-gcc" -print-prog-name=cc1 2>/dev/null || true)")"
+    verify_static_binaries \
+        "${CROSS_PREFIX}/bin/${TARGET}-as" "${CROSS_PREFIX}/bin/${TARGET}-ld" \
+        "${CROSS_PREFIX}/bin/${TARGET}-ar" "${CROSS_PREFIX}/bin/${TARGET}-objdump" \
+        "${CROSS_PREFIX}/bin/${TARGET}-gcc" "${CROSS_PREFIX}/bin/${TARGET}-g++" \
+        "${CROSS_PREFIX}/bin/${TARGET}-gfortran" \
+        "${libexec_dir}/cc1" "${libexec_dir}/cc1plus" "${libexec_dir}/f951" || true
+fi
 
 # 构建后处理
 clean_build_dir "$BUILD_DIR" "$LOG_DIR" "$CLEAN_BUILD"

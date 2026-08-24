@@ -64,9 +64,19 @@ jobs:
           echo "musl_ver=$MUSL_VER" >> $GITHUB_OUTPUT
           echo "linux_ver=$LINUX_VER" >> $GITHUB_OUTPUT
 
+      - name: Compute target triple
+        id: triple
+        run: |
+          if [ "${{ matrix.libc }}" = "musl" ]; then suf=musl; else suf=gnu; fi
+          echo "target=${{ matrix.arch }}-linux-$suf" >> "$GITHUB_OUTPUT"
+
+      # 发布产物会被下载到其他机器上运行，因此静态链接工具链自身的可执行文件，
+      # 避免依赖 runner 的 glibc/libstdc++ 版本。显式给出 --install-dir，
+      # 保持安装路径为 ./cross-<triple> (否则 --static 会追加 -static 后缀)。
       - name: Build toolchain
         run: |
-          ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc ${{ matrix.libc }} --clean
+          ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc ${{ matrix.libc }} \
+            --static --install-dir ./cross-${{ steps.triple.outputs.target }} --clean
         env:
           GCC_VER: ${{ steps.versions.outputs.gcc_ver }}
           BINUTILS_VER: ${{ steps.versions.outputs.binutils_ver }}
@@ -74,11 +84,24 @@ jobs:
           MUSL_VER: ${{ steps.versions.outputs.musl_ver }}
           LINUX_VER: ${{ steps.versions.outputs.linux_ver }}
 
-      - name: Compute target triple
-        id: triple
+      # 复用 lib.sh 的 verify_static_binaries，避免校验规则在 CI 与脚本中重复实现。
+      # --require: 缺失即失败，防止路径变化导致校验被静默跳过。
+      - name: Verify toolchain is statically linked
+        env:
+          TRIPLE: ${{ steps.triple.outputs.target }}
         run: |
-          if [ "${{ matrix.libc }}" = "musl" ]; then suf=musl; else suf=gnu; fi
-          echo "target=${{ matrix.arch }}-linux-$suf" >> "$GITHUB_OUTPUT"
+          source ./lib.sh
+          prefix="./cross-$TRIPLE"
+          gcc_bin="$prefix/bin/$TRIPLE-gcc"
+          [ -x "$gcc_bin" ] || error "工具链驱动缺失: $gcc_bin"
+          libexec=$(dirname "$("$gcc_bin" -print-prog-name=cc1)")
+          verify_static_binaries --require \
+            "$prefix/bin/$TRIPLE-as" "$prefix/bin/$TRIPLE-ld" \
+            "$prefix/bin/$TRIPLE-ar" "$prefix/bin/$TRIPLE-objdump" \
+            "$gcc_bin" "$prefix/bin/$TRIPLE-g++" \
+            "$prefix/bin/$TRIPLE-gfortran" \
+            "$libexec/cc1" "$libexec/cc1plus" "$libexec/f951" \
+            "$libexec/lto1" "$libexec/collect2"
 
       - name: Install qemu-user (for smoke test)
         run: |

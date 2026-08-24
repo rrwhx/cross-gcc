@@ -44,6 +44,7 @@ CLEAN_BUILD=false
 ARCHIVE_RESULT=false
 FRESH_BUILD=false
 ENABLE_SANITIZER=true
+STATIC_BUILD=false
 
 usage() {
     cat <<EOF
@@ -65,6 +66,12 @@ usage() {
   --link-jobs         并行链接作业数 (LLVM_PARALLEL_LINK_JOBS)
   -j,--threads        并行编译线程数 (默认: ${THREADS})
   --mirror            下载镜像源 (默认: $MIRROR)
+  --static            静态链接工具链自身的可执行文件 (clang/lld/flang 等)，产物不依赖 host
+                      的 libc/libstdc++，可随意拷贝到同架构机器执行。需要 host 提供 libc.a
+                      (glibc-static / libc6-dev) 与 libstdc++.a。目标侧运行时
+                      (compiler-rt/flang-rt) 不受影响。会自动关闭 clang 插件与 LLVM dylib，
+                      并给构建/日志/安装目录追加 -static 后缀，与动态构建互不干扰。
+                      静态链接内存占用较高，必要时配合 --link-jobs 1 使用。
 
 构建后处理选项:
   --fresh             构建前删除已有的 build/log/install 目录
@@ -77,6 +84,7 @@ usage() {
   $(basename "$0")
   $(basename "$0") --llvm-ver 22.1.8 --targets X86
   $(basename "$0") --llvm-ver git:update --projects clang,lld --fresh
+  $(basename "$0") --projects clang,lld --runtimes compiler-rt --static --fresh --link-jobs 2
 EOF
     exit 0
 }
@@ -98,6 +106,7 @@ while [[ $# -gt 0 ]]; do
         --link-jobs)             LINK_JOBS="$2"; shift 2;;
         -j|--threads)            THREADS="$2"; shift 2;;
         --mirror)                MIRROR="$2"; shift 2;;
+        --static)                STATIC_BUILD=true; shift;;
         --fresh)                 FRESH_BUILD=true; shift;;
         --clean)                 CLEAN_BUILD=true; shift;;
         --archive)               ARCHIVE_RESULT=true; shift;;
@@ -132,10 +141,14 @@ fi
 # ==============================================================================
 
 WORK_DIR=$(realpath "$WORK_DIR")
+STATIC_SUFFIX=""
+if [[ "$STATIC_BUILD" == true ]]; then
+    STATIC_SUFFIX="-static"
+fi
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-${WORK_DIR}/downloads}"
-BUILD_DIR="${BUILD_DIR:-${WORK_DIR}/build-native-llvm-${HOST_TRIPLE}}"
-INSTALL_DIR="${INSTALL_DIR:-${WORK_DIR}/native-${HOST_TRIPLE}}"
-LOG_DIR="${LOG_DIR:-${WORK_DIR}/logs-native-llvm-${HOST_TRIPLE}}"
+BUILD_DIR="${BUILD_DIR:-${WORK_DIR}/build-native-llvm-${HOST_TRIPLE}${STATIC_SUFFIX}}"
+INSTALL_DIR="${INSTALL_DIR:-${WORK_DIR}/native-${HOST_TRIPLE}${STATIC_SUFFIX}}"
+LOG_DIR="${LOG_DIR:-${WORK_DIR}/logs-native-llvm-${HOST_TRIPLE}${STATIC_SUFFIX}}"
 canonicalize_dirs DOWNLOAD_DIR BUILD_DIR INSTALL_DIR LOG_DIR
 
 fresh_clean_dirs "$FRESH_BUILD" "$BUILD_DIR" "$LOG_DIR" "$INSTALL_DIR"
@@ -174,6 +187,7 @@ info "构建后端: ${LLVM_TARGETS}"
 info "启用项目: ${LLVM_PROJECTS}"
 info "启用运行时: ${LLVM_RUNTIMES}"
 info "sanitizer: $([[ "$ENABLE_SANITIZER" == true ]] && echo 开启 || echo 关闭)"
+info "静态链接: $([[ "$STATIC_BUILD" == true ]] && echo 开启 || echo 关闭)"
 info "源码目录: ${SRC_DIR}"
 info "工作目录: ${WORK_DIR}"
 info "构建目录: ${BUILD_DIR}"
@@ -189,6 +203,59 @@ step "=== 配置 LLVM ==="
 CMAKE_EXTRA_ARGS=()
 if [[ -n "$LINK_JOBS" ]]; then
     CMAKE_EXTRA_ARGS+=("-DLLVM_PARALLEL_LINK_JOBS=${LINK_JOBS}")
+fi
+
+# zlib 默认强制开启；静态构建需要 host 提供 libz.a，否则退化为关闭
+LLVM_ZLIB_OPT=FORCE_ON
+
+# 静态链接处理
+# CMAKE_EXE_LINKER_FLAGS=-static 只作用于本次 CMake 工程 (llvm/clang/lld/flang 等 host
+# 可执行文件)。compiler-rt / flang-rt 由 llvm_ExternalProject_Add 起独立的子 CMake 构建，
+# 不继承这里的 CMAKE_EXE_LINKER_FLAGS，但仍显式在 RUNTIMES/BUILTINS_CMAKE_ARGS 里清空，
+# 避免将来 LLVM 改变透传行为时把目标侧运行时也静态化。
+if [[ "$STATIC_BUILD" == true ]]; then
+    CMAKE_EXTRA_ARGS+=(
+        "-DCMAKE_EXE_LINKER_FLAGS=-static"
+        # PIC=OFF 才能跳过 libclang-cpp.so / libLLVM.so 等共享库
+        # (否则会把非 PIC 的 libz.a 链进共享库而失败)
+        -DLLVM_ENABLE_PIC=OFF
+        # 静态可执行文件没有 dynamic section，安装阶段的 RPATH 改写会失败
+        -DCMAKE_SKIP_RPATH=ON
+        -DLLVM_STATIC_LINK_CXX_STDLIB=ON
+        -DLLVM_BUILD_LLVM_DYLIB=OFF
+        -DLLVM_LINK_LLVM_DYLIB=OFF
+        -DLLVM_BUILD_LLVM_C_DYLIB=OFF
+        -DCLANG_LINK_CLANG_DYLIB=OFF
+        -DLLVM_ENABLE_PLUGINS=OFF
+        -DCLANG_PLUGIN_SUPPORT=OFF
+        -DLLVM_ENABLE_LIBEDIT=OFF
+        -DLLVM_ENABLE_LIBXML2=OFF
+        -DLLVM_ENABLE_ZSTD=OFF
+        "-DRUNTIMES_CMAKE_ARGS=-DCMAKE_EXE_LINKER_FLAGS="
+        "-DBUILTINS_CMAKE_ARGS=-DCMAKE_EXE_LINKER_FLAGS="
+    )
+
+    host_libc_a="$(gcc -print-file-name=libc.a 2>/dev/null || true)"
+    if [[ ! -f "$host_libc_a" ]]; then
+        warn "未找到 libc.a，静态链接可能失败。请安装 glibc-static (RPM) 或 libc6-dev (DEB)。"
+    fi
+    host_libstdcxx_a="$(gcc -print-file-name=libstdc++.a 2>/dev/null || true)"
+    if [[ ! -f "$host_libstdcxx_a" ]]; then
+        warn "未找到 libstdc++.a，静态链接可能失败。请安装 libstdc++-static (RPM) 或 libstdc++-dev (DEB)。"
+    fi
+    host_libz_a="$(gcc -print-file-name=libz.a 2>/dev/null || true)"
+    if [[ -f "$host_libz_a" ]]; then
+        # FindZLIB 默认优先找到 libz.so，-static 下显式链接 .so 会报
+        # "attempted static link of dynamic object"，因此直接指定静态库。
+        host_libz_a="$(realpath "$host_libz_a")"
+        CMAKE_EXTRA_ARGS+=(
+            "-DZLIB_LIBRARY_RELEASE=${host_libz_a}"
+            "-DZLIB_LIBRARY=${host_libz_a}"
+        )
+    else
+        LLVM_ZLIB_OPT=OFF
+        warn "未找到 libz.a，静态构建已关闭 zlib 支持 (装 zlib-static / zlib1g-dev 可启用)。"
+    fi
 fi
 
 # sanitizer 由 compiler-rt 提供，默认开启
@@ -216,7 +283,7 @@ build_step "configure" "${LOG_DIR}" \
     -DLLVM_ENABLE_PROJECTS="${LLVM_PROJECTS}" \
     -DLLVM_ENABLE_RUNTIMES="${LLVM_RUNTIMES}" \
     -DCOMPILER_RT_BUILD_SANITIZERS=${SANITIZER_ONOFF} \
-    -DLLVM_ENABLE_ZLIB=FORCE_ON \
+    -DLLVM_ENABLE_ZLIB=${LLVM_ZLIB_OPT} \
     "${CMAKE_EXTRA_ARGS[@]}"
 
 step "=== 构建 LLVM ==="
@@ -226,6 +293,15 @@ build_step "build" "${LOG_DIR}" ninja -j"${THREADS}"
 step "=== 安装 LLVM ==="
 cd "${BUILD_DIR}"
 build_step "install" "${LOG_DIR}" ninja install
+
+if [[ "$STATIC_BUILD" == true ]]; then
+    static_check_paths=()
+    for exe in clang clang++ clang-cpp lld ld.lld llvm-ar llvm-nm llvm-objdump \
+               llvm-ranlib llvm-strip llvm-config flang flang-new; do
+        static_check_paths+=("${INSTALL_DIR}/bin/${exe}")
+    done
+    verify_static_binaries "${static_check_paths[@]}" || true
+fi
 
 # ==============================================================================
 # 完成输出

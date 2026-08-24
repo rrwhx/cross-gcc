@@ -251,6 +251,52 @@ fresh_clean_dirs() {
     fi
 }
 
+# 校验可执行文件是否为静态链接
+# 静态 PIE 在 file 输出中显示为 "static-pie linked"，同样属于静态链接。
+# 用法: verify_static_binaries [--require] <可执行文件路径>...
+#   默认跳过不存在的路径 (便于传入 gdb/flang 等可选组件)；
+#   --require 时缺失即视为失败，适合发布流程校验必备产物。
+# 返回: 全部通过返回 0；存在动态链接、缺失(--require)或无任何可校验文件时返回 1。
+# 构建脚本通常以 `|| true` 忽略返回值 (产物本身仍可用，只是不可跨机器拷贝)，
+# 发布流程 (CI) 应把非零返回视为致命错误。
+verify_static_binaries() {
+    local require=false
+    if [[ "${1:-}" == "--require" ]]; then
+        require=true
+        shift
+    fi
+
+    step "=== 校验静态链接 ==="
+    local failed=0 checked=0 exe
+    for exe in "$@"; do
+        if [[ ! -f "$exe" ]]; then
+            if [[ "$require" == true ]]; then
+                warn "缺失: $exe"
+                failed=$((failed + 1))
+            fi
+            continue
+        fi
+        checked=$((checked + 1))
+        if file -L "$exe" 2>/dev/null | grep -qE "statically linked|static-pie linked"; then
+            ok "静态: $(basename "$exe")"
+        else
+            warn "仍为动态链接: $exe"
+            failed=$((failed + 1))
+        fi
+    done
+
+    if [[ $checked -eq 0 ]]; then
+        warn "未找到任何可校验的可执行文件，静态校验无效"
+        return 1
+    fi
+    if [[ $failed -gt 0 ]]; then
+        warn "共 ${failed} 项未通过静态校验，拷贝到其他机器时可能无法运行"
+        return 1
+    fi
+    ok "已校验 ${checked} 个可执行文件，均为静态链接"
+    return 0
+}
+
 # 打包工具链
 archive_toolchain() {
     local prefix_dir="$1"

@@ -42,12 +42,13 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "其他选项将直接传递给 build-toolchain-generic.sh，例如："
             echo "  --binutils-ver, --gcc-ver, --glibc-ver, --musl-ver, --linux-ver"
-            echo "  --clean, --archive, --threads, --download-dir, 等等"
+            echo "  --clean, --archive, --threads, --download-dir, --static, 等等"
             echo ""
             echo "示例:"
             echo "  $0 --arch aarch64,riscv64 --libc glibc --gcc-ver 14.2.0 --clean"
             echo "  $0 --arch aarch64 --libc musl --fresh"
             echo "  $0 --libc glibc --archive"
+            echo "  $0 --arch riscv64 --libc musl --static --archive   # 静态工具链，可拷贝到其他机器"
             exit 0
             ;;
         *)
