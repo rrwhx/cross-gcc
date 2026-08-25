@@ -65,9 +65,11 @@ usage() {
                    的 libc/libstdc++，可随意拷贝到同架构机器执行。需要 host 提供 libc.a
                    (如 glibc-static / libc6-dev)。目标侧的 glibc/musl 与 libgcc_s/
                    libstdc++ 运行库不受影响，仍按原方式构建。
-                   注意: 静态构建会关闭 gold 与 gprofng；liblto_plugin 只生成静态库
-                   (不生成 .so)，因此 ld 的 LTO 插件不可用，-flto 走 lto-wrapper
-                   路径 (已验证含静态库归档的 -flto 链接正常)。
+                   注意: 静态构建会失去两项能力 —
+                   1) liblto_plugin 只生成静态库 (不生成 .so)，ld 的 LTO 插件不可用，
+                      -fuse-linker-plugin 报错；-flto 改走 lto-wrapper 路径，
+                      已验证 (含静态库归档) 链接结果正常。
+                   2) cc1 的插件支持被关闭，-fplugin 不可用。
                    构建/日志/安装目录会自动追加 -static 后缀，与动态构建互不干扰。
   --fresh          构建前删除已有的 build/log/install 目录
   --clean          构建完成后删除构建目录和日志目录

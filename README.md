@@ -169,6 +169,19 @@
 需要 host 提供 `libc.a`、`libstdc++.a`（LLVM 另需 `libz.a`）。
 `build-native-gcc.sh`、`build-native-llvm.sh` 与 `build-qemu.sh` 同样支持该选项。
 
+静态构建换取可移植性，代价是失去依赖动态加载的能力：
+
+| 能力 | 动态构建 | `--static` |
+|------|----------|-----------|
+| `-flto` | 可用 | 可用（走 `lto-wrapper`，不经 ld 插件） |
+| `-fuse-linker-plugin` | 可用 | 报错，`liblto_plugin.so` 不生成 |
+| GCC 插件 `-fplugin` | 可用 | 报错 `plugin support is disabled` |
+| LLVM `libclang.so` / `libclang-cpp.so` | 生成 | 不生成（`LLVM_ENABLE_PIC=OFF`），依赖 C API 的工具无法链接 |
+
+此外静态可执行文件中的 `dlopen` 需要运行时存在与链接时同版本的 glibc 共享库，
+拷贝到其他机器后不可靠，因此任何插件机制都不应依赖。
+需要插件、`libclang` 或链接期 LTO 插件时，请使用动态构建。
+
 ### 版本参数 git 格式
 
 版本参数（如 `--gcc-ver`、`--llvm-ver`）支持 `git[:REF][:update]` 格式：
