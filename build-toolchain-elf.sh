@@ -164,8 +164,7 @@ if [[ "$STATIC_BUILD" == true ]]; then
     gcc_static_args+=(--disable-plugin)
     gcc_configure_env=(env "LDFLAGS=-static")
 
-    host_libc_a="$(gcc -print-file-name=libc.a 2>/dev/null || true)"
-    if [[ ! -f "$host_libc_a" ]]; then
+    if ! host_has_static_lib libc.a; then
         warn "未找到 libc.a，静态链接可能失败。请安装 glibc-static (RPM) 或 libc6-dev (DEB)。"
     fi
 fi

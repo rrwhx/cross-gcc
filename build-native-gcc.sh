@@ -66,10 +66,14 @@ usage() {
   --static         静态链接工具链自身的可执行文件 (gcc/as/ld/gdb 等)，
                    产物不依赖 host 的 libc/libstdc++，可随意拷贝到同架构机器执行。
                    需要 host 提供 libc.a 等静态库 (如 glibc-static / libc6-dev)。
-                   注意: 静态构建会关闭 gold 与 gprofng；LTO 插件仍编入，但静态 ld
-                   在异构机器上 dlopen 插件可能失败，此时链接期 LTO 不可用。
-                   与 --enable-gdb 同用时会额外静态编译 gmp/mpfr 依赖，并关闭
-                   gdb 的 TUI/python/gdbserver 以保证全静态链接。
+                   注意: 静态构建会失去两项能力 —
+                   1) liblto_plugin 只生成静态库 (不生成 .so)，ld 的 LTO 插件不可用，
+                      -fuse-linker-plugin 报错；-flto 改走 lto-wrapper 路径，
+                      已验证 (含静态库归档) 链接结果正常。
+                   2) cc1 的插件支持被关闭，-fplugin 不可用。
+                   与 --enable-gdb 同用时: 需要 host 提供 libgmp.a/libmpfr.a (缺失则报错)，
+                   并关闭 gdb 的 TUI/python/gdbserver 以保证全静态链接。
+                   构建/日志/安装目录会自动追加 -static 后缀，与动态构建互不干扰。
   --fresh          构建前删除已有的 build/log/install 目录
   --clean          构建完成后删除构建目录和日志目录
   --archive        构建完成后将工具链打包成 tar.xz 并删除原目录
@@ -149,6 +153,7 @@ fi
 #   libstdc++.so 等) 仍保持共享构建, 不受本选项影响。
 binutils_static_args=()
 gdb_static_args=()
+gdb_only_static_args=()
 gcc_static_args=()
 binutils_make_args=()
 gdb_make_args=()
@@ -165,17 +170,19 @@ if [[ "$STATIC_BUILD" == true ]]; then
     binutils_static_args+=(--disable-shared)
     binutils_make_args=("LDFLAGS=-all-static")
 
-    gdb_static_args+=(--disable-shared --with-static-standard-libraries
-                      --without-python --disable-tui
-                      --disable-gdbserver --disable-gprofng)
+    # gdb 专属的静态开关 (关闭依赖动态加载的 python/TUI/gdbserver)，
+    # 随 binutils 树编译时也需要传入。gdb 14+ 依赖的 GMP/MPFR 静态库须由 host 提供。
+    gdb_only_static_args=(--with-static-standard-libraries
+                          --without-python --disable-tui --disable-gdbserver)
+    gdb_static_args+=(--disable-shared --disable-gprofng "${gdb_only_static_args[@]}")
     gdb_make_args=("LDFLAGS=-all-static")
+    [[ "$ENABLE_GDB" == true ]] && require_static_gdb_libs
 
     gcc_static_args+=(--disable-plugin)
     gcc_configure_env=(env "LDFLAGS=-static")
 
     # 简单前置检查：静态链接需要 host 提供 libc.a
-    host_libc_a="$(gcc -print-file-name=libc.a 2>/dev/null || true)"
-    if [[ ! -f "$host_libc_a" ]]; then
+    if ! host_has_static_lib libc.a; then
         warn "未找到 libc.a，静态链接可能失败。请安装 glibc-static (RPM) 或 libc6-dev (DEB)。"
     fi
 fi
@@ -235,33 +242,6 @@ ensure_gcc_prerequisites() {
     fi
 }
 
-# 为静态 gdb 编译静态 gmp + mpfr, 安装到 $1 (deps 前缀)。
-# gdb 14+ 需要 GMP/MPFR, 而 host 通常只提供动态库; 这里复用 GCC 已下载的
-# gmp/mpfr 源码 (contrib/download_prerequisites 建立的 gmp、mpfr 符号链接),
-# 单独编译出 .a 供 gdb 全静态链接使用。
-build_static_gdb_deps() {
-    local pfx="$1"
-    if [[ -f "$pfx/lib/libgmp.a" && -f "$pfx/lib/libmpfr.a" ]]; then
-        info "gdb 静态依赖已存在, 跳过: $pfx"
-        return
-    fi
-    ensure_gcc_prerequisites
-    local gmp_src="$SRC_DIR_GCC/gmp" mpfr_src="$SRC_DIR_GCC/mpfr"
-    [[ -d "$gmp_src" && -d "$mpfr_src" ]] || error "未找到 gmp/mpfr 源码: $gmp_src, $mpfr_src"
-    local bdir="$BUILD_DIR/build-gdb-deps"
-    step "=== 为静态 GDB 构建 gmp/mpfr 依赖 ==="
-    mkdir -p "$bdir/gmp" && cd "$bdir/gmp" || error "无法进入 $bdir/gmp"
-    build_step "deps-gmp-configure" "${LOG_DIR_GDB}" \
-        "$gmp_src/configure" --prefix="$pfx" --disable-shared --enable-static
-    build_step "deps-gmp-build"   "${LOG_DIR_GDB}" make -j${THREADS}
-    build_step "deps-gmp-install" "${LOG_DIR_GDB}" make install
-    mkdir -p "$bdir/mpfr" && cd "$bdir/mpfr" || error "无法进入 $bdir/mpfr"
-    build_step "deps-mpfr-configure" "${LOG_DIR_GDB}" \
-        "$mpfr_src/configure" --prefix="$pfx" --with-gmp="$pfx" --disable-shared --enable-static
-    build_step "deps-mpfr-build"   "${LOG_DIR_GDB}" make -j${THREADS}
-    build_step "deps-mpfr-install" "${LOG_DIR_GDB}" make install
-}
-
 # 根据 --enable-gdb/--disable-gdb 决定 gdb 的编译方式:
 # - binutils 为 git 源 (binutils-gdb.git) 时, gdb 随 binutils 一起编译;
 # - binutils 为 release 源码包 (不含 gdb) 时, 单独下载 gdb 源码包并独立编译。
@@ -269,7 +249,7 @@ binutils_gdb_args=()
 BUILD_GDB_SEPARATE=false
 if [[ "$BINUTILS_VER" == git* ]]; then
     if [[ "$ENABLE_GDB" == true ]]; then
-        binutils_gdb_args+=(--enable-gdb)
+        binutils_gdb_args+=(--enable-gdb "${gdb_only_static_args[@]}")
     else
         binutils_gdb_args+=(--disable-gdb --disable-sim)
     fi
@@ -331,12 +311,6 @@ build_step "install" "${LOG_DIR_BINUTILS}" \
 # 使用 release 源码包时单独编译 gdb (git 源已随 binutils 编译)
 if [[ "$BUILD_GDB_SEPARATE" == true ]]; then
     step "=== 构建 GDB (独立) ==="
-    gdb_dep_args=()
-    if [[ "$STATIC_BUILD" == true ]]; then
-        GDB_DEPS_PREFIX="$BUILD_DIR/gdb-deps-prefix"
-        build_static_gdb_deps "$GDB_DEPS_PREFIX"
-        gdb_dep_args=(--with-gmp="$GDB_DEPS_PREFIX" --with-mpfr="$GDB_DEPS_PREFIX")
-    fi
     mkdir -p "$BUILD_DIR_GDB"
     cd "$BUILD_DIR_GDB" || error "无法进入构建目录"
     build_step "configure" "${LOG_DIR_GDB}" \
@@ -346,8 +320,7 @@ if [[ "$BUILD_GDB_SEPARATE" == true ]]; then
         --disable-nls \
         --disable-werror \
         --disable-sim \
-        "${gdb_static_args[@]}" \
-        "${gdb_dep_args[@]}"
+        "${gdb_static_args[@]}"
     # 仅构建/安装 gdb 组件, 避免覆盖 binutils 已安装的 bfd/opcodes 等
     if [[ "$STATIC_BUILD" == true ]]; then
         build_step "configure-host" "${LOG_DIR_GDB}" \

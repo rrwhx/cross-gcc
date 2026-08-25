@@ -70,6 +70,8 @@ usage() {
                       -fuse-linker-plugin 报错；-flto 改走 lto-wrapper 路径，
                       已验证 (含静态库归档) 链接结果正常。
                    2) cc1 的插件支持被关闭，-fplugin 不可用。
+                   与 --enable-gdb 同用时: 需要 host 提供 libgmp.a/libmpfr.a (缺失则报错)，
+                   并关闭 gdb 的 TUI/python/gdbserver 以保证全静态链接。
                    构建/日志/安装目录会自动追加 -static 后缀，与动态构建互不干扰。
   --fresh          构建前删除已有的 build/log/install 目录
   --clean          构建完成后删除构建目录和日志目录
@@ -208,6 +210,7 @@ esac
 # 完全不读取这里的变量, 因此目标 C 库不受影响 (切勿改成 export LDFLAGS)。
 binutils_static_args=()
 binutils_make_args=()
+gdb_static_args=()
 gcc_static_args=()
 gcc_configure_env=()
 # binutils 功能开关默认值 (动态构建): 启用 gold 与链接期 LTO 插件
@@ -224,13 +227,12 @@ if [[ "$STATIC_BUILD" == true ]]; then
     gcc_static_args+=(--disable-plugin)
     gcc_configure_env=(env "LDFLAGS=-static")
 
-    if [[ "$ENABLE_GDB" == true ]]; then
-        warn "静态构建暂不支持交叉 gdb (需要 host 提供静态 gmp/mpfr)，已自动关闭 gdb"
-        ENABLE_GDB=false
-    fi
+    # gdb 随 binutils 树一起编译，额外关闭依赖动态加载的组件 (python/TUI/gdbserver)。
+    # gdb 14+ 依赖的 GMP/MPFR 静态库须由 host 提供 (启用 gdb 时会先校验)。
+    gdb_static_args=(--with-static-standard-libraries
+                     --without-python --disable-tui --disable-gdbserver)
 
-    host_libc_a="$(gcc -print-file-name=libc.a 2>/dev/null || true)"
-    if [[ ! -f "$host_libc_a" ]]; then
+    if ! host_has_static_lib libc.a; then
         warn "未找到 libc.a，静态链接可能失败。请安装 glibc-static (RPM) 或 libc6-dev (DEB)。"
     fi
 fi
@@ -240,7 +242,8 @@ fi
 binutils_gdb_args=()
 if [[ "$BINUTILS_VER" == git* ]]; then
     if [[ "$ENABLE_GDB" == true ]]; then
-        binutils_gdb_args+=(--enable-gdb)
+        [[ "$STATIC_BUILD" == true ]] && require_static_gdb_libs
+        binutils_gdb_args+=(--enable-gdb "${gdb_static_args[@]}")
     else
         binutils_gdb_args+=(--disable-gdb --disable-sim)
     fi
@@ -581,6 +584,7 @@ if [[ "$STATIC_BUILD" == true ]]; then
         "${CROSS_PREFIX}/bin/${TARGET}-ar" "${CROSS_PREFIX}/bin/${TARGET}-objdump" \
         "${CROSS_PREFIX}/bin/${TARGET}-gcc" "${CROSS_PREFIX}/bin/${TARGET}-g++" \
         "${CROSS_PREFIX}/bin/${TARGET}-gfortran" \
+        "${CROSS_PREFIX}/bin/${TARGET}-gdb" \
         "${libexec_dir}/cc1" "${libexec_dir}/cc1plus" "${libexec_dir}/f951" || true
 fi
 

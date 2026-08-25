@@ -251,6 +251,30 @@ fresh_clean_dirs() {
     fi
 }
 
+# 检测 host 是否提供某个静态库 (如 libgmp.a / libc.a)
+# gcc -print-file-name 找不到时会原样回显文件名，因此只有绝对路径才算存在
+# (避免当前目录下的同名文件造成误判)。
+host_has_static_lib() {
+    local path
+    path="$(gcc -print-file-name="$1" 2>/dev/null || true)"
+    [[ "$path" == /* && -f "$path" ]]
+}
+
+# 静态构建 gdb 的前置检查: gdb 14+ 依赖 GMP/MPFR，全静态链接需要它们的静态库。
+# 缺失时直接失败 (而不是静默降级或自行编译)，由使用者决定如何补齐。
+require_static_gdb_libs() {
+    local missing=()
+    host_has_static_lib libgmp.a  || missing+=(libgmp.a)
+    host_has_static_lib libmpfr.a || missing+=(libmpfr.a)
+    [[ ${#missing[@]} -eq 0 ]] && return 0
+    error "静态构建 gdb 需要 host 提供静态库，缺失: ${missing[*]}
+  DEB: 运行 ./install-prerequisites.sh (libgmp-dev/libmpfr-dev 已含静态库)
+  RPM: 另需安装 gmp-static / mpfr-static
+  源码方式: ./install-flex-bison.sh --with-gmp-mpfr，再按其提示导出
+            LIBRARY_PATH (给 gcc 找 .a) 与 C_INCLUDE_PATH (给 gdb configure 找头文件)
+  也可改用 --disable-gdb 或去掉 --static"
+}
+
 # 校验可执行文件是否为静态链接
 # 静态 PIE 在 file 输出中显示为 "static-pie linked"，同样属于静态链接。
 # 用法: verify_static_binaries [--require] <可执行文件路径>...

@@ -176,7 +176,21 @@
 | `-flto` | 可用 | 可用（走 `lto-wrapper`，不经 ld 插件） |
 | `-fuse-linker-plugin` | 可用 | 报错，`liblto_plugin.so` 不生成 |
 | GCC 插件 `-fplugin` | 可用 | 报错 `plugin support is disabled` |
+| gdb Python 脚本 / TUI | 可用 | 不可用（`--without-python --disable-tui`） |
 | LLVM `libclang.so` / `libclang-cpp.so` | 生成 | 不生成（`LLVM_ENABLE_PIC=OFF`），依赖 C API 的工具无法链接 |
+
+`--static` 可与 `--enable-gdb` 同用，但要求 host 提供 `libgmp.a`/`libmpfr.a`（gdb 14+ 依赖 GMP/MPFR）：
+DEB 系由 `install-prerequisites.sh` 安装的 `libgmp-dev`/`libmpfr-dev` 本身就含静态库，
+RPM 系可能需额外安装 `gmp-static`/`mpfr-static`；缺失时构建会直接报错而不是静默降级。
+静态 gdb 会关闭 python/TUI/gdbserver 以保证全静态链接。
+
+发行版不提供静态库时，可用 `./install-flex-bison.sh --with-gmp-mpfr` 从源码编译到 `~/.local`，
+之后导出两个变量（缺一不可）：
+
+```bash
+export LIBRARY_PATH="$HOME/.local/lib:$LIBRARY_PATH"        # gcc 找 libgmp.a/libmpfr.a
+export C_INCLUDE_PATH="$HOME/.local/include:$C_INCLUDE_PATH" # gdb configure 找 gmp.h/mpfr.h
+```
 
 此外静态可执行文件中的 `dlopen` 需要运行时存在与链接时同版本的 glibc 共享库，
 拷贝到其他机器后不可靠，因此任何插件机制都不应依赖。
