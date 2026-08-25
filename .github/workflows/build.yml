@@ -44,6 +44,10 @@ jobs:
             libc: glibc
           - arch: riscv64
             libc: musl
+          # 裸机工具链 (newlib)，由 build-toolchain-elf.sh 构建；
+          # 该脚本已在 paths 触发列表中，此前没有任何 job 覆盖它。
+          - arch: riscv64
+            libc: newlib
 
     steps:
       - name: Checkout code
@@ -66,28 +70,44 @@ jobs:
 
       - name: Compute target triple
         id: triple
+        env:
+          ARCH: ${{ matrix.arch }}
+          LIBC: ${{ matrix.libc }}
         run: |
-          if [ "${{ matrix.libc }}" = "musl" ]; then suf=musl; else suf=gnu; fi
-          echo "target=${{ matrix.arch }}-linux-$suf" >> "$GITHUB_OUTPUT"
+          case "$LIBC" in
+            musl)   target="$ARCH-linux-musl" ;;
+            newlib) target="$ARCH-unknown-elf" ;;
+            *)      target="$ARCH-linux-gnu" ;;
+          esac
+          echo "target=$target" >> "$GITHUB_OUTPUT"
 
       # 发布产物会被下载到其他机器上运行，因此静态链接工具链自身的可执行文件，
       # 避免依赖 runner 的 glibc/libstdc++ 版本。显式给出 --install-dir，
       # 保持安装路径为 ./cross-<triple> (否则 --static 会追加 -static 后缀)。
       - name: Build toolchain
-        run: |
-          ./build-toolchain-generic.sh --arch ${{ matrix.arch }} --libc ${{ matrix.libc }} \
-            --static --install-dir ./cross-${{ steps.triple.outputs.target }} --clean
         env:
+          ARCH: ${{ matrix.arch }}
+          LIBC: ${{ matrix.libc }}
+          TRIPLE: ${{ steps.triple.outputs.target }}
           GCC_VER: ${{ steps.versions.outputs.gcc_ver }}
           BINUTILS_VER: ${{ steps.versions.outputs.binutils_ver }}
           GLIBC_VER: ${{ steps.versions.outputs.glibc_ver }}
           MUSL_VER: ${{ steps.versions.outputs.musl_ver }}
           LINUX_VER: ${{ steps.versions.outputs.linux_ver }}
+        run: |
+          if [ "$LIBC" = newlib ]; then
+            ./build-toolchain-elf.sh --arch "$ARCH" \
+              --static --install-dir "./cross-$TRIPLE" --clean
+          else
+            ./build-toolchain-generic.sh --arch "$ARCH" --libc "$LIBC" \
+              --static --install-dir "./cross-$TRIPLE" --clean
+          fi
 
       # 复用 lib.sh 的 verify_static_binaries，避免校验规则在 CI 与脚本中重复实现。
       # --require: 缺失即失败，防止路径变化导致校验被静默跳过。
       - name: Verify toolchain is statically linked
         env:
+          LIBC: ${{ matrix.libc }}
           TRIPLE: ${{ steps.triple.outputs.target }}
         run: |
           source ./lib.sh
@@ -95,13 +115,18 @@ jobs:
           gcc_bin="$prefix/bin/$TRIPLE-gcc"
           [ -x "$gcc_bin" ] || error "工具链驱动缺失: $gcc_bin"
           libexec=$(dirname "$("$gcc_bin" -print-prog-name=cc1)")
-          verify_static_binaries --require \
-            "$prefix/bin/$TRIPLE-as" "$prefix/bin/$TRIPLE-ld" \
-            "$prefix/bin/$TRIPLE-ar" "$prefix/bin/$TRIPLE-objdump" \
-            "$gcc_bin" "$prefix/bin/$TRIPLE-g++" \
-            "$prefix/bin/$TRIPLE-gfortran" \
-            "$libexec/cc1" "$libexec/cc1plus" "$libexec/f951" \
+          required=(
+            "$prefix/bin/$TRIPLE-as" "$prefix/bin/$TRIPLE-ld"
+            "$prefix/bin/$TRIPLE-ar" "$prefix/bin/$TRIPLE-objdump"
+            "$gcc_bin" "$prefix/bin/$TRIPLE-g++"
+            "$libexec/cc1" "$libexec/cc1plus"
             "$libexec/lto1" "$libexec/collect2"
+          )
+          # 裸机工具链只启用 c,c++，没有 Fortran
+          if [ "$LIBC" != newlib ]; then
+            required+=("$prefix/bin/$TRIPLE-gfortran" "$libexec/f951")
+          fi
+          verify_static_binaries --require "${required[@]}"
 
       - name: Install qemu-user (for smoke test)
         run: |
@@ -180,6 +205,7 @@ jobs:
             |------|------|
             | riscv64 | glibc |
             | riscv64 | musl |
+            | riscv64 | newlib (裸机 ELF) |
             | riscv32 | glibc |
             | loongarch64 | glibc |
             | aarch64 | glibc |
