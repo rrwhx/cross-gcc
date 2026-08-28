@@ -275,6 +275,109 @@ mount -t sysfs  none /sys
 
 echo "Welcome to BusyBox initramfs"
 
+# --- virtio-9p share auto-mount -------------------------------------------
+# Mounts every virtio-9p share the host exported, at <base>/<mount_tag>.
+# Runs before the workload so shares are ready; failures only warn, because a
+# missing share must not stop the workload from running.
+#
+# Host side (one -device per tag):
+#   -fsdev local,id=fs0,path=/host/dir,security_model=none \
+#   -device virtio-9p-device,fsdev=fs0,mount_tag=share
+#   -> guest gets /mnt/share
+#
+# Tunables (the kernel exports unrecognized cmdline KEY=VALUE as env, so these
+# can be set straight from -append):
+#   MOUNT9P=0          skip entirely
+#   MOUNT9P_BASE=DIR   mount root, default /mnt
+#   MOUNT9P_OPTS=STR   mount -o options; 9p2000.L gives full POSIX semantics,
+#                      and the default msize is small enough to make large
+#                      file I/O noticeably slow
+#   MOUNT9P_RO=1       mount read-only
+#   MOUNT9P_SYSFS_ROOT overrides the virtio device dir (testing only)
+
+# Extract msize=N from a comma-separated mount option list (empty if absent).
+_9p_msize() {
+    for _kv in $(printf '%s' "$1" | tr ',' ' '); do
+        case "$_kv" in
+            msize=*) printf '%s' "${_kv#msize=}"; return ;;
+        esac
+    done
+}
+
+mount_9p_shares() {
+    if [ "${MOUNT9P:-1}" != 1 ]; then
+        echo "9p: disabled by MOUNT9P=${MOUNT9P}"
+        return 0
+    fi
+
+    _base=${MOUNT9P_BASE:-/mnt}
+    _opts=${MOUNT9P_OPTS:-trans=virtio,version=9p2000.L,msize=262144}
+    [ "${MOUNT9P_RO:-0}" = 1 ] && _opts="$_opts,ro"
+    _root=${MOUNT9P_SYSFS_ROOT:-/sys/bus/virtio/devices}
+    _n=0
+
+    for _dev in "$_root"/virtio*; do
+        [ -f "$_dev/mount_tag" ] || continue
+        # mount_tag is a fixed-size NUL-padded sysfs buffer; the NULs must be
+        # stripped or mount gets a tag with invisible bytes and cannot find it.
+        _tag=$(tr -d '\0' < "$_dev/mount_tag" 2>/dev/null)
+        [ -n "$_tag" ] || continue
+        # The tag becomes a path component: reject separators and whitespace.
+        case "$_tag" in
+            */*|*" "*|*"	"*)
+                echo "9p: rejecting tag [$_tag] (path separator or whitespace)"
+                continue ;;
+        esac
+
+        _mp=$_base/$_tag
+        # Skip if already mounted: re-mounting the same tag stacks mounts
+        # silently instead of failing, which is harder to debug.
+        if grep -q " $_mp 9p " /proc/mounts 2>/dev/null; then
+            echo "9p: [$_tag] already mounted on $_mp"
+            _n=$((_n+1))
+            continue
+        fi
+        if ! mkdir -p "$_mp" 2>/dev/null; then
+            echo "9p: cannot create mount point $_mp" >&2
+            continue
+        fi
+
+        if mount -t 9p -o "$_opts" "$_tag" "$_mp" 2>/tmp/.9p.err; then
+            # msize is negotiated with the server, and the kernel silently
+            # clamps it to whatever the transport accepts. Report what actually
+            # took effect, not what we asked for -- a silently reduced msize is
+            # a common cause of "9p feels slow" and is otherwise invisible.
+            _eff=""
+            while read -r _s _d _t _o _rest; do
+                [ "$_d" = "$_mp" ] && [ "$_t" = 9p ] && _eff=$_o
+            done < /proc/mounts
+            _want_ms=$(_9p_msize "$_opts")
+            _got_ms=$(_9p_msize "$_eff")
+            # The kernel only lists msize in /proc/mounts when it was requested,
+            # so omit it rather than printing a confusing "unknown".
+            if [ -n "$_got_ms" ]; then
+                echo "9p: mounted [$_tag] -> $_mp (msize=$_got_ms)"
+            else
+                echo "9p: mounted [$_tag] -> $_mp"
+            fi
+            if [ -n "$_want_ms" ] && [ -n "$_got_ms" ] && [ "$_want_ms" != "$_got_ms" ]; then
+                echo "9p: NOTE [$_tag] msize clamped by kernel: requested $_want_ms, effective $_got_ms" >&2
+            fi
+            _n=$((_n+1))
+        else
+            echo "9p: FAILED [$_tag] -> $_mp: $(tr '\n' ' ' < /tmp/.9p.err)" >&2
+            # A kernel without 9p is the most common cause and mount's own
+            # message does not say so.
+            grep -qw 9p /proc/filesystems 2>/dev/null \
+                || echo "9p: kernel has no 9p fs (need CONFIG_9P_FS + CONFIG_NET_9P_VIRTIO)" >&2
+        fi
+        rm -f /tmp/.9p.err
+    done
+
+    [ "$_n" = 0 ] || echo "9p: $_n share(s) ready under $_base"
+}
+mount_9p_shares
+
 # Prefer bash when available
 if [ -x /bin/bash ]; then
     SHELL=/bin/bash
