@@ -71,6 +71,7 @@ info "==============================================="
 
 # 遍历每个架构和 libc 组合
 declare -a failed_list=()
+declare -a failed_cmds=()
 
 for arch in "${arch_list[@]}"; do
     for libc in "${libc_list[@]}"; do
@@ -78,11 +79,16 @@ for arch in "${arch_list[@]}"; do
         info "开始构建工具链：ARCH=$arch, LIBC=$libc"
         step "======================================================================"
 
-        if "$SCRIPT_DIR/build-toolchain-generic.sh" --arch "$arch" --libc "$libc" "${extra_args[@]}"; then
+        # 先打印完整命令: 批量构建时需要能直接拿单条命令出来单独重跑
+        cmd=("$SCRIPT_DIR/build-toolchain-generic.sh" --arch "$arch" --libc "$libc" "${extra_args[@]}")
+        info "执行: $(format_cmd "${cmd[@]}")"
+
+        if "${cmd[@]}"; then
             ok "构建成功：ARCH=$arch, LIBC=$libc"
         else
             warn "构建失败：ARCH=$arch, LIBC=$libc"
             failed_list+=("ARCH=$arch, LIBC=$libc")
+            failed_cmds+=("$(format_cmd "${cmd[@]}")")
         fi
     done
 done
@@ -90,8 +96,9 @@ done
 if [[ ${#failed_list[@]} -gt 0 ]]; then
     warn "==============================================="
     warn "以下构建任务失败 (${#failed_list[@]}):"
-    for item in "${failed_list[@]}"; do
-        warn "  - $item"
+    for i in "${!failed_list[@]}"; do
+        warn "  - ${failed_list[$i]}"
+        warn "    复现: ${failed_cmds[$i]}"
     done
     warn "==============================================="
     exit 1

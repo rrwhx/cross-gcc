@@ -172,6 +172,20 @@ print_build_error_context() {
     warn "---"
 }
 
+# 将命令渲染为可直接粘贴到终端复现的一行
+# 只给确实需要的参数加引号 (含空格/引号/通配符等), 否则原样输出以保持可读
+format_cmd() {
+    local out="" a
+    for a in "$@"; do
+        if [[ -n "$a" && "$a" != *[!A-Za-z0-9_./=:,+-]* ]]; then
+            out+="$a "
+        else
+            out+="$(printf '%q' "$a") "
+        fi
+    done
+    printf '%s' "${out% }"
+}
+
 # 构建函数
 build_step() {
     local name=$1
@@ -179,12 +193,18 @@ build_step() {
     mkdir -p "$log_dir"
     shift 2
 
-    step "执行: $*"
-    if "$@" 2>&1 | cat > "${log_dir}/${name}.log"; then
+    local log_file="${log_dir}/${name}.log"
+    # 打印成可直接粘贴复现的形式。cwd 必须带上: 多数调用方会先 cd 到构建目录,
+    # 而 cmake/configure 就地生成产物, 少了 cwd 这条命令没法复现。
+    local repro="(cd $(format_cmd "$PWD") && $(format_cmd "$@"))"
+    step "执行: $repro"
+    if "$@" 2>&1 | cat > "$log_file"; then
         ok "${name} 成功"
     else
-        print_build_error_context "${log_dir}/${name}.log"
-        error "${name} 失败，详见 ${log_dir}/${name}.log"
+        print_build_error_context "$log_file"
+        # 失败点距离上面那行"执行:"可能隔着上千行输出, 这里再打印一次
+        warn "复现: $repro"
+        error "${name} 失败，详见 $log_file"
     fi
 }
 

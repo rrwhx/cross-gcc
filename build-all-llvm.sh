@@ -75,6 +75,7 @@ fi
 # 构建
 # ---------------------------------------------------------------------------
 declare -a failed_list=()
+declare -a failed_cmds=()
 
 info "==============================================="
 info "LLVM 版本: ${version_list[*]}"
@@ -90,16 +91,21 @@ for ver in "${version_list[@]}"; do
         info "开始构建 LLVM：VER=$ver, ARCH=$arch"
         step "======================================================================"
 
-        if "$SCRIPT_DIR/build-toolchain-llvm.sh" \
-            --arch "$arch" \
-            --llvm-ver "$ver" \
-            --target-gcc-toolchain "$gcc_dir" \
-            --target-sysroot "$gcc_dir/${arch}-linux-gnu" \
-            "${extra_args[@]}"; then
+        # 先打印完整命令: 批量构建时需要能直接拿单条命令出来重跑
+        cmd=("$SCRIPT_DIR/build-toolchain-llvm.sh"
+             --arch "$arch"
+             --llvm-ver "$ver"
+             --target-gcc-toolchain "$gcc_dir"
+             --target-sysroot "$gcc_dir/${arch}-linux-gnu"
+             "${extra_args[@]}")
+        info "执行: $(format_cmd "${cmd[@]}")"
+
+        if "${cmd[@]}"; then
             ok "构建成功：LLVM $ver / $arch"
         else
             warn "构建失败：LLVM $ver / $arch"
             failed_list+=("LLVM $ver / $arch")
+            failed_cmds+=("$(format_cmd "${cmd[@]}")")
         fi
     done
 done
@@ -107,8 +113,9 @@ done
 if [[ ${#failed_list[@]} -gt 0 ]]; then
     warn "==============================================="
     warn "以下构建任务失败 (${#failed_list[@]}):"
-    for item in "${failed_list[@]}"; do
-        warn "  - $item"
+    for i in "${!failed_list[@]}"; do
+        warn "  - ${failed_list[$i]}"
+        warn "    复现: ${failed_cmds[$i]}"
     done
     warn "==============================================="
     exit 1
