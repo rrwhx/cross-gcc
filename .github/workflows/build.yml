@@ -58,15 +58,70 @@ jobs:
           sudo apt-get update
           ./install-prerequisites.sh
 
-      - name: Get latest versions
+      # 优先用上游最新版; 取不到则回落到 versions.env 的固定版本。
+      # 关键是无论走哪条路都如实输出"实际使用的版本"与来源: 之前这里是
+      #   eval "$(./get-latest-versions.sh --shell)"
+      # 命令替换会吞掉脚本的非零退出码, 于是取值失败时静默写出空值 ——
+      # job 全绿、工具链其实按 versions.env 编出来了, 但 release 版本栏是空的。
+      - name: Resolve component versions
         id: versions
         run: |
-          eval "$(./get-latest-versions.sh --shell)"
-          echo "gcc_ver=$GCC_VER" >> $GITHUB_OUTPUT
-          echo "binutils_ver=$BINUTILS_VER" >> $GITHUB_OUTPUT
-          echo "glibc_ver=$GLIBC_VER" >> $GITHUB_OUTPUT
-          echo "musl_ver=$MUSL_VER" >> $GITHUB_OUTPUT
-          echo "linux_ver=$LINUX_VER" >> $GITHUB_OUTPUT
+          if out=$(./get-latest-versions.sh --shell 2>fetch.err); then
+            eval "$out"
+            VERSION_SOURCE=latest
+            echo "::notice::已取到上游最新版本"
+          else
+            VERSION_SOURCE=pinned
+            echo "::warning::上游版本获取失败, 回落到 versions.env 的固定版本"
+            echo "::group::get-latest-versions.sh 的错误输出"
+            cat fetch.err || true
+            echo "::endgroup::"
+            # versions.env 用 ${VAR:-默认} 写法, 此处变量均未设置, source 即得固定版本
+            . ./versions.env
+          fi
+
+          # 解析后仍为空说明两条路都没成: 必须失败, 不能再让空值流到 release
+          for v in GCC_VER BINUTILS_VER GLIBC_VER MUSL_VER LINUX_VER; do
+            [ -n "${!v:-}" ] || { echo "::error::$v 解析后仍为空"; exit 1; }
+          done
+
+          {
+            echo "gcc_ver=$GCC_VER"
+            echo "binutils_ver=$BINUTILS_VER"
+            echo "glibc_ver=$GLIBC_VER"
+            echo "musl_ver=$MUSL_VER"
+            echo "linux_ver=$LINUX_VER"
+            echo "version_source=$VERSION_SOURCE"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "::group::本次使用的组件版本 (来源: $VERSION_SOURCE)"
+          printf '  %-12s %s\n' GCC "$GCC_VER" binutils "$BINUTILS_VER" \
+                                 glibc "$GLIBC_VER" musl "$MUSL_VER" Linux "$LINUX_VER"
+          echo "::endgroup::"
+
+      # release job 与 build job 是两个 job, 若各自再 fetch 一次可能拿到不同结果,
+      # 导致说明与产物不符。故由 build 侧把实际用的版本落成 artifact 传过去。
+      - name: Save resolved versions (once)
+        if: matrix.arch == 'riscv64' && matrix.libc == 'glibc'
+        run: |
+          mkdir -p versioninfo
+          {
+            echo "GCC_VER=${{ steps.versions.outputs.gcc_ver }}"
+            echo "BINUTILS_VER=${{ steps.versions.outputs.binutils_ver }}"
+            echo "GLIBC_VER=${{ steps.versions.outputs.glibc_ver }}"
+            echo "MUSL_VER=${{ steps.versions.outputs.musl_ver }}"
+            echo "LINUX_VER=${{ steps.versions.outputs.linux_ver }}"
+            echo "VERSION_SOURCE=${{ steps.versions.outputs.version_source }}"
+          } > versioninfo/versions.txt
+          cat versioninfo/versions.txt
+
+      - name: Upload resolved versions (once)
+        if: matrix.arch == 'riscv64' && matrix.libc == 'glibc'
+        uses: actions/upload-artifact@v7
+        with:
+          name: toolchain-versions
+          path: versioninfo/versions.txt
+          retention-days: 7
 
       - name: Compute target triple
         id: triple
@@ -84,6 +139,42 @@ jobs:
       # 发布产物会被下载到其他机器上运行，因此静态链接工具链自身的可执行文件，
       # 避免依赖 runner 的 glibc/libstdc++ 版本。显式给出 --install-dir，
       # 保持安装路径为 ./cross-<triple> (否则 --static 会追加 -static 后缀)。
+      # 失败时最想要的两样东西: 环境是什么、以及怎么在本地一模一样地跑一遍
+      - name: Print build context
+        env:
+          ARCH: ${{ matrix.arch }}
+          LIBC: ${{ matrix.libc }}
+          TRIPLE: ${{ steps.triple.outputs.target }}
+          GCC_VER: ${{ steps.versions.outputs.gcc_ver }}
+          BINUTILS_VER: ${{ steps.versions.outputs.binutils_ver }}
+          GLIBC_VER: ${{ steps.versions.outputs.glibc_ver }}
+          MUSL_VER: ${{ steps.versions.outputs.musl_ver }}
+          LINUX_VER: ${{ steps.versions.outputs.linux_ver }}
+          VERSION_SOURCE: ${{ steps.versions.outputs.version_source }}
+        run: |
+          echo "::group::runner 环境"
+          echo "matrix        : ARCH=$ARCH LIBC=$LIBC TRIPLE=$TRIPLE"
+          echo "commit        : ${{ github.sha }}"
+          echo "版本来源      : $VERSION_SOURCE"
+          echo "gcc (host)    : $(gcc --version | head -1)"
+          echo "make          : $(make --version | head -1)"
+          echo "nproc / mem   : $(nproc) 核 / $(free -h | awk '/^Mem:/{print $2}')"
+          echo "磁盘          : $(df -h . | awk 'NR==2{print $4" 可用"}')"
+          echo "MIRROR        : ${MIRROR:-<用 versions.env/lib.sh 默认>}"
+          echo "::endgroup::"
+
+          # 这段可直接复制到本地重跑该矩阵项 (含具体版本, 与 CI 完全一致)
+          if [ "$LIBC" = newlib ]; then
+            script="./build-toolchain-elf.sh --arch $ARCH"
+          else
+            script="./build-toolchain-generic.sh --arch $ARCH --libc $LIBC"
+          fi
+          echo "::group::本地复现此矩阵项"
+          echo "GCC_VER=$GCC_VER BINUTILS_VER=$BINUTILS_VER \\"
+          echo "GLIBC_VER=$GLIBC_VER MUSL_VER=$MUSL_VER LINUX_VER=$LINUX_VER \\"
+          echo "  $script --static --install-dir ./cross-$TRIPLE --clean"
+          echo "::endgroup::"
+
       - name: Build toolchain
         env:
           ARCH: ${{ matrix.arch }}
@@ -143,6 +234,25 @@ jobs:
         run: |
           tar -cJf cross-${{ steps.triple.outputs.target }}.tar.xz cross-${{ steps.triple.outputs.target }}
 
+      # 构建脚本已把每步日志写到 logs-*/; 失败时把它们摊出来,
+      # 免得为了看一行报错去下载 artifact 或重跑一次
+      - name: Dump build logs on failure
+        if: failure()
+        run: |
+          echo "::group::日志目录"
+          ls -lhR logs-* 2>/dev/null | head -60 || echo "(无 logs-* 目录)"
+          echo "::endgroup::"
+          for f in logs-*/*.log; do
+            [ -f "$f" ] || continue
+            echo "::group::tail -60 $f"
+            tail -60 "$f"
+            echo "::endgroup::"
+          done
+          echo "::group::可能相关的报错行"
+          grep -n -m40 -E "fatal error|: error:|undefined reference|collect2: error|configure: error" \
+            logs-*/*.log 2>/dev/null || echo "(未匹配到)"
+          echo "::endgroup::"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -161,16 +271,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Get latest versions
-        id: versions
-        run: |
-          eval "$(./get-latest-versions.sh --shell)"
-          echo "gcc_ver=$GCC_VER" >> $GITHUB_OUTPUT
-          echo "binutils_ver=$BINUTILS_VER" >> $GITHUB_OUTPUT
-          echo "glibc_ver=$GLIBC_VER" >> $GITHUB_OUTPUT
-          echo "musl_ver=$MUSL_VER" >> $GITHUB_OUTPUT
-          echo "linux_ver=$LINUX_VER" >> $GITHUB_OUTPUT
-
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
@@ -178,7 +278,25 @@ jobs:
           merge-multiple: true
 
       - name: List files
-        run: ls -lh artifacts/
+        run: ls -lhR artifacts/
+
+      # 直接采用 build 侧实际使用的版本, 不在这里重新 fetch:
+      # 重新取有可能与构建时不一致, 说明就会与产物不符。
+      - name: Load versions used by the build
+        run: |
+          f=artifacts/versions.txt
+          [ -f "$f" ] || { echo "::error::缺少 $f, 无法确定构建实际使用的版本"; exit 1; }
+          echo "::group::构建实际使用的版本"
+          cat "$f"
+          echo "::endgroup::"
+          cat "$f" >> "$GITHUB_ENV"
+          . "$f"
+          case "$VERSION_SOURCE" in
+            latest) note="上游最新发布版" ;;
+            pinned) note="versions.env 固定版本 (上游版本获取失败时的回落)" ;;
+            *)      note="未知 ($VERSION_SOURCE)" ;;
+          esac
+          echo "VERSION_NOTE=$note" >> "$GITHUB_ENV"
 
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2
@@ -194,11 +312,13 @@ jobs:
             ## 组件版本
             | 组件 | 版本 |
             |------|------|
-            | GCC | ${{ steps.versions.outputs.gcc_ver }} |
-            | binutils | ${{ steps.versions.outputs.binutils_ver }} |
-            | glibc | ${{ steps.versions.outputs.glibc_ver }} |
-            | musl | ${{ steps.versions.outputs.musl_ver }} |
-            | Linux 内核头文件 | ${{ steps.versions.outputs.linux_ver }} |
+            | GCC | ${{ env.GCC_VER }} |
+            | binutils | ${{ env.BINUTILS_VER }} |
+            | glibc | ${{ env.GLIBC_VER }} |
+            | musl | ${{ env.MUSL_VER }} |
+            | Linux 内核头文件 | ${{ env.LINUX_VER }} |
+
+            > 版本来源: **${{ env.VERSION_NOTE }}**
 
             ## 支持架构
             | Arch | LibC |

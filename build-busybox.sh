@@ -15,7 +15,7 @@ setup_error_trap
 # ---------------------------------------------------------------------------
 # 默认配置
 # ---------------------------------------------------------------------------
-BUSYBOX_VER="${BUSYBOX_VER:-1.38.0}"
+# 组件版本默认值来自 versions.env (由 lib.sh 加载)，可用环境变量或命令行覆盖
 BUSYBOX_URL="https://busybox.net/downloads/busybox-{VER}.tar.bz2"
 # CoreMark 固定使用 git master 最新代码
 COREMARK_GIT="https://github.com/eembc/coremark.git"

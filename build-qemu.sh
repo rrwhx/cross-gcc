@@ -27,7 +27,8 @@ TARGETS=""
 ARCH_LIST=""
 JOBS="$THREADS"
 REPO="https://${MIRROR}/git/qemu.git"
-REF="v11.0.0"
+# QEMU_REF 默认值来自 versions.env (由 lib.sh 加载)，可用环境变量或 --ref 覆盖
+REF="$QEMU_REF"
 DO_INSTALL=true
 DO_DEPS=false
 STATIC_BUILD=false

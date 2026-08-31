@@ -27,6 +27,17 @@ THREADS=${THREADS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/nul
 # 备选: mirrors.tuna.tsinghua.edu.cn, mirrors.bfsu.edu.cn, mirror.nju.edu.cn
 MIRROR="${MIRROR:-mirrors.bfsu.edu.cn}"
 
+# 组件版本默认值集中在 versions.env, 那里用 ${VAR:-默认值} 写法, 所以直接 source 即可:
+# 已设置的环境变量原样保留, 未设置或为空则取默认值。
+# 优先级: 命令行参数 > 环境变量 > versions.env
+# (各脚本在 source lib.sh 之后才解析命令行, 那里的直接赋值会覆盖此处结果)
+_versions_env="$(dirname "${BASH_SOURCE[0]}")/versions.env"
+# 缺文件就直接报错: 否则版本变为空值, 会在后面以难懂的下载 404 形式爆出来
+[[ -f "$_versions_env" ]] || error "缺少版本配置文件: $_versions_env"
+# shellcheck source=versions.env
+source "$_versions_env"
+unset _versions_env
+
 # 捕获错误并提示
 setup_error_trap() {
     trap 'error "错误发生在脚本第 ${LINENO} 行，详细信息请查看日志。"; exit 1' ERR

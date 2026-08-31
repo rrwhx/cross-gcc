@@ -19,9 +19,7 @@ source "$SCRIPT_DIR/lib.sh"
 setup_error_trap
 
 # 默认版本设置（支持环境变量覆盖）
-BINUTILS_VER="${BINUTILS_VER:-2.46.1}"
-GCC_VER="${GCC_VER:-16.1.0}"
-GDB_VER="${GDB_VER:-17.2}"
+# 组件版本默认值来自 versions.env (由 lib.sh 加载)，可用环境变量或命令行覆盖
 
 # 初始化参数
 DOWNLOAD_DIR=""; SRC_DIR=""; BUILD_DIR=""; LOG_DIR=""; INSTALL_DIR=""; WORK_DIR=""

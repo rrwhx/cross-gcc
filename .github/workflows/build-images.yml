@@ -60,8 +60,11 @@ jobs:
             exit 1
           fi
           # BusyBox：沿用脚本内置默认版本
-          BUSYBOX_VER=$(sed -n 's/^BUSYBOX_VER=.*:-\([0-9.]*\)}.*/\1/p' build-busybox.sh)
-          [ -z "$BUSYBOX_VER" ] && BUSYBOX_VER=unknown
+          # 从单一事实来源读取, 不再用正则刮 shell 脚本 (格式一改就静默取到 unknown)
+          BUSYBOX_VER=$(. ./versions.env >/dev/null 2>&1; echo "$BUSYBOX_VER")
+          # 不再 fallback 成 unknown: 静默的 unknown 会让"版本取不到"这件事
+          # 一路混进 release 说明而无人察觉 (build.yml 就是这么出的空版本表)
+          [ -n "$BUSYBOX_VER" ] || { echo "::error::versions.env 中 BUSYBOX_VER 为空"; exit 1; }
           echo "LINUX_VER=$LINUX_VER" >> "$GITHUB_ENV"
           echo "BUSYBOX_VER=$BUSYBOX_VER" >> "$GITHUB_ENV"
           echo "内核最新稳定版: $LINUX_VER"
@@ -158,12 +161,14 @@ jobs:
 
       - name: Load versions
         run: |
-          if [ -f artifacts/versions/versions.txt ]; then
-            cat artifacts/versions/versions.txt >> "$GITHUB_ENV"
-          else
-            echo "KERNEL_VER=unknown" >> "$GITHUB_ENV"
-            echo "BUSYBOX_VER=unknown" >> "$GITHUB_ENV"
-          fi
+          f=artifacts/versions/versions.txt
+          # 缺文件就失败, 不再填 unknown: 静默的 unknown 会让"版本没传过来"
+          # 一路混进 release 说明而无人察觉
+          [ -f "$f" ] || { echo "::error::缺少 $f, 无法确定构建使用的版本"; exit 1; }
+          echo "::group::构建使用的版本"
+          cat "$f"
+          echo "::endgroup::"
+          cat "$f" >> "$GITHUB_ENV"
 
       - name: Prepare release files
         run: |
