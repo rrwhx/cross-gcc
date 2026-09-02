@@ -167,7 +167,14 @@ build_step "busybox_defconfig" "$LOG_DIR" \
     ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" defconfig
 
 # 启用静态链接，禁用不兼容模块
+# 注: sed 匹配不上也返回 0。CONFIG_STATIC 是本脚本的根本目的 (initramfs 里
+# 没有动态链接器), 若 defconfig 里那行文本变了而没人发现, 会静默编出一个
+# 动态链接的 busybox —— 所以改完必须断言。
 sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' "$BUILD_DIR/.config"
+grep -q '^CONFIG_STATIC=y' "$BUILD_DIR/.config" \
+    || error "未能开启 CONFIG_STATIC (BusyBox ${BUSYBOX_VER} 的 defconfig 文本可能已变), 请检查 $BUILD_DIR/.config"
+
+# 下面三项是绕过编译错误的关闭项: 匹配不上通常意味着它本来就没开, 无需断言
 sed -i 's/CONFIG_TC=y/# CONFIG_TC is not set/' "$BUILD_DIR/.config"
 sed -i 's/CONFIG_SHA1_HWACCEL=y/# CONFIG_SHA1_HWACCEL is not set/' "$BUILD_DIR/.config"
 sed -i 's/CONFIG_SHA256_HWACCEL=y/# CONFIG_SHA256_HWACCEL is not set/' "$BUILD_DIR/.config"
@@ -189,6 +196,9 @@ build_step "busybox_install" "$LOG_DIR" \
 BUSYBOX_BIN=$(realpath "$BUILD_DIR/busybox")
 ok "BusyBox 二进制: $BUSYBOX_BIN"
 info "$(file "$BUSYBOX_BIN")"
+# 断言结果而非只断言配置: initramfs 里没有动态链接器, 动态 busybox 一启动就挂
+verify_static_binaries --require "$BUSYBOX_BIN" \
+    || error "BusyBox 二进制不是静态链接, 无法用于 initramfs"
 
 # ---------------------------------------------------------------------------
 # 编译 CoreMark (静态链接, 使用同一交叉 gcc)
@@ -405,7 +415,16 @@ INIT_EOF
 chmod 755 "$INITRAMFS_DIR/init"
 
 info "打包 cpio: $OUTPUT"
-(cd "$INITRAMFS_DIR" && find . | cpio -o -H newc) > "$OUTPUT" 2>/dev/null
+# cpio 会把 "N blocks" 写到 stderr, 原先用 2>/dev/null 静音, 但这也把真实错误
+# 一起丢了 —— 打包失败时只剩一个空/残缺的 .cpio 而看不到原因。改为收集 stderr,
+# 成功时当进度信息打印, 失败时原样抛出。
+_cpio_err="$BUILD_DIR/cpio.stderr"
+if ! (cd "$INITRAMFS_DIR" && find . | cpio -o -H newc) > "$OUTPUT" 2>"$_cpio_err"; then
+    cat "$_cpio_err" >&2
+    error "cpio 打包失败: $OUTPUT (源目录: $INITRAMFS_DIR)"
+fi
+info "cpio: $(tr '\n' ' ' < "$_cpio_err")"
+rm -f "$_cpio_err"
 
 OUTPUT=$(realpath "$OUTPUT")
 ok "BusyBox ${BUSYBOX_VER} 交叉编译完成！"
