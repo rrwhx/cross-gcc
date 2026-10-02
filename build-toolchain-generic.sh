@@ -448,21 +448,42 @@ else
 
 # remove arch specified string optimization
 rm -rf "$SRC_DIR_MUSL/src/string/"*/
-cat > "$SRC_DIR_MUSL/src/stdio/sprintf.c" <<EOF
+cat > "$SRC_DIR_MUSL/src/stdio/sprintf.c" <<'EOF'
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
-int sprintf(char *restrict s, const char *restrict fmt, ...)
+int sprintf(char *s, const char *fmt, ...)
 {
-	char buf[4096];
-	int ret;
+	char *buf = NULL;
+	size_t len = 0;
+
+	/* Preserve the caller's errno for the %m conversion. */
+	int entry_errno = errno;
+	FILE *f = open_memstream(&buf, &len);
+	if (!f) return -1;
+	errno = entry_errno;
+
+	/* Format once into a growing buffer before writing to s. */
 	va_list ap;
 	va_start(ap, fmt);
-	ret = vsprintf(buf, fmt, ap);
+	int ret = vfprintf(f, fmt, ap);
 	va_end(ap);
-	for (int i=0 ; i<ret + 1; i++) {
-		s[i] = buf[i];
+
+	int saved_errno = errno;
+	/* Closing the stream flushes output and finalizes buf and len. */
+	if (fclose(f) != 0 && ret >= 0) {
+		ret = -1;
+		saved_errno = errno;
 	}
+	/* Copy the terminator and any embedded NUL bytes on success. */
+	if (ret >= 0) memcpy(s, buf, len + 1);
+
+	free(buf);
+	errno = saved_errno;
 	return ret;
 }
 EOF
