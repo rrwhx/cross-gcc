@@ -43,7 +43,7 @@ setup_error_trap() {
     trap 'error "错误发生在脚本第 ${LINENO} 行，详细信息请查看日志。"; exit 1' ERR
 }
 
-# 下载函数：若文件不存在则使用 curl 或 wget 下载 (curl 优先级更高)
+# 下载函数：先下载到同目录临时文件，成功后原子替换 (curl 优先级更高)
 download() {
     local url="$1"
     local dest="$2"
@@ -51,12 +51,26 @@ download() {
         info "已存在: ${dest}，跳过下载"
     else
         info "下载 $url ..."
+        [[ ! -d "$dest" ]] || error "下载目标是目录: $dest"
+        local temp_file
+        temp_file="$(mktemp "${dest}.part.XXXXXX")" || error "无法创建下载临时文件: $dest"
         if command -v curl > /dev/null; then
-            curl -fSL --insecure --progress-bar -o "$dest" "$url" || error "下载失败: $url"
+            if ! curl -fSL --insecure --progress-bar -o "$temp_file" "$url"; then
+                rm -f -- "$temp_file"
+                error "下载失败: $url"
+            fi
         elif command -v wget > /dev/null; then
-            wget -nc -q --show-progress -O "$dest" "$url" || error "下载失败: $url"
+            if ! wget -q --show-progress -O "$temp_file" "$url"; then
+                rm -f -- "$temp_file"
+                error "下载失败: $url"
+            fi
         else
+            rm -f -- "$temp_file"
             error "未安装 curl 或 wget，无法下载文件"
+        fi
+        if ! mv -f -- "$temp_file" "$dest"; then
+            rm -f -- "$temp_file"
+            error "无法保存下载文件: $dest"
         fi
     fi
 }

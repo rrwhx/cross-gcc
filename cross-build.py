@@ -21,6 +21,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
 import time
 from dataclasses import dataclass, field, asdict
@@ -593,14 +594,21 @@ class BuildEngine:
         # 下载
         if not archive.exists():
             step(f"下载 {pkg.name} ({url})")
-            # --connect-timeout: 避免网络不通时白等两分钟 (默认无连接超时)
-            r = run_cmd(["curl", "-fSL", "--insecure", "--progress-bar",
-                         "--connect-timeout", "20", "--retry", "2",
-                         "-o", str(archive), url])
-            if r.returncode != 0:
-                archive.unlink(missing_ok=True)  # 删除半成品, 下次不会误用
-                error(f"下载失败: {url}")
-                sys.exit(1)
+            # 临时文件与最终文件同目录，下载成功后通过重命名原子完成。
+            fd, temp_name = tempfile.mkstemp(prefix=f"{fname}.part.", dir=self.download_dir)
+            os.close(fd)
+            temp_archive = Path(temp_name)
+            try:
+                # --connect-timeout: 避免网络不通时白等两分钟 (默认无连接超时)
+                r = run_cmd(["curl", "-fSL", "--insecure", "--progress-bar",
+                             "--connect-timeout", "20", "--retry", "2",
+                             "-o", str(temp_archive), url])
+                if r.returncode != 0:
+                    error(f"下载失败: {url}")
+                    sys.exit(1)
+                temp_archive.replace(archive)
+            finally:
+                temp_archive.unlink(missing_ok=True)
 
         # 解压
         step(f"解压 {fname}")

@@ -10,9 +10,10 @@ fi
 # 检查压缩包完整性
 check_archive_integrity() {
     local filename="$1"
+    local archive_name="${2:-$filename}"
 
     # 根据文件扩展名使用不同的验证方法
-    case "$filename" in
+    case "$archive_name" in
         *.tar.gz|*.tgz)
             if ! gzip -t "$filename" 2>/dev/null; then
                 echo "错误: gzip 完整性检查失败: $filename"
@@ -70,28 +71,40 @@ download_file() {
         echo "文件已验证: $filename (跳过下载)"
         return 0
     fi
+    if [[ -d "$filename" ]]; then
+        echo "错误: 下载目标是目录: $filename"
+        return 1
+    fi
 
     for ((attempt=1; attempt<=max_retries; attempt++)); do
         echo "正在下载 [$attempt/$max_retries]: $url"
 
         local dl_success=false
+        local temp_file
+        temp_file="$(mktemp "${filename}.part.XXXXXX")" || return 1
 
         if command -v curl > /dev/null; then
-             if curl -fSL --insecure --progress-bar -o "$filename" "$url"; then
+             if curl -fSL --insecure --progress-bar -o "$temp_file" "$url"; then
                  dl_success=true
              fi
         elif command -v wget > /dev/null; then
-             if wget --no-check-certificate --quiet --show-progress -O "$filename" "$url"; then
+             if wget --no-check-certificate --quiet --show-progress -O "$temp_file" "$url"; then
                  dl_success=true
              fi
         else
+             rm -f -- "$temp_file"
              echo "错误: 未找到 curl 或 wget，无法下载文件"
              exit 1
         fi
 
         if $dl_success; then
-            # 下载后验证完整性
-            if check_file_integrity "$filename"; then
+            # 按原始扩展名验证临时文件，完整后再原子替换最终文件。
+            if check_archive_integrity "$temp_file" "$filename"; then
+                if ! mv -f -- "$temp_file" "$filename"; then
+                    rm -f -- "$temp_file"
+                    echo "错误: 无法保存下载文件: $filename"
+                    return 1
+                fi
                 echo "下载成功: $filename"
                 return 0
             else
@@ -101,6 +114,9 @@ download_file() {
             echo "下载失败: $filename"
         fi
 
+        # 失败只清理临时文件，保留原有文件直到新下载完成。
+        rm -f -- "$temp_file"
+
         # 尝试备用源（仅对isl）
         if [[ "$filename" == *"isl"* && $attempt -eq 1 ]]; then
             echo "尝试备用源: https://libisl.sourceforge.io/$filename"
@@ -108,8 +124,6 @@ download_file() {
             continue
         fi
 
-        # 删除可能损坏的文件
-        rm -f "$filename"
         sleep 1  # 重试前等待
     done
 
