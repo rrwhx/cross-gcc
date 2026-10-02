@@ -62,7 +62,8 @@ class PackageDef:
     # 源码获取
     source_url: str = ""          # tar 下载
     git_url: str = ""             # git clone
-    git_ref: str = ""             # branch/tag
+    git_ref: str = ""             # branch/tag/完整提交 SHA，空值表示远端 HEAD
+    git_update: bool = False
     git_recursive: bool = False
     # 构建系统
     build_system: str = ""        # autotools | cmake | make | meson | custom
@@ -473,7 +474,7 @@ def ok(msg):
 
 def run_cmd(cmd: list[str], cwd=None, env=None, log_file=None) -> subprocess.CompletedProcess:
     """执行命令并记录，失败时打印尾部日志"""
-    cmd_str = " ".join(cmd)
+    cmd_str = shlex.join(cmd)
     info(f"  $ {cmd_str}")
 
     if log_file:
@@ -520,6 +521,10 @@ class BuildEngine:
 
         # 编译器设置
         self.env = os.environ.copy()
+        # 源码仓库独立于调用方的 Git 工作树、索引和对象目录。
+        for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+                     "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"):
+            self.env.pop(name, None)
         if not self.native and self.target:
             toolchain_dir = Path(args.toolchain_dir).resolve() if args.toolchain_dir else None
             if toolchain_dir:
@@ -557,20 +562,17 @@ class BuildEngine:
 
     def _git_clone(self, pkg: PackageDef) -> Path:
         dest = self.src_dir / pkg.name
-        if dest.exists():
-            info(f"源码已存在: {dest}")
-            return dest
-        cmd = ["git", "clone", "--depth", "1"]
-        if pkg.git_ref:
-            cmd += ["--branch", pkg.git_ref]
-        if pkg.git_recursive:
-            cmd.append("--recursive")
-        cmd += [pkg.git_url, str(dest)]
-        step(f"克隆 {pkg.name} ({pkg.git_url})")
-        r = run_cmd(cmd, log_file=self.log_dir / f"{pkg.name}_clone.log")
+        update = getattr(self.args, "update_sources", False) or pkg.git_update
+        # 与 Bash 构建脚本共用引用解析、缓存校验和更新逻辑；参数不插入 shell 文本。
+        cmd = ["bash", "-c",
+               'set -euo pipefail; source "$1"; git_clone "$2" "$3" "$4" "$5" "$6" "$7"',
+               "git-source", str(Path(__file__).resolve().with_name("lib.sh")),
+               pkg.git_url, str(dest), "1", str(update).lower(), pkg.git_ref,
+               str(pkg.git_recursive).lower()]
+        step(f"获取 Git 源码 {pkg.name} ({pkg.git_ref or 'HEAD'})")
+        r = run_cmd(cmd, env=self.env, log_file=self.log_dir / f"{pkg.name}_clone.log")
         if r.returncode != 0:
-            error(f"克隆失败: {pkg.name}")
-            sys.exit(1)
+            raise RuntimeError(f"获取 Git 源码失败: {pkg.name}")
         return dest
 
     def _download_tar(self, pkg: PackageDef) -> Path:
@@ -647,6 +649,9 @@ class BuildEngine:
                 "source_url": pkg.source_url.replace("{ver}", pkg.version) if pkg.source_url else "",
                 "git_url": pkg.git_url,
                 "git_ref": pkg.git_ref,
+                "git_commit": subprocess.check_output(
+                    ["git", "-C", str(src_path), "rev-parse", "HEAD"],
+                    env=self.env, text=True).strip() if pkg.git_url else "",
                 "build_system": pkg.custom_builder or pkg.build_system,
                 "cc": self.env.get("CC", ""),
                 "cxx": self.env.get("CXX", ""),
@@ -1229,6 +1234,8 @@ def main():
     parser.add_argument("--manifest", default="", help="输出构建清单 JSON 路径")
     parser.add_argument("--recipes", action="append", default=[],
                         help="加载额外的包定义 JSON (配置式扩展, 可多次指定)")
+    parser.add_argument("--update-sources", action="store_true",
+                        help="更新已缓存的 Git 分支/标签到远端版本（完整提交 SHA 保持固定）")
     parser.add_argument("--all", action="store_true", help="构建所有库类型的包")
     parser.add_argument("--release", action="store_true",
                         help="构建默认发布集 (几个典型且简单的包, 见 --list 的发布列)")
@@ -1290,6 +1297,9 @@ def main():
         for name in names:
             pkg = PACKAGES[name]
             src = pkg.git_url or pkg.source_url.replace("{ver}", pkg.version)
+            if pkg.git_url:
+                update = args.update_sources or pkg.git_update
+                src += f" (ref={pkg.git_ref or 'HEAD'}, update={str(update).lower()})"
             if args.static and not pkg.supports_static:
                 link = "SKIP"
             else:

@@ -42,7 +42,8 @@ usage() {
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
   --gcc-ver      gcc 版本 (默认: $GCC_VER)
   --newlib-ver   newlib 版本 (默认: $NEWLIB_VER)
-                 git 格式: git | git:TAG | git:update | git:TAG:update
+                 git 格式: git | git:REF | git:update | git:REF:update
+                 REF 支持分支、标签、完整提交 SHA；同名引用使用 refs/heads/ 或 refs/tags/
 
 构建后处理选项:
   --static       静态链接工具链自身的可执行文件 (交叉 gcc/as/ld 等)，产物不依赖 host

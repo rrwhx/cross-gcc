@@ -29,6 +29,7 @@ JOBS="$THREADS"
 REPO="https://${MIRROR}/git/qemu.git"
 # QEMU_REF 默认值来自 versions.env (由 lib.sh 加载)，可用环境变量或 --ref 覆盖
 REF="$QEMU_REF"
+UPDATE_SOURCE=false
 DO_INSTALL=true
 DO_DEPS=false
 STATIC_BUILD=false
@@ -46,8 +47,9 @@ usage() {
                      (例如: aarch64,loongarch64,riscv64,x86_64)
   -t,--targets LIST  直接指定 QEMU target-list (优先级高于 --arch)
   -j,--jobs N        并行编译线程数 (默认: $JOBS)
-  -r,--repo URL      源码缺失时克隆的 QEMU git 地址 (默认: $REPO)
-     --ref REF       克隆的分支/标签/提交 (默认: $REF)
+  -r,--repo URL      QEMU git 地址，已有 Git 缓存也会校验 origin (默认: $REPO)
+     --ref REF       分支/标签/完整提交 SHA (默认: $REF)
+     --update        更新已缓存的 Git 引用到远端版本
      --install       执行 make install (默认)
      --no-install    跳过 make install
      --deps          安装系统依赖 (需 sudo)
@@ -84,6 +86,7 @@ while [[ $# -gt 0 ]]; do
         -j|--jobs)     JOBS="$2";       shift 2 ;;
         -r|--repo)     REPO="$2";       shift 2 ;;
         --ref)         REF="$2";        shift 2 ;;
+        --update)      UPDATE_SOURCE=true; shift ;;
         --install)     DO_INSTALL=true;  shift  ;;
         --no-install)  DO_INSTALL=false; shift  ;;
         --deps)        DO_DEPS=true;     shift  ;;
@@ -232,16 +235,15 @@ ensure_python_tomli
 # ---------------------------------------------------------------------------
 # 获取源码
 # ---------------------------------------------------------------------------
-if [[ ! -f "$SRC_DIR/configure" ]]; then
-    step "QEMU 源码不在 $SRC_DIR；克隆 $REPO @ $REF"
-    if ! command -v git >/dev/null 2>&1; then
-        error "git 未安装，无法克隆 QEMU 源码"
-    fi
-    git clone --depth 1 --branch "$REF" "$REPO" "$SRC_DIR" \
-        || error "git 克隆失败 ($REPO @ $REF)"
-else
+if [[ -f "$SRC_DIR/configure" && ! -e "$SRC_DIR/.git" ]]; then
+    [[ "$UPDATE_SOURCE" == false ]] || error "已有 QEMU 源码不是 Git 工作树，无法使用 --update"
     info "使用已有 QEMU 源码: $SRC_DIR"
+else
+    git_clone "$REPO" "$SRC_DIR" 1 "$UPDATE_SOURCE" "$REF"
+    [[ -f "$SRC_DIR/configure" ]] || error "指定 Git 引用不包含 QEMU configure: $REF"
 fi
+# 后续会切换到构建目录，源码入口需使用绝对路径。
+SRC_DIR="$(cd "$SRC_DIR" && pwd -P)"
 
 # ---------------------------------------------------------------------------
 # 配置 + 编译 + 安装

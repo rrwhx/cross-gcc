@@ -202,10 +202,28 @@ export C_INCLUDE_PATH="$HOME/.local/include:$C_INCLUDE_PATH" # gdb configure 找
 
 | 格式 | 行为 |
 |------|------|
-| `git` | 克隆默认分支 HEAD，已存在则跳过 |
-| `git:update` | 克隆 HEAD，已存在则拉取最新 |
-| `git:TAG` | 克隆指定 tag/branch，已存在则跳过 |
-| `git:TAG:update` | 克隆指定 ref，已存在则更新到该 ref |
+| `git` | 获取远端默认分支，重复使用时保持已缓存的提交 |
+| `git:update` | 更新到远端当前默认分支，支持默认分支改名或切换 |
+| `git:REF` | 获取指定分支、标签或完整提交 SHA；更换 REF 会切换源码版本 |
+| `git:REF:update` | 更新指定分支或标签；完整提交 SHA 始终固定 |
+
+分支与标签同名时，使用 `git:refs/heads/NAME` 或 `git:refs/tags/NAME` 明确选择。
+也支持远端公布的其他完整 `refs/...` 引用。提交使用完整的 40 位或 64 位 SHA，
+远端必须允许抓取该对象；不支持 `HEAD~1` 等修订表达式。
+
+Git 源码以 detached HEAD 保存，并记录实际提交。相同 REF 的有效缓存可离线复用；
+更换 REF 时会解析请求的引用，已有的显式引用或完整 SHA 可从本地缓存切换。
+旧缓存会校验 Git 工作树和 origin，拒绝冒用其他仓库或不完整的克隆。
+切换提交时若有已跟踪的本地修改，构建会停止；未跟踪文件由 Git 的 checkout 冲突保护处理。
+同一提交的缓存复用会保留源码补丁。切换版本时请配合 `--fresh` 重建工具链。
+
+同一源码目录的获取操作使用独占锁；异常退出遗留的 `<源码目录>.git-lock`，
+应确认没有任务仍在使用后再手动删除。不同 REF 的并行构建请使用独立的源码目录。
+
+`build-qemu.sh` 的 `--ref` 使用相同的引用规则，`--update` 请求更新 Git 缓存；
+本地非 Git 源码目录仍可直接使用。
+`cross-build.py` 的 recipe 使用 `git_ref`，可通过 `git_update: true` 或 `--update-sources`
+请求更新；子模块会按父仓库记录的提交同步，构建清单记录实际 `git_commit`。
 
 ---
 

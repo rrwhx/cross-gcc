@@ -52,7 +52,8 @@ usage() {
   --glibc-ver    glibc 版本 (默认: $GLIBC_VER)
   --musl-ver     musl 版本 (默认: $MUSL_VER)
   --linux-ver    linux 内核版本 (默认: $LINUX_VER)
-                 git 格式: git | git:TAG | git:update | git:TAG:update
+                 git 格式: git | git:REF | git:update | git:REF:update
+                 REF 支持分支、标签、完整提交 SHA；同名引用使用 refs/heads/ 或 refs/tags/
 
 构建后处理选项:
   --enable-sanitizer 开启 GCC sanitizer (默认关闭)

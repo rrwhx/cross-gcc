@@ -53,7 +53,8 @@ usage() {
 版本控制选项(支持 'git[:REF][:update]' 格式):
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
   --gcc-ver      gcc 版本 (默认: $GCC_VER)
-                 git 格式: git | git:TAG | git:update | git:TAG:update
+                 git 格式: git | git:REF | git:update | git:REF:update
+                 REF 支持分支、标签、完整提交 SHA；同名引用使用 refs/heads/ 或 refs/tags/
   --gdb-ver      gdb 版本 (默认: $GDB_VER, 支持 git[:REF][:update])
                  仅当 binutils 为 release 源码包且开启 gdb 时用于单独编译 gdb
 
