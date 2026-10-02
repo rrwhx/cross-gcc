@@ -187,13 +187,14 @@ canonicalize_dirs() {
 print_build_error_context() {
     local log_file="$1"
     local error_lines
-    error_lines=$(grep -n -C2 -E "fatal error|: error:|undefined reference to|ld: error:|collect2: error:|CMake Error|Traceback \(most recent call last\):|ModuleNotFoundError|No such file or directory" "$log_file" | head -50)
+    # 未匹配或 head 截断导致的 SIGPIPE 不应中断后续错误报告。
+    error_lines=$(grep -n -C2 -E "fatal error|: error:|undefined reference to|ld: error:|collect2: error:|CMake Error|Traceback \(most recent call last\):|ModuleNotFoundError|No such file or directory" "$log_file" | head -50) || true
     if [[ -n "$error_lines" ]]; then
         warn "--- 关键错误行 ---"
         echo "$error_lines" >&2
     fi
     warn "--- 日志末尾 ---"
-    tail -20 "$log_file" >&2
+    tail -20 "$log_file" >&2 || true
     warn "---"
 }
 
