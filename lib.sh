@@ -282,6 +282,35 @@ git_clone() (
     info "Git 源码: $requested -> $commit ($dest)"
 )
 
+# 先解压到同级临时目录，tar 成功后再原子移动到原有源码目录。
+# 参数: archive dest；归档顶层目录名沿用各脚本原有约定。
+extract_source_archive() (
+    local archive="$1" dest="$2" temp_dir="" lock_dir="${2}.extract-lock"
+    local parent name
+    parent="$(dirname "$dest")"
+    name="$(basename "$dest")"
+    mkdir -p "$parent" || error "无法创建源码父目录: $parent"
+    mkdir "$lock_dir" 2>/dev/null || error "源码目录正在解压或遗留锁尚未清理: $lock_dir"
+    source_archive_cleanup() {
+        if [[ -n "$temp_dir" ]]; then
+            assert_safe_to_delete "$temp_dir"
+            rm -rf -- "$temp_dir"
+        fi
+        rmdir "$lock_dir" 2>/dev/null || true
+    }
+    trap source_archive_cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 129' HUP
+    if [[ -d "$dest" ]]; then
+        info "$dest 已解压"
+        return 0
+    fi
+    temp_dir="$(mktemp -d "$parent/.extract.XXXXXX")" || error "无法创建源码解压临时目录"
+    tar -xf "$archive" -C "$temp_dir" || error "解压失败: $archive"
+    mv -- "$temp_dir/$name" "$dest" || error "无法发布源码目录: $dest"
+)
+
 # 获取源码：git 版本克隆，release 版本追加到全局 dl_files 下载列表
 # 参数: ver src_dir git_url tar_url
 fetch_source() {
@@ -322,7 +351,7 @@ extract_dl_files() {
         if [[ -d "$srcdir" ]]; then
             info "$srcdir 已解压"
         else
-            tar -xf "$download_dir/$filename" -C "$src_dir" || error "解压失败"
+            extract_source_archive "$download_dir/$filename" "$srcdir"
         fi
     done
 }

@@ -130,7 +130,7 @@ else
     BUSYBOX_SRC="$SRC_DIR/busybox-${BUSYBOX_VER}"
     if [[ ! -d "$BUSYBOX_SRC" ]]; then
         info "解压: busybox-${BUSYBOX_VER}.${ARCHIVE_EXT}"
-        tar -xf "$ARCHIVE_FILE" -C "$SRC_DIR"
+        extract_source_archive "$ARCHIVE_FILE" "$BUSYBOX_SRC"
     else
         info "源码目录已存在，跳过解压"
     fi

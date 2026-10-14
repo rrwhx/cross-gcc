@@ -250,7 +250,7 @@ for def in "${LIB_DEFS[@]}"; do
     parse_lib_def "$def"
     if should_build "$LIB_NAME" && [[ ! -d "$SRC_DIR/${LIB_NAME}-${LIB_VER}" ]]; then
         info "解压: ${LIB_NAME}-${LIB_VER}.${LIB_EXT}"
-        tar -xf "$DOWNLOAD_DIR/${LIB_NAME}-${LIB_VER}.${LIB_EXT}" -C "$SRC_DIR"
+        extract_source_archive "$DOWNLOAD_DIR/${LIB_NAME}-${LIB_VER}.${LIB_EXT}" "$SRC_DIR/${LIB_NAME}-${LIB_VER}"
     fi
 done
 

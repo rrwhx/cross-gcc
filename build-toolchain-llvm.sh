@@ -160,7 +160,7 @@ else
         if [[ ! -d "$SRC_DIR" ]]; then
             step "=== 解压 LLVM 源码 ==="
             info "解压: $LLVM_TAR"
-            tar -xf "$DOWNLOAD_DIR/$LLVM_TAR" -C "$DOWNLOAD_DIR"
+            extract_source_archive "$DOWNLOAD_DIR/$LLVM_TAR" "$SRC_DIR"
         fi
     fi
 fi

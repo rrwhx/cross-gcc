@@ -157,7 +157,7 @@ else
     LINUX_SRC="$DOWNLOAD_DIR/linux-${LINUX_VER}"
     if [[ ! -d "$LINUX_SRC" ]]; then
         info "解压: linux-${LINUX_VER}.tar.xz"
-        tar -xf "$ARCHIVE_FILE" -C "$DOWNLOAD_DIR"
+        extract_source_archive "$ARCHIVE_FILE" "$LINUX_SRC"
     else
         info "源码目录已存在，跳过解压"
     fi

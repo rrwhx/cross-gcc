@@ -604,20 +604,25 @@ class BuildEngine:
                              "--connect-timeout", "20", "--retry", "2",
                              "-o", str(temp_archive), url])
                 if r.returncode != 0:
-                    error(f"下载失败: {url}")
-                    sys.exit(1)
+                    raise RuntimeError(f"下载失败: {url}")
                 temp_archive.replace(archive)
             finally:
                 temp_archive.unlink(missing_ok=True)
 
-        # 解压
+        # 先解压到临时目录，成功后再发布，避免复用失败留下的半成品。
         step(f"解压 {fname}")
-        run_cmd(["tar", "-xf", str(archive), "-C", str(self.src_dir)])
-        # 有时解压后的目录名与预期不同，尝试 glob
-        if not src_path.exists():
-            candidates = list(self.src_dir.glob(f"{pkg.name}*"))
-            if candidates:
-                src_path = candidates[0]
+        with tempfile.TemporaryDirectory(prefix=".extract.", dir=self.src_dir) as temp:
+            r = run_cmd(["tar", "-xf", str(archive), "-C", temp])
+            if r.returncode != 0:
+                raise RuntimeError(f"解压失败: {archive}")
+            extracted = Path(temp) / dirname
+            # 归档根目录与文件名不同时，只从本次解压结果中查找。
+            if not extracted.is_dir():
+                candidates = [p for p in Path(temp).glob(f"{pkg.name}*") if p.is_dir()]
+                if not candidates:
+                    raise RuntimeError(f"解压后未找到 {pkg.name} 源码目录")
+                extracted = candidates[0]
+            extracted.rename(src_path)
         return src_path
 
     # ------------------------------------------------------------------
