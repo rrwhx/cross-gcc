@@ -98,6 +98,7 @@ while [[ $# -gt 0 ]]; do
         --verbose)     VERBOSE=true; shift;;
         --strict)      STRICT=true; shift;;
         -h|--help)     usage;;
+        -*)            error "未知选项: $1";;
         *)             ARCHS+=("$1"); shift;;
     esac
 done
@@ -163,9 +164,9 @@ for arch in "${ARCHS[@]}"; do
     start_time=$(date +%s)
 
     if [[ "$VERBOSE" == true ]]; then
-        timeout "$TIMEOUT" "${cmd[@]}" < /dev/null; ret=$?
+        if timeout "$TIMEOUT" "${cmd[@]}" < /dev/null; then ret=0; else ret=$?; fi
     else
-        timeout "$TIMEOUT" "${cmd[@]}" < /dev/null > /dev/null 2>&1; ret=$?
+        if timeout "$TIMEOUT" "${cmd[@]}" < /dev/null > /dev/null 2>&1; then ret=0; else ret=$?; fi
     fi
 
     elapsed=$(( $(date +%s) - start_time ))
@@ -191,5 +192,5 @@ info "通过: $PASS  失败: $FAIL  跳过: $SKIP"
 if [[ "$STRICT" == true ]]; then
     [[ $FAIL -eq 0 && $SKIP -eq 0 && $PASS -gt 0 ]] && ok "全部通过" || error "存在失败或被跳过的测试 (--strict)"
 else
-    [[ $FAIL -eq 0 ]] && ok "全部通过" || error "存在失败的测试"
+    [[ $FAIL -eq 0 && $PASS -gt 0 ]] && ok "全部通过" || error "存在失败或没有实际通过的测试"
 fi

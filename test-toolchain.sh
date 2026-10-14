@@ -25,6 +25,8 @@ TOOLCHAIN_DIR=""
 WORK_DIR=$(pwd)
 QEMU_DIR=""
 RUN_MODE="static"   # none | static | all
+STRICT=false
+LANGUAGE_LIST="c,c++,fortran"
 
 usage() {
     cat <<EOF
@@ -37,10 +39,12 @@ usage() {
   --work-dir DIR       测试工作目录 (默认: 当前目录)
   --qemu-dir DIR       qemu-user 二进制目录 (默认: 从 PATH 查找 qemu-<arch>)
   --run-mode MODE      运行模式: none(仅编译) | static(运行静态产物,默认) | all(静态+动态)
+  --languages LIST     要测试的语言 (逗号分隔: c,c++,fortran，默认全部；cxx 为 c++ 别名)
+  --strict             选定语言编译器或需要运行的 QEMU 缺失时判定失败
   -h,--help            显示帮助
 
 说明:
-  - 编译阶段始终覆盖 C/C++/Fortran 的动态与静态链接 (缺少 g++/gfortran 时自动跳过)。
+  - 编译阶段覆盖选定语言的动态与静态链接；缺少编译器记录 SKIP，严格模式视为失败。
   - 运行阶段默认只跑静态产物 (不依赖目标动态库/加载器, 最稳定)；
     --run-mode all 会额外用 'qemu -L <sysroot>' 运行动态产物。
   - 若找不到对应的 qemu-<arch>, 运行项标记为 SKIP, 编译项仍会执行。
@@ -60,6 +64,8 @@ while [[ $# -gt 0 ]]; do
         --work-dir)      WORK_DIR="$2"; shift 2;;
         --qemu-dir)      QEMU_DIR="$2"; shift 2;;
         --run-mode)      RUN_MODE="$2"; shift 2;;
+        --languages)     LANGUAGE_LIST="$2"; shift 2;;
+        --strict)        STRICT=true; shift;;
         -h|--help)       usage;;
         *)               error "未知选项: $1"; usage;;
     esac
@@ -73,6 +79,22 @@ case "$RUN_MODE" in
     none|static|all) ;;
     *) error "无效的 --run-mode: $RUN_MODE (可选: none|static|all)";;
 esac
+
+[[ -n "$LANGUAGE_LIST" && "$LANGUAGE_LIST" != ,* && "$LANGUAGE_LIST" != *, && "$LANGUAGE_LIST" != *,,* ]] \
+    || error "--languages 必须是非空语言列表"
+declare -a REQUESTED_LANGS=()
+IFS=',' read -ra language_values <<< "$LANGUAGE_LIST"
+for language in "${language_values[@]}"; do
+    case "$language" in
+        c|fortran) normalized="$language";;
+        c++|cxx) normalized=cxx;;
+        *) error "不支持的测试语言: $language";;
+    esac
+    for existing in "${REQUESTED_LANGS[@]}"; do
+        [[ "$existing" != "$normalized" ]] || error "重复的测试语言: $language"
+    done
+    REQUESTED_LANGS+=("$normalized")
+done
 
 TOOLCHAIN_DIR=$(realpath "$TOOLCHAIN_DIR")
 WORK_DIR=$(realpath "$WORK_DIR")
@@ -168,6 +190,7 @@ EOF
 # ---------------------------------------------------------------------------
 declare -a RESULTS=()
 PASS=0; FAIL=0; SKIP=0
+MISSING=0
 
 record() {
     local st="$1" name="$2"
@@ -203,7 +226,7 @@ test_one() {
     local ccmd=("$compiler" "$src" -o "$bin" "${flags[@]}")
     info "编译命令: ${ccmd[*]}"
     info "编译日志: $clog"
-    if (cd "$TESTDIR" && "${ccmd[@]}") > "$clog" 2>&1; then
+    if (cd "$TESTDIR" && "${ccmd[@]}") > "$clog" 2>&1 && [[ -s "$bin" ]]; then
         record PASS "compile $name"
         ok "编译成功: $name -> $bin"
     else
@@ -216,7 +239,7 @@ test_one() {
     # 打印 ELF 架构信息（仅供参考）
     if command -v "$READELF" >/dev/null 2>&1; then
         local machine
-        machine=$("$READELF" -h "$bin" 2>/dev/null | awk -F: '/Machine:/{gsub(/^[ \t]+/,"",$2); print $2}')
+        machine=$("$READELF" -h "$bin" 2>/dev/null | awk -F: '/Machine:/{gsub(/^[ \t]+/,"",$2); print $2}') || true
         [[ -n "$machine" ]] && info "ELF Machine: $machine  ($(du -h "$bin" | cut -f1))"
     fi
 
@@ -236,6 +259,7 @@ test_one() {
 
     if [[ -z "$QEMU" ]]; then
         record SKIP "run $name"
+        ((++MISSING))
         info "跳过运行: $name (无 qemu-$QEMU_ARCH)"
         return 0
     fi
@@ -274,24 +298,30 @@ test_one() {
     else
         record FAIL "run $name"
         warn "运行失败: $name"
-        [[ -n "${out:-}" ]] && echo "$out" | head -n 15 >&2
+        [[ -n "${out:-}" ]] && { echo "$out" | head -n 15 >&2 || true; }
     fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------
 # 执行
 # ---------------------------------------------------------------------------
-declare -a LANGS=(c)
-if command -v "$CXX" >/dev/null 2>&1; then
-    LANGS+=(cxx)
-else
-    warn "未找到 $CXX，跳过 C++ 测试"
-fi
-if command -v "$FC" >/dev/null 2>&1; then
-    LANGS+=(fortran)
-else
-    info "未找到 $FC，跳过 Fortran 测试"
-fi
+declare -a LANGS=()
+for lang in "${REQUESTED_LANGS[@]}"; do
+    case "$lang" in
+        c) compiler="$CC";;
+        cxx) compiler="$CXX";;
+        fortran) compiler="$FC";;
+    esac
+    if command -v "$compiler" >/dev/null 2>&1; then
+        LANGS+=("$lang")
+    else
+        warn "未找到 $compiler，跳过 $lang 测试"
+        record SKIP "compile $lang-dynamic (缺少 $compiler)"
+        record SKIP "compile $lang-static (缺少 $compiler)"
+        ((++MISSING))
+    fi
+done
 
 step "=== 开始工具链测试: $TARGET ==="
 for lang in "${LANGS[@]}"; do
@@ -314,5 +344,7 @@ for r in "${RESULTS[@]}"; do
     esac
 done
 echo ""
-info "通过: $PASS  失败: $FAIL  跳过: $SKIP"
-[[ $FAIL -eq 0 ]] && ok "工具链测试通过" || error "存在失败的测试项"
+info "通过: $PASS  失败: $FAIL  跳过: $SKIP  缺失: $MISSING"
+[[ $FAIL -eq 0 && $PASS -gt 0 ]] || error "存在失败或没有实际通过的测试"
+[[ "$STRICT" != true || $MISSING -eq 0 ]] || error "存在缺失的必需测试项 (--strict)"
+ok "工具链测试通过"

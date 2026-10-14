@@ -272,6 +272,10 @@ brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
 #    需要 qemu-<arch>（系统包 qemu-user，或用 build-qemu.sh 构建）
 ./test-toolchain.sh --toolchain-dir ./cross-riscv64-linux-gnu --target riscv64-linux-gnu
 
+# CI 严格模式：缺少选定语言编译器或需要运行的 QEMU 时判定失败
+./test-toolchain.sh --toolchain-dir ./cross-riscv64-linux-gnu \
+    --target riscv64-linux-gnu --languages c,c++,fortran --strict
+
 # 仅编译（无 qemu 环境）/ 额外测试动态链接与共享库加载
 ./test-toolchain.sh --toolchain-dir ./cross-aarch64-linux-gnu \
     --target aarch64-linux-gnu --run-mode none
@@ -285,6 +289,11 @@ brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
 # 默认不安装系统依赖；首次构建可加 --deps 自动装依赖（需 sudo）
 ./build-qemu.sh --arch aarch64,loongarch64,riscv64,x86_64 --deps
 ```
+
+`--run-mode none` 或 static 模式中主动省略的动态运行不属于必需项缺失；
+严格模式只对选定但无法执行的测试判定失败。系统模拟测试若全部跳过，也会返回失败。
+批量构建会继续执行后续任务并汇总所有失败，最终只要有失败就返回非零退出码。
+Python 构建清单会保留每个请求的成功或失败结果，包括源码获取失败和不支持的构建方式。
 
 ---
 

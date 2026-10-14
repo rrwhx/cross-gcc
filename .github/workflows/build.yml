@@ -223,12 +223,17 @@ jobs:
         run: |
           sudo apt-get install -y --no-install-recommends qemu-user qemu-user-static
 
+      # Ubuntu 22.04 的 QEMU 包不含 LoongArch 用户态模拟器，该架构仅验证编译。
       - name: Smoke test toolchain
         run: |
+          languages=c,c++,fortran
+          if [ "${{ matrix.libc }}" = newlib ]; then
+            languages=c,c++
+          fi
           ./test-toolchain.sh \
             --toolchain-dir ./cross-${{ steps.triple.outputs.target }} \
             --target ${{ steps.triple.outputs.target }} \
-            --run-mode static
+            --run-mode "${{ matrix.arch == 'loongarch64' && 'none' || 'static' }}" --languages "$languages" --strict
 
       - name: Package toolchain
         run: |

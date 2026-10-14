@@ -556,8 +556,7 @@ class BuildEngine:
         elif pkg.source_url:
             return self._download_tar(pkg)
         else:
-            error(f"{pkg.name}: 未指定源码来源")
-            sys.exit(1)
+            raise RuntimeError(f"{pkg.name}: 未指定源码来源")
 
     def _git_clone(self, pkg: PackageDef) -> Path:
         dest = self.src_dir / pkg.name
@@ -643,6 +642,10 @@ class BuildEngine:
         )
 
         try:
+            if self.static and not pkg.supports_static:
+                raise RuntimeError(f"{pkg.name}: 不支持所请求的静态链接")
+            if pkg.custom_builder and pkg.custom_builder not in CUSTOM_BUILDERS:
+                raise RuntimeError(f"{pkg.name}: 未注册自定义构建函数 '{pkg.custom_builder}'")
             # 获取源码
             src_path = self.fetch_source(pkg)
             result.source_dir = str(src_path)
@@ -703,13 +706,9 @@ class BuildEngine:
                 if pkg.custom_builder and pkg.custom_builder in CUSTOM_BUILDERS:
                     CUSTOM_BUILDERS[pkg.custom_builder](self, pkg, src_path, build_dir, inst_dir, result)
                 else:
-                    error(f"{pkg.name}: custom 构建系统但无自定义构建函数")
-                    result.error = "missing custom_builder"
-                    return result
+                    raise RuntimeError(f"{pkg.name}: custom 构建系统但无自定义构建函数")
             else:
-                error(f"{pkg.name}: 未知构建系统 '{pkg.build_system}'")
-                result.error = f"unknown build_system: {pkg.build_system}"
-                return result
+                raise RuntimeError(f"{pkg.name}: 未知构建系统 '{pkg.build_system}'")
 
             result.success = True
             ok(f"{pkg.name} {pkg.version} 构建完成 ({self.target or 'native'}, {'static' if self.static else 'shared'})")
@@ -718,8 +717,9 @@ class BuildEngine:
             result.error = str(e)
             error(f"{pkg.name} 构建异常: {e}")
 
-        result.duration_seconds = round(time.time() - t0, 2)
-        self.results.append(result)
+        finally:
+            result.duration_seconds = round(time.time() - t0, 2)
+            self.results.append(result)
         return result
 
     # ------------------------------------------------------------------
@@ -1120,8 +1120,12 @@ def _build_champsim(engine: BuildEngine, pkg, src_path, build_dir, inst_dir, res
     vcpkg_sh = src_path / "vcpkg" / "bootstrap-vcpkg.sh"
     if vcpkg_sh.exists():
         step("初始化 vcpkg")
-        run_cmd(["bash", str(vcpkg_sh)], cwd=src_path)
-        run_cmd([str(src_path / "vcpkg" / "vcpkg"), "install"], cwd=src_path)
+        r = run_cmd(["bash", str(vcpkg_sh)], cwd=src_path)
+        if r.returncode != 0:
+            raise RuntimeError("vcpkg bootstrap 失败")
+        r = run_cmd([str(src_path / "vcpkg" / "vcpkg"), "install"], cwd=src_path)
+        if r.returncode != 0:
+            raise RuntimeError("vcpkg install 失败")
 
     # 配置
     config_json = src_path / "champsim_config.json"
@@ -1293,6 +1297,7 @@ def main():
 
     # --dry-run: 只展示计划
     if args.dry_run:
+        plan_failed = False
         print(f"\n{'包':<18} {'类型':<12} {'构建':<12} {'链接':<8} {'源码'}")
         print("-" * 96)
         for name in names:
@@ -1301,7 +1306,8 @@ def main():
             if pkg.git_url:
                 src += f" (ref={pkg.git_ref or 'HEAD'})"
             if args.static and not pkg.supports_static:
-                link = "SKIP"
+                link = "FAIL"
+                plan_failed = True
             else:
                 link = "static" if args.static else "shared"
             print(f"{name:<18} {pkg.pkg_type:<12} "
@@ -1309,16 +1315,15 @@ def main():
         print(f"\n安装: {'是' if not args.no_install else '否'}"
               f"  并行: {args.jobs or detect_cpu_count()}"
               f"  工作目录: {Path(args.work_dir).resolve()}\n")
+        if plan_failed:
+            error("构建计划包含不支持的静态链接请求")
+            sys.exit(1)
         return
 
     # 构建
     engine = BuildEngine(args)
     for name in names:
         pkg = PACKAGES[name]
-        # 检查静态支持
-        if args.static and not pkg.supports_static:
-            info(f"跳过 {name} (不支持静态链接)")
-            continue
         engine.build_package(pkg)
 
     # 报告
@@ -1329,7 +1334,7 @@ def main():
     save_manifest(engine.results, manifest_path)
 
     # 退出码
-    if any(not r.success for r in engine.results):
+    if not engine.results or any(not r.success for r in engine.results):
         sys.exit(1)
 
 
