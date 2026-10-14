@@ -58,8 +58,8 @@
 # bare-metal ELF 工具链 (newlib)
 ./build-toolchain-elf.sh --arch riscv64
 
-# 使用 git 最新开发版 + 拉取更新
-./build-toolchain-generic.sh --arch riscv64 --libc glibc --gcc-ver git:update
+# 使用 git 最新开发版，每次构建同步远端
+./build-toolchain-generic.sh --arch riscv64 --libc glibc --gcc-ver git
 
 # 同时编译 gdb (默认不编译, 需 binutils 使用 git 源)
 ./build-toolchain-generic.sh --arch riscv64 --libc glibc --binutils-ver git --enable-gdb
@@ -86,7 +86,7 @@
     --target-gcc-toolchain ./cross-riscv64-linux-gnu
 
 # 使用 git 最新版
-./build-toolchain-llvm.sh --arch riscv64 --llvm-ver git:update \
+./build-toolchain-llvm.sh --arch riscv64 --llvm-ver git \
     --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
     --target-gcc-toolchain ./cross-riscv64-linux-gnu
 
@@ -198,21 +198,23 @@ export C_INCLUDE_PATH="$HOME/.local/include:$C_INCLUDE_PATH" # gdb configure 找
 
 ### 版本参数 git 格式
 
-版本参数（如 `--gcc-ver`、`--llvm-ver`）支持 `git[:REF][:update]` 格式：
+版本参数（如 `--gcc-ver`、`--llvm-ver`）支持 `git[:REF]` 格式：
 
 | 格式 | 行为 |
 |------|------|
-| `git` | 获取远端默认分支，重复使用时保持已缓存的提交 |
-| `git:update` | 更新到远端当前默认分支，支持默认分支改名或切换 |
-| `git:REF` | 获取指定分支、标签或完整提交 SHA；更换 REF 会切换源码版本 |
-| `git:REF:update` | 更新指定分支或标签；完整提交 SHA 始终固定 |
+| `git` | 每次获取远端当前默认分支，支持默认分支改名或切换 |
+| `git:REF` | 每次获取远端指定分支、标签或完整 `refs/...` 当前指向的提交 |
+| `git:SHA` | 使用完整提交 SHA 固定版本，本地已有对象时直接复用 |
+
+已移除更新开关及旧的 `:update` 后缀。原 `git:update` 改为 `git`，
+原 `git:REF:update` 改为 `git:REF`；`git:update` 现在按普通引用解析，表示名为 `update` 的分支或标签。
 
 分支与标签同名时，使用 `git:refs/heads/NAME` 或 `git:refs/tags/NAME` 明确选择。
 也支持远端公布的其他完整 `refs/...` 引用。提交使用完整的 40 位或 64 位 SHA，
 远端必须允许抓取该对象；不支持 `HEAD~1` 等修订表达式。
 
-Git 源码以 detached HEAD 保存，并记录实际提交。相同 REF 的有效缓存可离线复用；
-更换 REF 时会解析请求的引用，已有的显式引用或完整 SHA 可从本地缓存切换。
+Git 源码以 detached HEAD 保存，并记录实际提交。缓存用于减少对象传输，命名引用仍每次查询并抓取远端；
+联网或抓取失败会报错，不会静默使用旧源码。需要可复现构建或离线复用时，使用本地已有的完整提交 SHA。
 旧缓存会校验 Git 工作树和 origin，拒绝冒用其他仓库或不完整的克隆。
 切换提交时若有已跟踪的本地修改，构建会停止；未跟踪文件由 Git 的 checkout 冲突保护处理。
 同一提交的缓存复用会保留源码补丁。切换版本时请配合 `--fresh` 重建工具链。
@@ -220,10 +222,10 @@ Git 源码以 detached HEAD 保存，并记录实际提交。相同 REF 的有�
 同一源码目录的获取操作使用独占锁；异常退出遗留的 `<源码目录>.git-lock`，
 应确认没有任务仍在使用后再手动删除。不同 REF 的并行构建请使用独立的源码目录。
 
-`build-qemu.sh` 的 `--ref` 使用相同的引用规则，`--update` 请求更新 Git 缓存；
+`build-qemu.sh` 的 `--ref` 使用相同的引用规则，命名引用默认同步远端；
 本地非 Git 源码目录仍可直接使用。
-`cross-build.py` 的 recipe 使用 `git_ref`，可通过 `git_update: true` 或 `--update-sources`
-请求更新；子模块会按父仓库记录的提交同步，构建清单记录实际 `git_commit`。
+`cross-build.py` 的 recipe 使用 `git_ref`，默认同步命名引用，不再提供额外更新开关；
+子模块会按父仓库记录的提交同步，构建清单记录实际 `git_commit`。
 
 ---
 

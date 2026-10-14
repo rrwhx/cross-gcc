@@ -46,13 +46,13 @@ usage() {
   -j,--threads   构建线程数 (默认: $THREADS)
   --mirror       下载镜像源 (默认: $MIRROR, 推荐: mirrors.tuna.tsinghua.edu.cn, mirrors.bfsu.edu.cn, mirror.nju.edu.cn)
 
-版本控制选项(支持 'git[:REF][:update]' 格式):
+版本控制选项(支持 'git[:REF]' 格式):
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
   --gcc-ver      gcc 版本 (默认: $GCC_VER)
   --glibc-ver    glibc 版本 (默认: $GLIBC_VER)
   --musl-ver     musl 版本 (默认: $MUSL_VER)
   --linux-ver    linux 内核版本 (默认: $LINUX_VER)
-                 git 格式: git | git:REF | git:update | git:REF:update
+                 git 格式: git | git:REF；命名引用每次同步远端，完整提交 SHA 固定
                  REF 支持分支、标签、完整提交 SHA；同名引用使用 refs/heads/ 或 refs/tags/
 
 构建后处理选项:
@@ -77,9 +77,9 @@ usage() {
   -h,--help      显示帮助
 示例:
   $(basename "$0") --arch aarch64 --libc glibc
-  $(basename "$0") --arch riscv64 --libc glibc --gcc-ver git:update
+  $(basename "$0") --arch riscv64 --libc glibc --gcc-ver git
   $(basename "$0") --arch riscv64 --libc musl --static --fresh
-  $(basename "$0") --arch riscv64 --libc musl --gcc-ver git:releases/gcc-16.1.0:update
+  $(basename "$0") --arch riscv64 --libc musl --gcc-ver git:releases/gcc-16.1.0
 EOF
     exit 0
 }
@@ -245,7 +245,7 @@ if [[ "$BINUTILS_VER" == git* ]]; then
         binutils_gdb_args+=(--disable-gdb --disable-sim)
     fi
 elif [[ "$ENABLE_GDB" == true ]]; then
-    warn "启用 gdb 需要 binutils 使用 git 源 (--binutils-ver git[:REF][:update])，当前为 release tarball(不含 gdb)，gdb 将不会被编译"
+    warn "启用 gdb 需要 binutils 使用 git 源 (--binutils-ver git[:REF])，当前为 release tarball(不含 gdb)，gdb 将不会被编译"
 fi
 
 # 设置默认目录

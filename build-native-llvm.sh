@@ -52,7 +52,7 @@ usage() {
 
 构建当前 host 可直接使用的本地 LLVM/Clang 工具链（clang + lld + flang，使用 host libc）。
 
-  --llvm-ver          LLVM 版本 (默认: $LLVM_VER, 支持 git[:REF][:update])
+  --llvm-ver          LLVM 版本 (默认: $LLVM_VER, 支持 git[:REF])
   --src-dir           LLVM 源码目录 (直接指定已解压的源码路径，跳过下载/解压)
   --work-dir          工作目录前缀 (默认: 当前目录)
   --download-dir      源码下载目录 (默认: WORK_DIR/downloads)
@@ -83,7 +83,7 @@ usage() {
 示例:
   $(basename "$0")
   $(basename "$0") --llvm-ver 22.1.8 --targets X86
-  $(basename "$0") --llvm-ver git:update --projects clang,lld --fresh
+  $(basename "$0") --llvm-ver git --projects clang,lld --fresh
   $(basename "$0") --projects clang,lld --runtimes compiler-rt --static --fresh --link-jobs 2
 EOF
     exit 0
@@ -166,7 +166,7 @@ else
     if [[ "$LLVM_VER" == git* ]]; then
         SRC_DIR="$DOWNLOAD_DIR/llvm-project"
         parse_git_ver "$LLVM_VER"
-        git_clone "https://${MIRROR}/git/llvm-project.git" "$SRC_DIR" 1 "$_GIT_UPDATE" "$_GIT_REF"
+        git_clone "https://${MIRROR}/git/llvm-project.git" "$SRC_DIR" 1 "$_GIT_REF"
     else
         LLVM_TAR="llvm-project-${LLVM_VER}.src.tar.xz"
         LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VER}/${LLVM_TAR}"

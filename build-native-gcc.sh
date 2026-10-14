@@ -50,12 +50,12 @@ usage() {
   --mirror       下载镜像源 (默认: $MIRROR)
   --languages    GCC 启用的语言 (默认: $GCC_LANGUAGES)
 
-版本控制选项(支持 'git[:REF][:update]' 格式):
+版本控制选项(支持 'git[:REF]' 格式):
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
   --gcc-ver      gcc 版本 (默认: $GCC_VER)
-                 git 格式: git | git:REF | git:update | git:REF:update
+                 git 格式: git | git:REF；命名引用每次同步远端，完整提交 SHA 固定
                  REF 支持分支、标签、完整提交 SHA；同名引用使用 refs/heads/ 或 refs/tags/
-  --gdb-ver      gdb 版本 (默认: $GDB_VER, 支持 git[:REF][:update])
+  --gdb-ver      gdb 版本 (默认: $GDB_VER, 支持 git[:REF])
                  仅当 binutils 为 release 源码包且开启 gdb 时用于单独编译 gdb
 
 构建后处理选项:
@@ -81,7 +81,7 @@ usage() {
 示例:
   $(basename "$0")
   $(basename "$0") --gcc-ver 16.1.0 --binutils-ver 2.43
-  $(basename "$0") --gcc-ver git:update --languages c,c++ --fresh
+  $(basename "$0") --gcc-ver git --languages c,c++ --fresh
   $(basename "$0") --disable-gdb --static --fresh
 EOF
     exit 0

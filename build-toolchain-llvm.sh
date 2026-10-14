@@ -47,7 +47,7 @@ usage() {
 交叉编译 LLVM/Clang 工具链
 
   --arch              目标架构 (必填, 例如: aarch64, riscv64, x86_64, loongarch64)
-  --llvm-ver          LLVM 版本 (默认: $LLVM_VER, 支持 git[:REF][:update])
+  --llvm-ver          LLVM 版本 (默认: $LLVM_VER, 支持 git[:REF])
   --src-dir           LLVM 源码目录 (直接指定已解压的源码路径，跳过下载/解压)
   --work-dir          工作目录前缀 (默认: 当前目录)
   --download-dir      源码下载目录 (默认: WORK_DIR/downloads)
@@ -75,7 +75,7 @@ usage() {
 
 示例:
   $(basename "$0") --arch riscv64
-  $(basename "$0") --arch riscv64 --llvm-ver git:update
+  $(basename "$0") --arch riscv64 --llvm-ver git
   $(basename "$0") --arch riscv64 --llvm-ver git:llvmorg-22.1.8
   $(basename "$0") --arch aarch64 --src-dir ./llvm-project
   $(basename "$0") --arch aarch64 --target-gcc-toolchain ./cross-aarch64-linux-gnu --target-sysroot ./cross-aarch64-linux-gnu/aarch64-linux-gnu
@@ -150,7 +150,7 @@ else
     if [[ "$LLVM_VER" == git* ]]; then
         SRC_DIR="$DOWNLOAD_DIR/llvm-project"
         parse_git_ver "$LLVM_VER"
-        git_clone "https://${MIRROR}/git/llvm-project.git" "$SRC_DIR" 1 "$_GIT_UPDATE" "$_GIT_REF"
+        git_clone "https://${MIRROR}/git/llvm-project.git" "$SRC_DIR" 1 "$_GIT_REF"
     else
         LLVM_TAR="llvm-project-${LLVM_VER}.src.tar.xz"
         LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VER}/${LLVM_TAR}"

@@ -85,22 +85,16 @@ git_validate_ref() {
         || error "无效的 Git 引用: $ref（提交请使用完整 SHA）"
 }
 
-# Git 版本参数解析：解析 "git[:REF][:update]" 格式。
-# 输出变量: _GIT_REF, _GIT_UPDATE
+# Git 版本参数解析：解析 "git[:REF]" 格式。
+# 输出变量: _GIT_REF
 parse_git_ver() {
     local ver="${1:-}"
     _GIT_REF=""
-    _GIT_UPDATE=false
     case "$ver" in
         git) return 0 ;;
-        git:update) _GIT_UPDATE=true; return 0 ;;
         git:*) _GIT_REF="${ver#git:}" ;;
         *) error "无效的 Git 版本参数: $ver" ;;
     esac
-    if [[ "$_GIT_REF" == *:update ]]; then
-        _GIT_REF="${_GIT_REF%:update}"
-        _GIT_UPDATE=true
-    fi
     [[ -n "$_GIT_REF" ]] || error "Git 引用不能为空: $ver"
     command -v git >/dev/null 2>&1 || error "git 未安装，无法校验源码引用"
     git_validate_ref "$_GIT_REF"
@@ -116,10 +110,10 @@ git_source_cache_ref() {
 }
 
 # 解析请求的引用。输出 _GIT_SOURCE_REF、_GIT_SOURCE_OID、_GIT_SOURCE_FETCH。
-# 同一引用的冻结快照由 git_clone 的状态记录处理；切换引用时显式解析其身份。
+# 命名引用每次查询远端；完整提交 SHA 可直接复用本地对象。
 git_resolve_source_ref() {
-    local repo="$1" url="$2" requested="$3" update="$4"
-    local cached_ref="" remote_lines oid name branch="" tag=""
+    local repo="$1" url="$2" requested="$3"
+    local remote_lines oid name branch="" tag=""
     _GIT_SOURCE_REF="$requested"
     _GIT_SOURCE_OID=""
     _GIT_SOURCE_FETCH=true
@@ -134,15 +128,6 @@ git_resolve_source_ref() {
             _GIT_SOURCE_OID="$_GIT_SOURCE_REF"
         fi
         return 0
-    fi
-
-    # 显式引用可在离线状态下切回已缓存版本。
-    if [[ "$update" == false && "$requested" == refs/* && -e "$repo/.git" ]]; then
-        cached_ref="$(git_source_cache_ref "$requested")"
-        if _GIT_SOURCE_OID="$(git -C "$repo" rev-parse --verify "${cached_ref}^{commit}" 2>/dev/null)"; then
-            _GIT_SOURCE_FETCH=false
-            return 0
-        fi
     fi
 
     if [[ "$requested" == HEAD ]]; then
@@ -187,33 +172,23 @@ git_resolve_source_ref() {
         || error "远端 Git 引用不存在或仓库为空: $requested"
     git_validate_ref "$_GIT_SOURCE_REF"
 
-    # 不要求更新时，已有的命名引用保持冻结；缺失的引用才抓取。
-    if [[ "$update" == false && -e "$repo/.git" ]]; then
-        cached_ref="$(git_source_cache_ref "$_GIT_SOURCE_REF")"
-        if _GIT_SOURCE_OID="$(git -C "$repo" rev-parse --verify "${cached_ref}^{commit}" 2>/dev/null)"; then
-            _GIT_SOURCE_FETCH=false
-            return 0
-        fi
-        # 抓取前仍需远端 OID 来确定对象格式。
-        _GIT_SOURCE_OID="$(printf '%s\n' "$remote_lines" | awk '$1 !~ /^ref:/ && $2 != "" {print $1; exit}')"
-    fi
 }
 
 # 获取 Git 源码并检验缓存身份；以 detached HEAD 构建可复现快照。
-# 参数: url dest [depth] [update] [ref] [recursive]
+# 参数: url dest [depth] [ref] [recursive]
 # 子 shell 隔离 Git 环境和清理 trap，避免影响调用方。
 git_clone() (
     unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
-    local url="${1:-}" dest="${2:-}" depth="${3:-1}" update="${4:-false}" ref="${5:-}" recursive="${6:-false}"
+    local url="${1:-}" dest="${2:-}" depth="${3:-1}" ref="${4:-}" recursive="${5:-false}"
+    [[ $# -le 5 ]] || error "git_clone 参数过多: url dest [depth] [ref] [recursive]"
     [[ -n "$url" && "$url" != -* && -n "$dest" && "$dest" != -* ]] || error "Git 地址和源码目录不能为空或以选项开头"
     [[ "$depth" =~ ^[1-9][0-9]*$ ]] || error "Git 浅克隆深度必须为正整数: $depth"
-    [[ "$update" == true || "$update" == false ]] || error "无效的 Git update 参数: $update"
     [[ "$recursive" == true || "$recursive" == false ]] || error "无效的 Git recursive 参数: $recursive"
     command -v git >/dev/null 2>&1 || error "git 未安装，无法获取源码"
     git_validate_ref "$ref"
 
     local parent base lock_dir temp_repo="" temp_state="" work_repo current="" commit="" state_file
-    local requested="${ref:-HEAD}" recorded_ref="" recorded_commit="" new_repo=false cached=false
+    local requested="${ref:-HEAD}" new_repo=false
     parent="$(dirname "$dest")"
     base="$(basename "$dest")"
     mkdir -p "$parent" || error "无法创建源码父目录: $parent"
@@ -253,55 +228,40 @@ git_clone() (
             || error "源码缓存没有有效提交: $dest"
         state_file="$(git -C "$work_repo" rev-parse --absolute-git-dir)/cross-gcc-source"
         [[ ! -e "$state_file" || -f "$state_file" ]] || error "源码缓存记录不是普通文件: $state_file"
-        if [[ "$update" == false && -f "$state_file" ]]; then
-            { IFS= read -r recorded_ref && IFS= read -r recorded_commit; } < "$state_file" \
-                || error "源码缓存记录损坏: $dest，请使用更新模式重新获取"
-            [[ "$recorded_commit" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]] \
-                || error "源码缓存提交记录无效: $dest"
-            [[ -n "$recorded_ref" ]] || error "源码缓存引用记录为空: $dest"
-            git_validate_ref "$recorded_ref"
-            if [[ "$recorded_ref" == "$requested" ]]; then
-                [[ "$current" == "$recorded_commit" ]] || error "源码 HEAD 与缓存记录不一致: $dest，请显式更新或使用独立源码目录"
-                cached=true
-                commit="$current"
-            fi
-        fi
     else
         new_repo=true
         temp_repo="$(mktemp -d "$parent/.${base}.git.XXXXXX")" || error "无法创建 Git 源码临时目录"
         work_repo="$temp_repo"
     fi
 
-    if [[ "$cached" != true ]]; then
-        git_resolve_source_ref "$work_repo" "$url" "$requested" "$update"
-        if [[ "$new_repo" == true ]]; then
-            local object_format=sha1
-            [[ ${#_GIT_SOURCE_OID} -eq 64 ]] && object_format=sha256
-            git init --quiet --object-format="$object_format" "$work_repo" || error "初始化源码缓存失败"
-            git -C "$work_repo" remote add origin "$url" || error "设置源码 origin 失败"
-        fi
-        local cache_ref
-        cache_ref="$(git_source_cache_ref "$_GIT_SOURCE_REF")"
-        if [[ "$_GIT_SOURCE_FETCH" == true ]]; then
-            info "获取 Git 引用: $requested ($dest)"
-            git -C "$work_repo" fetch --depth "$depth" --no-tags -- origin "+${_GIT_SOURCE_REF}:${cache_ref}" \
-                || error "获取 Git 引用失败: $requested（完整 SHA 需由远端允许抓取）"
-        fi
-        if [[ "$requested" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]]; then
-            commit="$(git -C "$work_repo" rev-parse --verify "${_GIT_SOURCE_REF}^{commit}" 2>/dev/null)" || error "SHA 不是有效提交: $requested"
-            [[ "$commit" == "$_GIT_SOURCE_REF" ]] || error "完整 SHA 必须直接指向提交: $requested"
-        else
-            commit="$(git -C "$work_repo" rev-parse --verify "${cache_ref}^{commit}" 2>/dev/null)" || error "Git 引用没有指向提交: $requested"
-        fi
-        if [[ "$current" != "$commit" ]]; then
-            git -C "$work_repo" diff --quiet --ignore-submodules=untracked && \
-                git -C "$work_repo" diff --cached --quiet --ignore-submodules=untracked \
-                || error "源码有已跟踪的本地修改，拒绝切换提交: $dest"
-            git -C "$work_repo" checkout --detach "$commit" || error "切换源码提交失败: $dest（请检查未跟踪文件冲突）"
-        fi
-        if [[ "$requested" == HEAD && "$_GIT_SOURCE_REF" == refs/heads/* ]]; then
-            git -C "$work_repo" symbolic-ref refs/remotes/origin/HEAD "$cache_ref" || error "更新远端默认分支记录失败"
-        fi
+    git_resolve_source_ref "$work_repo" "$url" "$requested"
+    if [[ "$new_repo" == true ]]; then
+        local object_format=sha1
+        [[ ${#_GIT_SOURCE_OID} -eq 64 ]] && object_format=sha256
+        git init --quiet --object-format="$object_format" "$work_repo" || error "初始化源码缓存失败"
+        git -C "$work_repo" remote add origin "$url" || error "设置源码 origin 失败"
+    fi
+    local cache_ref
+    cache_ref="$(git_source_cache_ref "$_GIT_SOURCE_REF")"
+    if [[ "$_GIT_SOURCE_FETCH" == true ]]; then
+        info "获取 Git 引用: $requested ($dest)"
+        git -C "$work_repo" fetch --depth "$depth" --no-tags -- origin "+${_GIT_SOURCE_REF}:${cache_ref}" \
+            || error "获取 Git 引用失败: $requested（完整 SHA 需由远端允许抓取）"
+    fi
+    if [[ "$requested" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]]; then
+        commit="$(git -C "$work_repo" rev-parse --verify "${_GIT_SOURCE_REF}^{commit}" 2>/dev/null)" || error "SHA 不是有效提交: $requested"
+        [[ "$commit" == "$_GIT_SOURCE_REF" ]] || error "完整 SHA 必须直接指向提交: $requested"
+    else
+        commit="$(git -C "$work_repo" rev-parse --verify "${cache_ref}^{commit}" 2>/dev/null)" || error "Git 引用没有指向提交: $requested"
+    fi
+    if [[ "$current" != "$commit" ]]; then
+        git -C "$work_repo" diff --quiet --ignore-submodules=untracked && \
+            git -C "$work_repo" diff --cached --quiet --ignore-submodules=untracked \
+            || error "源码有已跟踪的本地修改，拒绝切换提交: $dest"
+        git -C "$work_repo" checkout --detach "$commit" || error "切换源码提交失败: $dest（请检查未跟踪文件冲突）"
+    fi
+    if [[ "$requested" == HEAD && "$_GIT_SOURCE_REF" == refs/heads/* ]]; then
+        git -C "$work_repo" symbolic-ref refs/remotes/origin/HEAD "$cache_ref" || error "更新远端默认分支记录失败"
     fi
 
     if [[ "$recursive" == true ]]; then
@@ -309,13 +269,11 @@ git_clone() (
             git -C "$work_repo" submodule update --init --recursive --checkout --depth "$depth" \
             || error "同步 Git 子模块失败: $dest"
     fi
-    if [[ "$cached" != true ]]; then
-        state_file="$(git -C "$work_repo" rev-parse --absolute-git-dir)/cross-gcc-source"
-        temp_state="$(mktemp "${state_file}.XXXXXX")" || error "无法记录源码提交"
-        printf '%s\n%s\n' "$requested" "$commit" > "$temp_state" || error "写入源码提交记录失败"
-        mv -f -- "$temp_state" "$state_file" || error "保存源码提交记录失败"
-        temp_state=""
-    fi
+    state_file="$(git -C "$work_repo" rev-parse --absolute-git-dir)/cross-gcc-source"
+    temp_state="$(mktemp "${state_file}.XXXXXX")" || error "无法记录源码提交"
+    printf '%s\n%s\n' "$requested" "$commit" > "$temp_state" || error "写入源码提交记录失败"
+    mv -f -- "$temp_state" "$state_file" || error "保存源码提交记录失败"
+    temp_state=""
     if [[ "$new_repo" == true ]]; then
         [[ ! -e "$dest" && ! -L "$dest" ]] || error "源码目标目录已被创建: $dest"
         mv -- "$temp_repo" "$dest" || error "保存 Git 源码缓存失败: $dest"
@@ -334,7 +292,7 @@ fetch_source() {
 
     if [[ "$ver" == git* ]]; then
         parse_git_ver "$ver"
-        git_clone "$git_url" "$src_dir" 1 "$_GIT_UPDATE" "$_GIT_REF"
+        git_clone "$git_url" "$src_dir" 1 "$_GIT_REF"
     else
         dl_files+=("$tar_url")
     fi

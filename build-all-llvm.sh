@@ -40,7 +40,7 @@ usage() {
 示例:
   $(basename "$0") -v 22.1.8 -a riscv64,aarch64
   $(basename "$0") -v 22.1.8,21.1.8 -a aarch64,loongarch64,riscv64,x86_64
-  $(basename "$0") -v git:update -a riscv64 --fresh
+  $(basename "$0") -v git -a riscv64 --fresh
   $(basename "$0") -v 22.1.8 -a riscv64 --static --archive
   $(basename "$0") -v 22.1.8 -a riscv64 --gcc-dir ./gcc_161/cross-{ARCH}-linux-gnu
 EOF

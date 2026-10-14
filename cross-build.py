@@ -63,7 +63,6 @@ class PackageDef:
     source_url: str = ""          # tar 下载
     git_url: str = ""             # git clone
     git_ref: str = ""             # branch/tag/完整提交 SHA，空值表示远端 HEAD
-    git_update: bool = False
     git_recursive: bool = False
     # 构建系统
     build_system: str = ""        # autotools | cmake | make | meson | custom
@@ -562,12 +561,11 @@ class BuildEngine:
 
     def _git_clone(self, pkg: PackageDef) -> Path:
         dest = self.src_dir / pkg.name
-        update = getattr(self.args, "update_sources", False) or pkg.git_update
         # 与 Bash 构建脚本共用引用解析、缓存校验和更新逻辑；参数不插入 shell 文本。
         cmd = ["bash", "-c",
-               'set -euo pipefail; source "$1"; git_clone "$2" "$3" "$4" "$5" "$6" "$7"',
+               'set -euo pipefail; source "$1"; git_clone "$2" "$3" "$4" "$5" "$6"',
                "git-source", str(Path(__file__).resolve().with_name("lib.sh")),
-               pkg.git_url, str(dest), "1", str(update).lower(), pkg.git_ref,
+               pkg.git_url, str(dest), "1", pkg.git_ref,
                str(pkg.git_recursive).lower()]
         step(f"获取 Git 源码 {pkg.name} ({pkg.git_ref or 'HEAD'})")
         r = run_cmd(cmd, env=self.env, log_file=self.log_dir / f"{pkg.name}_clone.log")
@@ -1234,8 +1232,6 @@ def main():
     parser.add_argument("--manifest", default="", help="输出构建清单 JSON 路径")
     parser.add_argument("--recipes", action="append", default=[],
                         help="加载额外的包定义 JSON (配置式扩展, 可多次指定)")
-    parser.add_argument("--update-sources", action="store_true",
-                        help="更新已缓存的 Git 分支/标签到远端版本（完整提交 SHA 保持固定）")
     parser.add_argument("--all", action="store_true", help="构建所有库类型的包")
     parser.add_argument("--release", action="store_true",
                         help="构建默认发布集 (几个典型且简单的包, 见 --list 的发布列)")
@@ -1298,8 +1294,7 @@ def main():
             pkg = PACKAGES[name]
             src = pkg.git_url or pkg.source_url.replace("{ver}", pkg.version)
             if pkg.git_url:
-                update = args.update_sources or pkg.git_update
-                src += f" (ref={pkg.git_ref or 'HEAD'}, update={str(update).lower()})"
+                src += f" (ref={pkg.git_ref or 'HEAD'})"
             if args.static and not pkg.supports_static:
                 link = "SKIP"
             else:

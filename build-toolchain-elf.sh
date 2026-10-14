@@ -38,11 +38,11 @@ usage() {
   -j,--threads   构建线程数 (默认: $THREADS)
   --mirror       下载镜像源 (默认: $MIRROR)
 
-版本控制选项(支持 'git[:REF][:update]' 格式):
+版本控制选项(支持 'git[:REF]' 格式):
   --binutils-ver binutils 版本 (默认: $BINUTILS_VER)
   --gcc-ver      gcc 版本 (默认: $GCC_VER)
   --newlib-ver   newlib 版本 (默认: $NEWLIB_VER)
-                 git 格式: git | git:REF | git:update | git:REF:update
+                 git 格式: git | git:REF；命名引用每次同步远端，完整提交 SHA 固定
                  REF 支持分支、标签、完整提交 SHA；同名引用使用 refs/heads/ 或 refs/tags/
 
 构建后处理选项:
@@ -63,7 +63,7 @@ usage() {
   $(basename "$0") --arch aarch64
   $(basename "$0") --arch riscv64 --gcc-ver 14.2.0
   $(basename "$0") --arch riscv64 --static --fresh
-  $(basename "$0") --arch arm --binutils-ver git --gcc-ver git:update --newlib-ver git
+  $(basename "$0") --arch arm --binutils-ver git --gcc-ver git --newlib-ver git
 EOF
     exit 0
 }

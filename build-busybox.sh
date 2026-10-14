@@ -43,7 +43,7 @@ usage() {
   --cross-compile   交叉编译前缀，可为完整路径或仅前缀
                     (例如: riscv64-linux-gnu- 或 /path/to/bin/riscv64-linux-gnu-)
   --work-dir        工作目录前缀 (默认: 当前目录)
-  --busybox-ver     BusyBox 版本 (默认: ${BUSYBOX_VER}, 支持 git[:REF][:update])
+  --busybox-ver     BusyBox 版本 (默认: ${BUSYBOX_VER}, 支持 git[:REF])
   --output          输出 initramfs 路径 (默认: <work-dir>/initrd-<arch>.cpio)
   --coremark        编译 CoreMark 性能测试程序 (git master, 静态链接),
                     打包为 /root/coremark 并输出 coremark-<arch> 产物
@@ -116,7 +116,7 @@ step "=== 获取 BusyBox 源码 ==="
 if [[ "$BUSYBOX_VER" == git* ]]; then
     BUSYBOX_SRC="$SRC_DIR/busybox"
     parse_git_ver "$BUSYBOX_VER"
-    git_clone "https://git.busybox.net/busybox/" "$BUSYBOX_SRC" 1 "$_GIT_UPDATE" "$_GIT_REF"
+    git_clone "https://git.busybox.net/busybox/" "$BUSYBOX_SRC" 1 "$_GIT_REF"
 else
     BUSYBOX_URL="${BUSYBOX_URL//\{VER\}/$BUSYBOX_VER}"
     if [[ "$BUSYBOX_URL" =~ \.(tar\.[a-z0-9]+)$ ]]; then
