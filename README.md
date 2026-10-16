@@ -257,9 +257,15 @@ aarch64-linux-gnu-gcc -o hello hello.c
 ### macOS 构建
 
 ```bash
-brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
+brew install bash gnu-sed gawk make bison rsync grep coreutils findutils gcc
+./env-macos.sh ./build-toolchain-generic.sh --arch riscv64 --libc glibc
 ./env-macos.sh ./build-all.sh --arch aarch64,riscv64 --libc glibc
 ```
+
+`env-macos.sh` 为主机工具设置 Homebrew GCC，包括 Linux 头文件工具使用的
+`HOSTCC`/`HOSTCXX` 和 glibc 使用的 `BUILD_CC`。macOS 的 `/usr/bin/gcc`
+实际是 Apple Clang；仅设置 `CC` 不会覆盖 Kbuild 中的 `HOSTCC = gcc`。
+上述变量可通过环境变量单独覆盖，Homebrew GCC 版本可用 `GCC_MAJOR` 指定。
 
 ---
 

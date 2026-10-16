@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# brew install bash gnu-sed gawk make bison rsync grep coreutils gcc
+# brew install bash gnu-sed gawk make bison rsync grep coreutils findutils gcc
 
 ulimit -n 16384
 
@@ -23,6 +23,12 @@ if [[ -z "${GCC_MAJOR:-}" ]]; then
     echo "错误: 未在 $HOMEBREW_PREFIX/bin 找到 gcc-N，请先执行 brew install gcc" >&2
     exit 1
 fi
+for compiler in "gcc-${GCC_MAJOR}" "g++-${GCC_MAJOR}"; do
+    if [[ ! -x "$HOMEBREW_PREFIX/bin/$compiler" ]]; then
+        echo "错误: 未找到 Homebrew 编译器 $HOMEBREW_PREFIX/bin/${compiler}，请检查 GCC_MAJOR 或执行 brew install gcc" >&2
+        exit 1
+    fi
+done
 
 # GNU make 为必需工具：macOS 系统自带 make 版本过旧，会导致奇怪构建错误，禁止回退
 MAKE_BIN="$HOMEBREW_PREFIX/opt/make/libexec/gnubin/make"
@@ -61,9 +67,13 @@ fi
 # 拼接冒号分隔的 PATH
 GNU_PATH_STR=$(IFS=:; echo "${GNU_PATHS[*]}")
 
-env \
+# Linux Kbuild 和交叉构建 glibc 需要单独指定本机辅助工具的编译器。
+exec env \
     CXX="g++-${GCC_MAJOR}" \
     CC="gcc-${GCC_MAJOR}" \
+    BUILD_CC="${BUILD_CC:-gcc-${GCC_MAJOR}}" \
+    HOSTCC="${HOSTCC:-gcc-${GCC_MAJOR}}" \
+    HOSTCXX="${HOSTCXX:-g++-${GCC_MAJOR}}" \
     MAKE="$MAKE_BIN" \
     PATH="$GNU_PATH_STR:$PATH" \
     "$@"
