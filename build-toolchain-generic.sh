@@ -17,6 +17,12 @@ source "$SCRIPT_DIR/lib.sh"
 
 setup_error_trap
 
+# CC 随后会切换为交叉编译器；本机辅助程序必须保留独立的编译器。
+# Kbuild 的 HOSTCC/HOSTCXX 还必须通过 make 命令行传入，否则会被其默认值覆盖。
+BUILD_CC="${BUILD_CC:-${CC:-gcc}}"
+HOSTCC="${HOSTCC:-$BUILD_CC}"
+HOSTCXX="${HOSTCXX:-${CXX:-g++}}"
+
 # 默认版本设置
 # 组件版本默认值来自 versions.env (由 lib.sh 加载)，可用环境变量或命令行覆盖
 
@@ -412,7 +418,8 @@ build_step "install" "${LOG_DIR_GCC_INITIAL}" \
 step "=== 准备Linux头文件 ==="
 cd "$SRC_DIR_LINUX" || error "无法进入Linux源码目录"
 build_step "headers" "${LOG_DIR_GLIBC}" \
-    make ARCH="${CROSS_KERNEL_NAME}" INSTALL_HDR_PATH="${CROSS_PREFIX}/${TARGET}/usr" headers_install
+    make HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
+    ARCH="${CROSS_KERNEL_NAME}" INSTALL_HDR_PATH="${CROSS_PREFIX}/${TARGET}/usr" headers_install
 
 # 构建 C 库（glibc 或 musl）
 if [[ "$LIBC" == "glibc" ]]; then
@@ -424,8 +431,9 @@ if [[ "$LIBC" == "glibc" ]]; then
     build_step  "configure" "${LOG_DIR_GLIBC}" \
         env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
         CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
+        BUILD_CC="$BUILD_CC" \
         "$SRC_DIR_GLIBC/configure" \
-        --build="$(gcc -dumpmachine)" \
+        --build="$($BUILD_CC -dumpmachine)" \
         --host="$TARGET" \
         --target="$TARGET" \
         --prefix="/usr" \
@@ -494,7 +502,7 @@ EOF
         CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
         CROSS_COMPILE="${CROSS_PREFIX}/bin/${TARGET}-" \
         "$SRC_DIR_MUSL/configure" \
-        --build="$(gcc -dumpmachine)" \
+        --build="$($BUILD_CC -dumpmachine)" \
         --host="$TARGET" \
         --target="$TARGET" \
         --prefix="/usr" \
