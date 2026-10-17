@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 从源码构建 QEMU (qemu-system-* 系统模拟 与 qemu-*-linux-user 用户态模拟)。
-# 自动安装构建依赖 (apt / dnf / yum)，克隆源码 (若缺失)，配置 + 编译 + 安装。
+# 可选安装构建依赖 (Homebrew / apt / dnf / yum)，克隆源码 (若缺失)，配置 + 编译 + 安装。
 # 产物可供 test-qemu-run.sh (系统模拟) 与 test-toolchain.sh (用户态模拟) 使用。
 set -euo pipefail
 
@@ -32,17 +32,19 @@ REF="$QEMU_REF"
 DO_INSTALL=true
 DO_DEPS=false
 STATIC_BUILD=false
+HOST_OS="$(uname -s)"
 
 usage() {
     cat <<EOF
 用法: $(basename "$0") [选项]
 
-从源码构建 QEMU。默认构建 riscv64 的系统模拟与用户态模拟。
+从源码构建 QEMU。默认构建 riscv64 系统模拟；Linux 主机还构建 Linux 用户态模拟。
 
   -s,--src DIR       QEMU 源码目录 (默认: ./qemu, 缺失时从 --repo 克隆 --ref)
   -b,--build DIR     out-of-tree 构建目录 (默认: <src>/build)
   -p,--prefix DIR    安装前缀 (默认: ./qemu-install)
-  -a,--arch LIST     架构列表 (逗号分隔), 每个展开为 <arch>-softmmu,<arch>-linux-user
+  -a,--arch LIST     架构列表 (逗号分隔), 每个展开为 <arch>-softmmu
+                     Linux 主机另加 <arch>-linux-user
                      (例如: aarch64,loongarch64,riscv64,x86_64)
   -t,--targets LIST  直接指定 QEMU target-list (优先级高于 --arch)
   -j,--jobs N        并行编译线程数 (默认: $JOBS)
@@ -50,17 +52,18 @@ usage() {
      --ref REF       分支/标签/完整提交 SHA (默认: $REF)，命名引用每次同步远端
      --install       执行 make install (默认)
      --no-install    跳过 make install
-     --deps          安装系统依赖 (需 sudo)
+     --deps          安装系统依赖 (Linux 需 sudo，macOS 使用 Homebrew)
      --no-deps       跳过系统依赖安装 (默认)
      --static        静态链接 qemu 自身的可执行文件 (透传 QEMU 的 --static)，产物不依赖
                      host 的共享库，可随意拷贝到同架构机器执行。需要系统提供静态库
                      (libglib-2.0.a / libpixman-1.a / libz.a 等)；*-linux-user 目标最
                      稳定，*-softmmu 在缺少静态库的发行版上可能配置失败。
                      构建/安装目录会自动追加 -static 后缀，与动态构建互不干扰。
+                     macOS 不支持静态链接主机可执行文件。
   -h,--help          显示帮助
 
 示例:
-  $(basename "$0")                                  # riscv64 系统+用户态 -> ./qemu-install
+  $(basename "$0")                                  # riscv64 系统模拟 (Linux 另加用户态)
   $(basename "$0") -a aarch64,loongarch64,riscv64,x86_64
   $(basename "$0") -t riscv64-linux-user -j 16 --deps         # 首次构建: 自动装依赖 (需 sudo)
   $(basename "$0") -t riscv64-linux-user --static             # 静态 qemu-riscv64，可拷贝
@@ -95,7 +98,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------------------------------------------------------------------------
-# 计算 target-list：架构 -> <q>-softmmu,<q>-linux-user
+# 计算 target-list：系统模拟，以及 Linux 主机可用的 Linux 用户态模拟
 # ---------------------------------------------------------------------------
 qemu_targets_for_arch() {
     local a="$1" q
@@ -103,7 +106,10 @@ qemu_targets_for_arch() {
         i686) q="i386" ;;
         *)    q="$a" ;;
     esac
-    printf '%s-softmmu,%s-linux-user' "$q" "$q"
+    printf '%s-softmmu' "$q"
+    if [[ "$HOST_OS" == Linux ]]; then
+        printf ',%s-linux-user' "$q"
+    fi
 }
 
 if [[ -z "$TARGETS" ]]; then
@@ -115,8 +121,15 @@ if [[ -z "$TARGETS" ]]; then
         done
         TARGETS=$(IFS=,; echo "${parts[*]}")
     else
-        TARGETS="riscv64-softmmu,riscv64-linux-user"
+        TARGETS="$(qemu_targets_for_arch riscv64)"
     fi
+fi
+
+if [[ "$HOST_OS" != Linux && ",$TARGETS," == *-linux-user,* ]]; then
+    error "*-linux-user 目标需要 Linux 主机；当前主机为 $HOST_OS，请使用 --arch 或 *-softmmu。"
+fi
+if [[ "$HOST_OS" == Darwin && "$STATIC_BUILD" == true ]]; then
+    error "macOS 不支持 --static 构建 QEMU，请去掉 --static。"
 fi
 
 SRC_DIR="${SRC_DIR:-$PWD/qemu}"
@@ -150,7 +163,9 @@ fi
 # 依赖安装
 # ---------------------------------------------------------------------------
 detect_pm() {
-    if command -v apt-get >/dev/null 2>&1; then echo apt
+    if [[ "$HOST_OS" == Darwin ]]; then
+        if command -v brew >/dev/null 2>&1; then echo brew; else echo unknown; fi
+    elif command -v apt-get >/dev/null 2>&1; then echo apt
     elif command -v dnf >/dev/null 2>&1; then echo dnf
     elif command -v yum >/dev/null 2>&1; then echo yum
     else echo unknown
@@ -200,9 +215,13 @@ install_deps_yum() {
 if [[ "$DO_DEPS" == true ]]; then
     PM="$(detect_pm)"
     case "$PM" in
+        brew)
+            step "通过 Homebrew 安装构建依赖"
+            brew install python ninja meson pkgconf glib pixman libslirp
+            ;;
         apt)     install_deps_apt ;;
         dnf|yum) install_deps_yum "$PM" ;;
-        unknown) error "不支持的发行版：未找到 apt-get / dnf / yum。" ;;
+        unknown) error "未找到当前系统支持的包管理器 (Homebrew / apt-get / dnf / yum)。" ;;
     esac
 else
     info "跳过依赖安装 (默认。如需自动安装构建依赖请加 --deps)"

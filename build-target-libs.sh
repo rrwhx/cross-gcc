@@ -20,8 +20,8 @@ setup_error_trap
 LIB_DEFS=(
     "zlib|1.3.2|https://github.com/madler/zlib/releases/download/v{VER}/zlib-{VER}.tar.gz|autotools|"
     "zlib-ng|2.3.3|https://github.com/zlib-ng/zlib-ng/archive/refs/tags/{VER}.tar.gz|cmake|-DZLIB_COMPAT=OFF -DZLIB_ENABLE_TESTS=OFF"
-    "lz4|1.10.0|https://github.com/lz4/lz4/archive/refs/tags/v{VER}.tar.gz|make|"
-    "zstd|1.5.7|https://github.com/facebook/zstd/releases/download/v{VER}/zstd-{VER}.tar.gz|make|"
+    "lz4|1.10.0|https://github.com/lz4/lz4/archive/refs/tags/v{VER}.tar.gz|make|TARGET_OS=Linux"
+    "zstd|1.5.7|https://github.com/facebook/zstd/releases/download/v{VER}/zstd-{VER}.tar.gz|make|UNAME_TARGET_SYSTEM=Linux"
     "snappy|1.2.2|https://github.com/google/snappy/archive/refs/tags/{VER}.tar.gz|cmake|-DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF"
     "jemalloc|5.3.1|https://github.com/jemalloc/jemalloc/releases/download/{VER}/jemalloc-{VER}.tar.bz2|autotools|'EXTRA_CXXFLAGS=-include stdexcept'"
 )
@@ -176,8 +176,14 @@ build_package() {
             cp -a "$src_pkg_dir/." "$build_pkg_dir/"
             (
                 cd "$build_pkg_dir"
-                build_step "${lib_name}_configure" "$LOG_DIR" \
-                    ./configure --host="${TARGET}" --prefix=/usr "${extra_args[@]}"
+                if [[ "$lib_name" == zlib ]]; then
+                    # zlib 的手写 configure 用 CHOST 选择目标系统，不接受 --host。
+                    build_step "${lib_name}_configure" "$LOG_DIR" \
+                        env CHOST="$TARGET" ./configure --prefix=/usr "${extra_args[@]}"
+                else
+                    build_step "${lib_name}_configure" "$LOG_DIR" \
+                        ./configure --host="${TARGET}" --prefix=/usr "${extra_args[@]}"
+                fi
                 build_step "${lib_name}_build" "$LOG_DIR" \
                     make -j"${THREADS}"
                 build_step "${lib_name}_install" "$LOG_DIR" \
@@ -191,7 +197,8 @@ build_package() {
                 build_step "${lib_name}_build" "$LOG_DIR" \
                     make -j"${THREADS}" CC="$CC" CXX="$CXX" AR="$AR" PREFIX=/usr "${extra_args[@]}"
                 build_step "${lib_name}_install" "$LOG_DIR" \
-                    make install DESTDIR="${TARGET_SYSROOT}" PREFIX=/usr
+                    make install DESTDIR="${TARGET_SYSROOT}" \
+                    CC="$CC" CXX="$CXX" AR="$AR" PREFIX=/usr "${extra_args[@]}"
             )
             ;;
         cmake)

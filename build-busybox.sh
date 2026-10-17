@@ -12,6 +12,10 @@ source "$SCRIPT_DIR/lib.sh"
 
 setup_error_trap
 
+# Kbuild 的 HOSTCC 默认值会覆盖环境变量，需要在 make 命令行显式传入。
+HOSTCC="${HOSTCC:-${CC:-gcc}}"
+HOSTCXX="${HOSTCXX:-${CXX:-g++}}"
+
 # ---------------------------------------------------------------------------
 # 默认配置
 # ---------------------------------------------------------------------------
@@ -164,6 +168,7 @@ info "工作目录: $BUSYBOX_SRC"
 info "生成默认配置 (ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE)"
 build_step "busybox_defconfig" "$LOG_DIR" \
     make -C "$BUSYBOX_SRC" O="$BUILD_DIR" \
+    HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
     ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" defconfig
 
 # 启用静态链接，禁用不兼容模块
@@ -185,11 +190,13 @@ info "工作目录: $BUILD_DIR"
 info "make -j${THREADS} ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE"
 build_step "busybox_build" "$LOG_DIR" \
     make -C "$BUILD_DIR" -j"${THREADS}" \
+    HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
     ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE"
 
 info "安装 BusyBox 到 _install/"
 build_step "busybox_install" "$LOG_DIR" \
     make -C "$BUILD_DIR" install \
+    HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
     ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE"
 
 # 输出 busybox 二进制信息

@@ -181,7 +181,7 @@ register(PackageDef(
     build_system="autotools",
     pkg_type="library",
     # zlib 为手写 configure: 遇到不认识的选项会直接报错退出,
-    # 既不认 --host 也不认 --enable-static/--disable-shared; 交叉靠 CC 环境变量
+    # 既不认 --host 也不认 --enable-static/--disable-shared; 交叉靠 CC 与 CHOST
     host_arg="",
     link_args_auto=False,
     static_args=["--static"],
@@ -215,7 +215,11 @@ register(PackageDef(
     version="1.5.7",
     description="Zstandard 压缩 (库 + CLI)",
     source_url="https://github.com/facebook/zstd/releases/download/v{ver}/zstd-{ver}.tar.gz",
-    build_system="make",
+    # 上游 Makefile 不识别 BUILD_SHARED=no；CMake 提供明确的共享库开关。
+    build_system="cmake",
+    source_subdir="build/cmake",
+    cmake_args=["-DZSTD_BUILD_TESTS=OFF"],
+    static_args=["-DZSTD_BUILD_SHARED=OFF"],
     pkg_type="library",
     # 同时产出 libzstd.a 与 zstd CLI
     static_link_exe=True,
@@ -341,7 +345,7 @@ register(PackageDef(
     git_url="https://github.com/OpenMathLib/OpenBLAS.git",
     build_system="make",
     pkg_type="library",
-    # make 没有统一的"只建静态库"变量名: lz4/zstd 用 BUILD_SHARED=no,
+    # make 没有统一的"只建静态库"变量名: lz4 用 BUILD_SHARED=no,
     # OpenBLAS 用 NO_SHARED=1。不关掉则它仍会去链 .so, 而 LDFLAGS=-static
     # 会使共享库链接报 crtbeginT.o 重定位错误 (实测确认)
     link_args_auto=False,
@@ -742,6 +746,9 @@ class BuildEngine:
         """将包级 static_env/shared_env 合入环境 (跨 configure/build/install 生效)"""
         extra = dict(pkg.env_extra)
         extra.update(pkg.static_env if self.static else pkg.shared_env)
+        if not self.native and self.target and pkg.name == "zlib":
+            # 不声明 CHOST 时，zlib 会按构建主机的 uname 选择链接参数。
+            extra["CHOST"] = self.target
         return dict(self.env, **{k: str(v) for k, v in extra.items()}) if extra else self.env
 
     def _render(self, tmpl: str, pkg: PackageDef) -> list:
@@ -951,12 +958,15 @@ class BuildEngine:
         shutil.copytree(src_path, build_dir, dirs_exist_ok=True)
 
         # 工具链与链接方式赋值: build 与 install 必须收到同一套。
-        # lz4/zstd 的 install 目标会按变量重新判定该构建什么, 只给 build 传
+        # lz4 的 install 目标会按变量重新判定该构建什么, 只给 build 传
         # BUILD_SHARED=no 时, install 阶段会去编译 .so (CI 实测: 报
         # "compiling dynamic library" 并因 -static 导致 crtbeginT.o 重定位冲突)
         assigns = [f"CC={self.env['CC']}", f"CXX={self.env['CXX']}",
                    f"AR={self.env.get('AR', 'ar')}",
                    f"PREFIX={pkg.install_prefix}"]
+        if not self.native and "-linux-" in self.target and pkg.name == "lz4":
+            # 上游 Makefile 默认用主机 uname 决定 .so/.dylib 及链接选项。
+            assigns.append("TARGET_OS=Linux")
         if pkg.link_args_auto and self.static:
             assigns.append("BUILD_SHARED=no")
         assigns += pkg.static_args if self.static else pkg.shared_args
@@ -964,7 +974,7 @@ class BuildEngine:
         env = self._link_env(pkg)
         make_cmd = ["make", f"-j{self.jobs}"] + assigns
         # BUILD_SHARED=no 只决定库形态, 不影响 libc 链接方式;
-        # 同时产出 CLI 的包 (lz4/zstd) 需额外用 LDFLAGS 强制静态可执行文件。
+        # 同时产出 CLI 的包 (如 lz4) 需额外用 LDFLAGS 强制静态可执行文件。
         # 仅作为命令行赋值传入 (优先级高于 Makefile 内赋值), 不放进 env,
         # 避免项目内部链接 .so 时误用 -static
         if self._want_static_exe(pkg):

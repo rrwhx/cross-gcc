@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# brew install bash gnu-sed gawk make bison rsync grep coreutils findutils gcc
+# 首次安装依赖: ./install-prerequisites.sh
 
 ulimit -n 16384
 
@@ -15,20 +15,24 @@ if [[ ! -x "$BASH_BIN" ]]; then
     exit 1
 fi
 
-# 自动探测已安装的最新 Homebrew GCC 主版本号 (可用 GCC_MAJOR 环境变量覆盖)
-if [[ -z "${GCC_MAJOR:-}" ]]; then
-    GCC_MAJOR=$(ls "$HOMEBREW_PREFIX"/bin/gcc-[0-9]* 2>/dev/null | sed -E 's/.*gcc-([0-9]+)$/\1/' | sort -n | tail -1)
-fi
-if [[ -z "${GCC_MAJOR:-}" ]]; then
-    echo "错误: 未在 $HOMEBREW_PREFIX/bin 找到 gcc-N，请先执行 brew install gcc" >&2
-    exit 1
-fi
-for compiler in "gcc-${GCC_MAJOR}" "g++-${GCC_MAJOR}"; do
-    if [[ ! -x "$HOMEBREW_PREFIX/bin/$compiler" ]]; then
-        echo "错误: 未找到 Homebrew 编译器 $HOMEBREW_PREFIX/bin/${compiler}，请检查 GCC_MAJOR 或执行 brew install gcc" >&2
+# 未指定 CC/CXX 时使用最新 Homebrew GCC (可用 GCC_MAJOR 环境变量覆盖)
+if [[ -z "${CC:-}" || -z "${CXX:-}" ]]; then
+    if [[ -z "${GCC_MAJOR:-}" ]]; then
+        GCC_MAJOR=$(ls "$HOMEBREW_PREFIX"/bin/gcc-[0-9]* 2>/dev/null | sed -E 's/.*gcc-([0-9]+)$/\1/' | sort -n | tail -1)
+    fi
+    if [[ -z "${GCC_MAJOR:-}" ]]; then
+        echo "错误: 未在 $HOMEBREW_PREFIX/bin 找到 gcc-N，请先执行 brew install gcc" >&2
         exit 1
     fi
-done
+    for compiler in "gcc-${GCC_MAJOR}" "g++-${GCC_MAJOR}"; do
+        if [[ ! -x "$HOMEBREW_PREFIX/bin/$compiler" ]]; then
+            echo "错误: 未找到 Homebrew 编译器 $HOMEBREW_PREFIX/bin/${compiler}，请检查 GCC_MAJOR 或执行 brew install gcc" >&2
+            exit 1
+        fi
+    done
+fi
+CC="${CC:-gcc-${GCC_MAJOR}}"
+CXX="${CXX:-g++-${GCC_MAJOR}}"
 
 # GNU make 为必需工具：macOS 系统自带 make 版本过旧，会导致奇怪构建错误，禁止回退
 MAKE_BIN="$HOMEBREW_PREFIX/opt/make/libexec/gnubin/make"
@@ -37,12 +41,15 @@ if [[ ! -x "$MAKE_BIN" ]]; then
     exit 1
 fi
 
-# 检查 GNU 工具目录：存在的加入 PATH，缺失的警告并跳过 (格式: 相对目录:brew包名)
+# 检查 Homebrew 工具目录：存在的加入 PATH，缺失的警告并跳过 (格式: 相对目录:brew包名)
 GNU_TOOL_DIRS=(
     "opt/coreutils/libexec/gnubin:coreutils"
     "opt/grep/libexec/gnubin:grep"
     "opt/findutils/libexec/gnubin:findutils"
     "opt/bison/bin:bison"
+    "opt/flex/bin:flex"
+    "opt/texinfo/bin:texinfo"
+    "opt/python@3/libexec/bin:python"
     "opt/gawk/libexec/gnubin:gawk"
     "opt/gnu-sed/libexec/gnubin:gnu-sed"
 )
@@ -55,13 +62,13 @@ for entry in "${GNU_TOOL_DIRS[@]}"; do
     if [[ -d "$dir" ]]; then
         GNU_PATHS+=("$dir")
     else
-        echo "警告: GNU 工具目录不存在，已跳过: $dir (对应包: $pkg)" >&2
+        echo "警告: Homebrew 工具目录不存在，已跳过: $dir (对应包: $pkg)" >&2
         MISSING_PKGS+=("$pkg")
     fi
 done
 
 if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
-    echo "警告: 部分 GNU 工具未安装，完整构建可能失败，建议执行: brew install ${MISSING_PKGS[*]}" >&2
+    echo "警告: 部分 Homebrew 工具未安装，完整构建可能失败，建议执行: brew install ${MISSING_PKGS[*]}" >&2
 fi
 
 # 拼接冒号分隔的 PATH
@@ -69,11 +76,11 @@ GNU_PATH_STR=$(IFS=:; echo "${GNU_PATHS[*]}")
 
 # Linux Kbuild 和交叉构建 glibc 需要单独指定本机辅助工具的编译器。
 exec env \
-    CXX="g++-${GCC_MAJOR}" \
-    CC="gcc-${GCC_MAJOR}" \
-    BUILD_CC="${BUILD_CC:-gcc-${GCC_MAJOR}}" \
-    HOSTCC="${HOSTCC:-gcc-${GCC_MAJOR}}" \
-    HOSTCXX="${HOSTCXX:-g++-${GCC_MAJOR}}" \
+    CXX="$CXX" \
+    CC="$CC" \
+    BUILD_CC="${BUILD_CC:-$CC}" \
+    HOSTCC="${HOSTCC:-$CC}" \
+    HOSTCXX="${HOSTCXX:-$CXX}" \
     MAKE="$MAKE_BIN" \
     PATH="$GNU_PATH_STR:$PATH" \
     "$@"

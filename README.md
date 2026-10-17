@@ -22,7 +22,7 @@
 | `build-kernel.sh` | 交叉编译 Linux 内核 |
 | `build-all.sh` | 批量构建多架构 × 多 libc 组合 |
 | `lib.sh` | 公共函数库（下载、git 克隆、日志、构建辅助） |
-| `install-prerequisites.sh` | 安装系统级构建依赖（apt/dnf/pacman） |
+| `install-prerequisites.sh` | 安装系统级构建依赖（Homebrew/apt/dnf/pacman） |
 | `install-flex-bison.sh` | 从源码编译安装 flex + bison + texinfo |
 | `prepare-gcc.sh` | GCC 源码预处理（下载 gmp/mpfr/mpc/isl 等依赖） |
 | `get-latest-versions.sh` | 获取各组件最新发布版本号 |
@@ -257,15 +257,72 @@ aarch64-linux-gnu-gcc -o hello hello.c
 ### macOS 构建
 
 ```bash
-brew install bash gnu-sed gawk make bison rsync grep coreutils findutils gcc
+./install-prerequisites.sh  # 已安装 Homebrew 和 Xcode Command Line Tools
 ./env-macos.sh ./build-toolchain-generic.sh --arch riscv64 --libc glibc
 ./env-macos.sh ./build-all.sh --arch aarch64,riscv64 --libc glibc
 ```
 
-`env-macos.sh` 为主机工具设置 Homebrew GCC，包括 Linux 头文件工具使用的
+`env-macos.sh` 默认使用 Homebrew GCC 编译主机工具，包括 Linux 头文件工具使用的
 `HOSTCC`/`HOSTCXX` 和 glibc 使用的 `BUILD_CC`。macOS 的 `/usr/bin/gcc`
 实际是 Apple Clang；仅设置 `CC` 不会覆盖 Kbuild 中的 `HOSTCC = gcc`。
-上述变量可通过环境变量单独覆盖，Homebrew GCC 版本可用 `GCC_MAJOR` 指定。
+`CC`/`CXX` 及上述变量都可通过环境变量覆盖；`BUILD_CC`/`HOSTCC` 默认跟随
+`CC`，`HOSTCXX` 默认跟随 `CXX`。Homebrew GCC 版本可用 `GCC_MAJOR` 指定。
+同时指定 `CC` 和 `CXX` 时不要求安装 Homebrew GCC。
+
+其他脚本也应通过 `env-macos.sh` 执行，以使用 Homebrew Bash、Python 和 GNU 工具。
+本次 macOS ARM64 检查的范围如下（Linux 目标为 `riscv64-linux-gnu`，newlib 目标为 `riscv64-unknown-elf`）：
+
+| 脚本 | macOS 状态与范围 |
+|------|-----------------|
+| `build-toolchain-generic.sh`、`test-toolchain.sh` | glibc 工具链已完成构建；C/C++/Fortran 编译链接测试已通过，使用 `--run-mode none` |
+| `build-busybox.sh` | 已实测 BusyBox 1.38.0 静态编译和 cpio 打包；未测试内核启动 |
+| `build-target-libs.sh`、`cross-build.py` | 修复 zlib、lz4、zstd 的 Linux 目标系统选择；这三个库已实测。Python 入口另验证静态构建，zstd 使用上游 CMake 的共享库开关；其他包未逐一验证 |
+| `build-qemu.sh` | QEMU 11.0.0 的 riscv64 系统模拟已完整构建安装，并验证版本查询、TCG virt 机器初始化；本次未启用 libslirp，未启动 Linux 内核 |
+| `install-prerequisites.sh` | 新增 Homebrew 分支，已用替身命令验证，测试不会实际安装软件 |
+| `build-all.sh`、`run-build-all.sh` | 沿用子脚本的兼容性，未跑完整架构/版本矩阵 |
+| `prepare-gcc.sh`、`get-latest-versions.sh`、`install-flex-bison.sh` | GNU 工具由封装脚本提供，本次未做完整联网/构建验证 |
+| `build-native-llvm.sh` | LLVM 22.1.8 的 clang/lld/compiler-rt、AArch64/RISCV 后端已完整构建安装（关闭 sanitizer）；本机 C/C++ 编译运行、RISC-V Linux C/C++ 静态/动态链接均通过 |
+| `build-toolchain-llvm.sh`、`build-all-llvm.sh` | 按交叉脚本参数做过真实 CMake 配置；完整 Linux 目标运行时和 Flang 链路未验证 |
+| `build-toolchain-elf.sh` | Binutils 2.47 + GCC 16.2.0 + newlib 4.6.0.20260123 完整构建安装通过；C/C++ 使用 `--specs=nosys.specs` 链接成 RISC-V ELF，未执行裸机程序 |
+| `build-kernel.sh`、`configs/kernel/mk-min-kernel.sh`、`build-native-gcc.sh` | 暂不适配：完整内核还需处理主机 ELF 头文件等依赖；原生 GCC 脚本的 binutils/链接器流程还需适配 Darwin |
+
+```bash
+# 交叉构建 BusyBox + initramfs
+./env-macos.sh ./build-busybox.sh --arch riscv64 \
+    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+
+# 交叉构建目标库
+./env-macos.sh ./build-target-libs.sh --target riscv64-linux-gnu \
+    --toolchain-dir ./cross-riscv64-linux-gnu --only zlib --only lz4 --only zstd
+
+# 已验证的原生 LLVM 配置，也可用于 RISC-V 交叉编译
+CC=clang CXX=clang++ ./env-macos.sh ./build-native-llvm.sh \
+    --targets AArch64,RISCV --projects clang,lld --runtimes compiler-rt \
+    --disable-sanitizer --link-jobs 1 -j 6
+
+# newlib 裸机工具链
+./env-macos.sh ./build-toolchain-elf.sh --arch riscv64 -j 4
+
+# QEMU 系统模拟；--deps 用 Homebrew 安装 QEMU 额外依赖
+CC=clang CXX=clang++ ./env-macos.sh ./build-qemu.sh --arch riscv64 --deps
+
+# 不联网、不安装软件的分支回归检查
+./env-macos.sh python3 test/test-macos-compat.py
+```
+
+QEMU 的 `*-linux-user` 目标需要 Linux 主机，参见
+[上游 configure 的主机检查](https://github.com/qemu/qemu/blob/master/configure)。
+macOS 可使用系统模拟；`test/test-qemu-run.sh` 需要另行准备 Linux 内核和 initramfs，
+本次未验证启动流程。构建 macOS 主机可执行文件时不要使用 `--static`；
+交叉编译给 Linux 使用的静态程序（如 BusyBox）不受此限制。
+newlib 的 `nosys.specs` 仅提供空系统调用用于链接检查；板级 I/O 需要目标平台实现。
+
+完整内核还需要在 macOS 上编译、运行 `modpost` 等主机工具。实测 Homebrew
+`libelf 0.8.13_1` 的 `pkg-config --cflags libelf` 能提供 `libelf.h`，但没有内核
+直接引用的 `elf.h` 和 `byteswap.h`。用临时包装头文件补齐后，`mk_elfconfig`
+可以工作，`modpost` 仍缺少 `STT_SPARC_REGISTER`、`R_386_PC32` 和多项 ARM/MIPS
+重定位常量。因此不能仅靠增加 include 路径支持完整内核；还需完整 ELF 定义和
+主机兼容处理。启用 objtool、BTF 等配置后需要另外验证对应工具及依赖。
 
 ---
 
