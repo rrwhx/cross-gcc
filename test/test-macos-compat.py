@@ -124,6 +124,69 @@ class MacOSCompatibility(unittest.TestCase):
         self.assertIn("build-essential", packages)
         self.assertNotIn("brew", packages)
 
+    def test_llvm_linux_runtimes_keep_host_configuration_separate(self):
+        self.script(self.bin / "cmake", 'printf "%s\\n" "$@" >> "$TRACE"')
+        self.script(self.bin / "ninja", "exit 0")
+        toolchain = self.work / "cross-gcc"
+        sysroot = toolchain / "riscv64-linux-gnu"
+        sysroot.mkdir(parents=True)
+        for host, with_sysroot in (("Darwin", True), ("Linux", True), ("Linux", False)):
+            with self.subTest(host=host, with_sysroot=with_sysroot):
+                self.env["TEST_OS"] = host
+                self.trace.write_text("")
+                args = ["--arch", "riscv64", "--src-dir", self.src,
+                        "--work-dir", self.work]
+                if with_sysroot:
+                    args += ["--target-gcc-toolchain", toolchain,
+                             "--target-sysroot", sysroot]
+                result = self.run_script("build-toolchain-llvm.sh", *args)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                configure = self.trace.read_text().splitlines()
+                # 主机构建保持 native；只有两套目标运行库子构建使用 Linux。
+                self.assertNotIn("-DCMAKE_SYSTEM_NAME=Linux", configure)
+                for kind in ("BUILTINS", "RUNTIMES"):
+                    prefix = f"-D{kind}_CMAKE_ARGS="
+                    runtime = next(arg[len(prefix):] for arg in configure
+                                   if arg.startswith(prefix)).split(";")
+                    self.assertIn("-DCMAKE_SYSTEM_NAME=Linux", runtime)
+                    if with_sysroot:
+                        self.assertIn(f"-DCMAKE_SYSROOT={sysroot.resolve()}", runtime)
+                        for lang in ("C", "CXX"):
+                            self.assertIn(f"-DCMAKE_{lang}_FLAGS=--gcc-toolchain={toolchain.resolve()}", runtime)
+                    else:
+                        self.assertFalse(any(arg.startswith("-DCMAKE_SYSROOT=") for arg in runtime))
+
+    def test_native_llvm_sdk_default_and_override(self):
+        self.script(self.bin / "cmake", 'printf "%s\\n" "$@" >> "$TRACE"')
+        self.script(self.bin / "ninja", "exit 0")
+        sdk = self.work / "MacOSX.sdk"
+        custom_sdk = self.work / "custom SDK"
+        sdk.mkdir()
+        custom_sdk.mkdir()
+        self.env["TEST_SDK"] = str(sdk)
+        for host, override in (("Darwin", ""), ("Darwin", str(custom_sdk)),
+                               ("Linux", "")):
+            with self.subTest(host=host, override=override):
+                self.env.update(TEST_OS=host, SDKROOT=override)
+                self.trace.write_text("")
+                # SDKROOT 已提供或 Linux 主机时，不应调用 xcrun。
+                self.script(self.bin / "xcrun", 'printf "%s\\n" "$TEST_SDK"'
+                            if host == "Darwin" and not override else "exit 99")
+                result = self.run_script("build-native-llvm.sh", "--src-dir", self.src,
+                                         "--work-dir", self.work)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                configure = self.trace.read_text().splitlines()
+                if host == "Darwin":
+                    self.assertIn(f"-DDEFAULT_SYSROOT={override or sdk}", configure)
+                else:
+                    self.assertFalse(any(arg.startswith("-DDEFAULT_SYSROOT=") for arg in configure))
+        self.env.update(TEST_OS="Darwin", SDKROOT=str(self.work / "missing-sdk"))
+        self.trace.write_text("")
+        result = self.run_script("build-native-llvm.sh", "--src-dir", self.src,
+                                 "--work-dir", self.work)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(self.trace.read_text(), "")
+
     def test_cross_libraries_keep_target_rules_during_install(self):
         for native, target in ((False, "riscv64-linux-gnu"), (False, "x86_64-w64-mingw32"), (True, "")):
             for static in (False, True):

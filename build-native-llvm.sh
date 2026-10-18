@@ -127,6 +127,16 @@ LLVM_RUNTIMES="${LLVM_RUNTIMES//,/;}"
 command -v cmake >/dev/null 2>&1 || error "未找到 cmake，请先安装 cmake"
 command -v ninja >/dev/null 2>&1 || error "未找到 ninja，请先安装 ninja-build"
 
+# 上游 clang/flang 不会像 Apple Clang 一样自动查找已安装的 macOS SDK。
+# 将 SDK 作为安装后驱动的默认 sysroot；命令行 --sysroot 仍可覆盖它。
+MACOS_SDK=""
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    MACOS_SDK="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}" \
+        || error "无法定位 macOS SDK，请安装 Xcode Command Line Tools 或设置 SDKROOT"
+    [[ "$MACOS_SDK" == /* && -d "$MACOS_SDK" ]] \
+        || error "macOS SDK 不存在或不是绝对路径: $MACOS_SDK"
+fi
+
 # host 三元组（native: build == host == target）
 if command -v gcc >/dev/null 2>&1; then
     HOST_TRIPLE="$(gcc -dumpmachine)"
@@ -201,6 +211,9 @@ info "构建线程数: ${THREADS}"
 
 step "=== 配置 LLVM ==="
 CMAKE_EXTRA_ARGS=()
+if [[ -n "$MACOS_SDK" ]]; then
+    CMAKE_EXTRA_ARGS+=("-DDEFAULT_SYSROOT=${MACOS_SDK}")
+fi
 if [[ -n "$LINK_JOBS" ]]; then
     CMAKE_EXTRA_ARGS+=("-DLLVM_PARALLEL_LINK_JOBS=${LINK_JOBS}")
 fi

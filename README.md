@@ -281,10 +281,12 @@ aarch64-linux-gnu-gcc -o hello hello.c
 | `install-prerequisites.sh` | 新增 Homebrew 分支，已用替身命令验证，测试不会实际安装软件 |
 | `build-all.sh`、`run-build-all.sh` | 沿用子脚本的兼容性，未跑完整架构/版本矩阵 |
 | `prepare-gcc.sh`、`get-latest-versions.sh`、`install-flex-bison.sh` | GNU 工具由封装脚本提供，本次未做完整联网/构建验证 |
-| `build-native-llvm.sh` | LLVM 22.1.8 的 clang/lld/compiler-rt、AArch64/RISCV 后端已完整构建安装（关闭 sanitizer）；本机 C/C++ 编译运行、RISC-V Linux C/C++ 静态/动态链接均通过 |
-| `build-toolchain-llvm.sh`、`build-all-llvm.sh` | 按交叉脚本参数做过真实 CMake 配置；完整 Linux 目标运行时和 Flang 链路未验证 |
+| `build-native-llvm.sh` | LLVM 22.1.8 默认项目、四个后端及运行库已完整构建安装，启用 sanitizer；修复默认 SDK 路径后，清空 SDK 环境的本机 C/C++/Fortran、ASan 编译运行通过，显式覆盖 sysroot 的 RISC-V Linux C/C++ 链接通过 |
+| `build-toolchain-llvm.sh` | 修复 Linux 目标运行库的平台选择及 C 编译器工具链路径；LLVM 22.1.8 的 clang/lld/flang、RISC-V compiler-rt/flang-rt 已完整构建安装，C/C++/Fortran 静态和动态链接共 6 项通过，另验证 compiler-rt builtins 链接；未执行目标程序 |
+| `build-all-llvm.sh` | 沿用子脚本的兼容性，未跑完整架构/版本矩阵 |
 | `build-toolchain-elf.sh` | Binutils 2.47 + GCC 16.2.0 + newlib 4.6.0.20260123 完整构建安装通过；C/C++ 使用 `--specs=nosys.specs` 链接成 RISC-V ELF，未执行裸机程序 |
-| `build-kernel.sh`、`configs/kernel/mk-min-kernel.sh`、`build-native-gcc.sh` | 暂不适配：完整内核还需处理主机 ELF 头文件等依赖；原生 GCC 脚本的 binutils/链接器流程还需适配 Darwin |
+| `build-native-gcc.sh` | Apple Silicon 实测失败：GNU ar 生成的 Mach-O 静态库触发对齐错误；单独配置原版 GCC 16.2.0 也报不支持 `aarch64-apple-darwin`，需要 Darwin 源码补丁及工具链流程适配 |
+| `build-kernel.sh`、`configs/kernel/mk-min-kernel.sh` | 暂不适配：完整内核还需处理主机 ELF 头文件等依赖 |
 
 ```bash
 # 交叉构建 BusyBox + initramfs
@@ -295,10 +297,16 @@ aarch64-linux-gnu-gcc -o hello hello.c
 ./env-macos.sh ./build-target-libs.sh --target riscv64-linux-gnu \
     --toolchain-dir ./cross-riscv64-linux-gnu --only zlib --only lz4 --only zstd
 
-# 已验证的原生 LLVM 配置，也可用于 RISC-V 交叉编译
-CC=clang CXX=clang++ ./env-macos.sh ./build-native-llvm.sh \
-    --targets AArch64,RISCV --projects clang,lld --runtimes compiler-rt \
-    --disable-sanitizer --link-jobs 1 -j 6
+# 原生 LLVM：默认项目和后端，包含 Flang 与 sanitizer
+CMAKE_BUILD_PARALLEL_LEVEL=3 CC=clang CXX=clang++ \
+    ./env-macos.sh ./build-native-llvm.sh --link-jobs 1 -j 3
+
+# 在 macOS 上运行、默认生成 RISC-V Linux 程序的 LLVM 工具链
+CMAKE_BUILD_PARALLEL_LEVEL=3 CC=clang CXX=clang++ \
+    ./env-macos.sh ./build-toolchain-llvm.sh --arch riscv64 \
+    --target-gcc-toolchain ./cross-riscv64-linux-gnu \
+    --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
+    --link-jobs 1 -j 3
 
 # newlib 裸机工具链
 ./env-macos.sh ./build-toolchain-elf.sh --arch riscv64 -j 4
@@ -316,6 +324,18 @@ macOS 可使用系统模拟；`test/test-qemu-run.sh` 需要另行准备 Linux �
 本次未验证启动流程。构建 macOS 主机可执行文件时不要使用 `--static`；
 交叉编译给 Linux 使用的静态程序（如 BusyBox）不受此限制。
 newlib 的 `nosys.specs` 仅提供空系统调用用于链接检查；板级 I/O 需要目标平台实现。
+
+`build-native-llvm.sh` 在 macOS 上使用 `xcrun --sdk macosx --show-sdk-path` 获取
+安装后 clang/flang 的默认 SDK，也可在构建时用绝对路径 `SDKROOT` 覆盖。
+使用原生 LLVM 交叉编译时，可用 `--sysroot` 显式选择目标系统的 sysroot。
+Flang 的部分源文件编译时占用数 GB 内存；16 GB 内存的机器建议从上述并发设置开始，
+顺序构建两套 LLVM。`CMAKE_BUILD_PARALLEL_LEVEL` 同时限制运行库子构建的并发。
+
+本机 Homebrew GCC 16.2.0 的配方会应用 Darwin 维护分支的 Apple Silicon 支持补丁，
+所以 `brew install gcc` 可用并不意味着本脚本下载的原版 GCC 可以构建同一目标。
+`build-native-gcc.sh` 还会优先使用刚安装的 GNU binutils；实测其中的 `ar` 生成的
+静态库被 Apple 链接器拒绝（`64-bit mach-o member ... not 8-byte aligned`）。
+这两项需要一起处理，超出了仅调整 shell 参数的范围，本次没有引入 GCC 源码补丁。
 
 完整内核还需要在 macOS 上编译、运行 `modpost` 等主机工具。实测 Homebrew
 `libelf 0.8.13_1` 的 `pkg-config --cflags libelf` 能提供 `libelf.h`，但没有内核

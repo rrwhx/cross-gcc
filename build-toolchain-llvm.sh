@@ -189,11 +189,14 @@ fi
 step "=== 配置 LLVM ==="
 CMAKE_EXTRA_ARGS=()
 
-# runtimes/builtins 子构建 (compiler-rt / flang-rt) 的附加 CMake 参数，最终以 ; 拼接传入
-runtimes_sub_args=()
+# 主机上的 clang/lld/flang 使用本机平台；运行库子构建始终面向 Linux。
+# 仅设置目标三元组不会改变 CMake 的系统判断，Darwin 上会误走 macOS 运行库分支。
+# 最终以 ; 拼接传入 runtimes/builtins (compiler-rt / flang-rt)。
+runtimes_sub_args=("-DCMAKE_SYSTEM_NAME=Linux")
 if [[ -n "$TARGET_GCC_TOOLCHAIN" && -n "$TARGET_SYSROOT" ]]; then
     runtimes_sub_args+=(
         "-DCMAKE_SYSROOT=${TARGET_SYSROOT}"
+        "-DCMAKE_C_FLAGS=--gcc-toolchain=${TARGET_GCC_TOOLCHAIN}"
         "-DCMAKE_CXX_FLAGS=--gcc-toolchain=${TARGET_GCC_TOOLCHAIN}"
     )
     if [[ "$ARCH" == "x86_64" ]]; then
