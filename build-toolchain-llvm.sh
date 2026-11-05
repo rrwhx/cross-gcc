@@ -33,7 +33,7 @@ TARGET_SYSROOT=""
 BUILD_DIR=""
 INSTALL_DIR=""
 LOG_DIR=""
-LINK_JOBS=""
+LINK_JOBS="${LLVM_LINK_JOBS:-}"
 # MIRROR 默认值由 lib.sh 提供，可通过 --mirror 覆盖
 CLEAN_BUILD=false
 ARCHIVE_RESULT=false
@@ -56,7 +56,8 @@ usage() {
   --build-dir         构建目录 (默认: WORK_DIR/build-llvm-ARCH)
   --install-dir       安装目录 (默认: WORK_DIR/install-llvm-ARCH)
   --log-dir           日志目录 (默认: WORK_DIR/logs-llvm-ARCH)
-  --link-jobs         并行链接作业数 (LLVM_PARALLEL_LINK_JOBS)
+  --link-jobs         并行链接作业数 (命令行 > LLVM_LINK_JOBS 环境变量)
+                      均未指定时不额外设置链接并发。
   -j,--threads        并行编译线程数 (默认: ${THREADS})
   --mirror            下载镜像源 (默认: $MIRROR)
   --static            静态链接工具链自身的可执行文件 (clang/lld/flang 等)，产物不依赖 host
