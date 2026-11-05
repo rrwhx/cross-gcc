@@ -23,7 +23,7 @@ setup_error_trap
 TARGET=""
 TOOLCHAIN_DIR=""
 WORK_DIR=$(pwd)
-QEMU_DIR=""
+QEMU_DIR="${QEMU_DIR:-}"
 RUN_MODE="static"   # none | static | all
 STRICT=false
 LANGUAGE_LIST="c,c++,fortran"
@@ -37,7 +37,7 @@ usage() {
   --toolchain-dir DIR  工具链根目录 (含 bin/<target>-gcc), 例如 ./cross-riscv64-linux-gnu
   --target TRIPLE      目标三元组, 例如 riscv64-linux-gnu
   --work-dir DIR       测试工作目录 (默认: 当前目录)
-  --qemu-dir DIR       qemu-user 二进制目录 (默认: 从 PATH 查找 qemu-<arch>)
+  --qemu-dir DIR       qemu-user 二进制目录 (默认读取 QEMU_DIR 环境变量，其次 PATH)
   --run-mode MODE      运行模式: none(仅编译) | static(运行静态产物,默认) | all(静态+动态)
   --languages LIST     要测试的语言 (逗号分隔: c,c++,fortran，默认全部；cxx 为 c++ 别名)
   --strict             选定语言编译器或需要运行的 QEMU 缺失时判定失败
