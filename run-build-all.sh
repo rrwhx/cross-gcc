@@ -37,6 +37,7 @@ run_build "$SCRIPT_DIR/build-all.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64
 # ./build-all.sh "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 9.5.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --work-dir gcc_95-glibc_241
 
 
+run_build "$SCRIPT_DIR/build-all-llvm.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ -v git:llvmorg-23.1.5 --work-dir llvm_2315/
 run_build "$SCRIPT_DIR/build-all-llvm.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ -v git:llvmorg-22.1.8 --work-dir llvm_2218/
 run_build "$SCRIPT_DIR/build-all-llvm.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ -v git --work-dir llvm_dev/
 
