@@ -176,6 +176,8 @@ LLVM 批量入口使用 `--llvm-ver`，工具链目录使用 `--toolchain-dir`�
 QEMU 使用 `--src-dir`、`--build-dir`、`--install-dir`；flex/bison 安装脚本同样使用 `--install-dir`。
 `--src-dir` 在 GCC 构建入口中指多组件源码的存放目录，在 LLVM/QEMU/内核入口中指具体源码树。
 最小内核辅助脚本的 `--toolchains-dir` 指含多套 `cross-<triple>/` 的父目录。
+该辅助入口需要显式指定源码目录，以及工具链父目录或交叉编译前缀；工作目录默认当前目录，
+并发沿用公共 `JOBS` 设置。路径可由 `SRC_DIR`、`TOOLCHAINS_DIR`、`CROSS_COMPILE`、`WORK_DIR`、`BUILD_DIR` 环境变量提供。
 脚本中的安装根目录统一使用 `INSTALL_DIR`，组件版本使用 `*_VER`，输出路径区分
 `OUTPUT_FILE` 与 `OUTPUT_DIR`；上游构建工具的 `--prefix`、`PREFIX` 和 `DESTDIR` 按各自接口传递。
 

@@ -7,15 +7,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$SCRIPT_DIR/../../lib.sh"
 
 # ---------------------------------------------------------------------------
-# 默认配置 (均可用环境变量或命令行覆盖)
+# 路径和并发可通过环境变量或命令行覆盖。
 # ---------------------------------------------------------------------------
-SRC_DIR="${SRC_DIR:-/dev/shm/lxy497151/downloads/linux-7.1.1}"
-TOOLCHAINS_DIR="${TOOLCHAINS_DIR:-/rvhome/lxy497151/cross-gcc/gcc_161-glibc_243}"
-WORK_DIR="${WORK_DIR:-/dev/shm/lxy497151}"
-BUILD_DIR=""
-CROSS_COMPILE=""
+SRC_DIR="${SRC_DIR:-}"
+TOOLCHAINS_DIR="${TOOLCHAINS_DIR:-}"
+WORK_DIR="${WORK_DIR:-$PWD}"
+BUILD_DIR="${BUILD_DIR:-}"
+CROSS_COMPILE="${CROSS_COMPILE:-}"
 CONFIG_ONLY=false
-DEFCONFIG_OUTPUT_FILE=""
+DEFCONFIG_OUTPUT_FILE="${DEFCONFIG_OUTPUT_FILE:-}"
 ARCH=""
 
 usage() {
@@ -24,9 +24,10 @@ usage() {
 
 生成 QEMU virt 最小内核配置 (defconfig + 裁剪) 并构建
 
-  --src-dir DIR        内核源码树 (默认: \$SRC_DIR 或 $SRC_DIR)
-  --toolchains-dir DIR 多架构工具链父目录, 含 cross-<triple>/bin (默认: \$TOOLCHAINS_DIR)
-  --cross-compile P    显式交叉编译前缀, 覆盖由 --toolchains-dir 推导的值
+  --src-dir DIR        内核源码树 (必填，或设置 SRC_DIR 环境变量)
+  --toolchains-dir DIR 多架构工具链父目录, 含 cross-<triple>/bin (或设置 TOOLCHAINS_DIR)
+  --cross-compile P    显式交叉编译前缀 (或设置 CROSS_COMPILE)，优先于工具链父目录
+                      --toolchains-dir 和 --cross-compile 至少指定一项
   --work-dir DIR       构建目录父路径 (默认: \$WORK_DIR 或 $WORK_DIR)
   --build-dir DIR      构建输出目录 (默认: <work-dir>/build-kernel-<arch>)
   -j, --jobs N         并行编译线程数 (默认: $JOBS)
@@ -35,10 +36,9 @@ usage() {
   -h, --help           显示帮助
 
 示例:
-  $(basename "$0") riscv64
-  $(basename "$0") --config-only aarch64
-  $(basename "$0") --savedefconfig ./x86_64_qemu_virt_min_defconfig x86_64
-  SRC_DIR=~/src/linux-7.2 $(basename "$0") loongarch64
+  $(basename "$0") --src-dir ./downloads/linux-7.2.2 --toolchains-dir . riscv64
+  $(basename "$0") --src-dir ./downloads/linux-7.2.2 --cross-compile aarch64-linux-gnu- --config-only aarch64
+  SRC_DIR=~/src/linux CROSS_COMPILE=loongarch64-linux-gnu- $(basename "$0") loongarch64
 EOF
     exit 0
 }
@@ -61,7 +61,9 @@ done
 
 require_positive_integer "构建并发数" "$JOBS"
 [[ -n "$ARCH" ]] || error "缺少架构参数"
-[[ -d "$SRC_DIR" ]] || { echo "内核源码不存在: $SRC_DIR"; exit 1; }
+[[ -n "$SRC_DIR" ]] || error "必须指定 --src-dir 或设置 SRC_DIR"
+[[ -d "$SRC_DIR" ]] || error "内核源码不存在: $SRC_DIR"
+SRC_DIR="$(cd "$SRC_DIR" && pwd -P)"
 
 case "$ARCH" in
     riscv64)     KERNEL_ARCH=riscv;     TARGET=riscv64-linux-gnu ;;
@@ -71,14 +73,23 @@ case "$ARCH" in
     *) echo "不支持的架构: $ARCH"; exit 1 ;;
 esac
 
-CROSS_COMPILE="${CROSS_COMPILE:-$TOOLCHAINS_DIR/cross-$TARGET/bin/$TARGET-}"
+if [[ -z "$CROSS_COMPILE" ]]; then
+    [[ -n "$TOOLCHAINS_DIR" ]] || error "必须指定 --toolchains-dir 或 --cross-compile"
+    [[ -d "$TOOLCHAINS_DIR" ]] || error "工具链父目录不存在: $TOOLCHAINS_DIR"
+    TOOLCHAINS_DIR="$(cd "$TOOLCHAINS_DIR" && pwd -P)"
+    CROSS_COMPILE="$TOOLCHAINS_DIR/cross-$TARGET/bin/$TARGET-"
+elif [[ "$CROSS_COMPILE" == */* ]]; then
+    cross_bin_dir="$(dirname "$CROSS_COMPILE")"
+    [[ -d "$cross_bin_dir" ]] || error "交叉编译器目录不存在: $cross_bin_dir"
+    CROSS_COMPILE="$(cd "$cross_bin_dir" && pwd -P)/$(basename "$CROSS_COMPILE")"
+fi
 BUILD_DIR="${BUILD_DIR:-$WORK_DIR/build-kernel-$ARCH}"
 
 command -v "${CROSS_COMPILE}gcc" >/dev/null 2>&1 || \
-    { echo "找不到交叉编译器: ${CROSS_COMPILE}gcc"; exit 1; }
+    error "找不到交叉编译器: ${CROSS_COMPILE}gcc"
 
+canonicalize_dirs WORK_DIR BUILD_DIR
 make_cmd=("${MAKE:-make}" -C "$SRC_DIR" "O=$BUILD_DIR" "ARCH=$KERNEL_ARCH" "CROSS_COMPILE=$CROSS_COMPILE")
-mkdir -p "$BUILD_DIR"
 
 echo "ARCH=$ARCH (KERNEL_ARCH=$KERNEL_ARCH)"
 echo "SRC_DIR=$SRC_DIR"
