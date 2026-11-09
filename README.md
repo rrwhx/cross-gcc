@@ -164,7 +164,7 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
 |------|------|
 | `--work-dir` | 工作目录前缀 |
 | `--jobs` / `-j` | 并行编译线程数 |
-| `--mirror` | 下载镜像源（默认清华） |
+| `--mirror` | 下载镜像源（默认 `mirrors.bfsu.edu.cn`） |
 | `--fresh` | 构建前清除已有 build/log/install 目录 |
 | `--clean` | 构建后删除构建目录和日志 |
 | `--archive` | 构建后打包为 tar.xz 并删除原目录 |

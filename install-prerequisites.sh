@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 在检测和安装依赖前处理帮助及无效参数。
+if [[ $# -gt 0 ]]; then
+    case "$1" in
+        -h|--help) echo "用法: $(basename "$0")（自动检测系统并安装构建依赖）"; exit 0;;
+        *) echo "错误: 未知参数: $1" >&2; exit 1;;
+    esac
+fi
+
 # 检测系统包管理器
 if [[ "$(uname -s)" == Darwin ]]; then
     command -v brew >/dev/null 2>&1 || {

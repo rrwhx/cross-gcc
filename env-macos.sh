@@ -2,6 +2,12 @@
 
 # 首次安装依赖: ./install-prerequisites.sh
 
+case "${1:-}" in
+    -h|--help) echo "用法: $(basename "$0") COMMAND [ARGS...]（使用 Homebrew 构建环境执行命令）"; exit 0;;
+    "") echo "错误: 缺少要执行的命令" >&2; exit 1;;
+    -*) echo "错误: 未知选项: $1" >&2; exit 1;;
+esac
+
 ulimit -n 16384
 
 # Homebrew 前缀自动探测 (Apple Silicon: /opt/homebrew, Intel: /usr/local)

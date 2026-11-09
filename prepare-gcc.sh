@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ $# -gt 0 ]]; then
+    case "$1" in
+        -h|--help) echo "用法: $(basename "$0")（在 GCC 源码根目录获取构建依赖）"; exit 0;;
+        *) echo "错误: 未知参数: $1" >&2; exit 1;;
+    esac
+fi
+
 # 检查 download_prerequisites 文件是否存在
 if [ ! -f "./contrib/download_prerequisites" ]; then
     echo "错误: ./contrib/download_prerequisites 文件不存在！"

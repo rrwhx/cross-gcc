@@ -45,21 +45,22 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --src-dir)          SRC_DIR="$2"; shift 2;;
-        --toolchains-dir) TOOLCHAINS_DIR="$2"; shift 2;;
-        --cross-compile)  CROSS_COMPILE="$2"; shift 2;;
-        --work-dir)       WORK_DIR="$2"; shift 2;;
-        --build-dir)      BUILD_DIR="$2"; shift 2;;
-        -j|--jobs)           JOBS="$2"; shift 2;;
+        --src-dir)          require_option_value "$@"; SRC_DIR="$2"; shift 2;;
+        --toolchains-dir) require_option_value "$@"; TOOLCHAINS_DIR="$2"; shift 2;;
+        --cross-compile)  require_option_value "$@"; CROSS_COMPILE="$2"; shift 2;;
+        --work-dir)       require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --build-dir)      require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
+        -j|--jobs)           require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --config-only)    CONFIG_ONLY=true; shift;;
-        --savedefconfig)  DEFCONFIG_OUTPUT_FILE="$2"; shift 2;;
+        --savedefconfig)  require_option_value "$@"; DEFCONFIG_OUTPUT_FILE="$2"; shift 2;;
         -h|--help)        usage;;
         -*)               echo "未知选项: $1" >&2; exit 1;;
-        *)                ARCH="$1"; shift;;
+        *)                [[ -z "$ARCH" ]] || error "每次仅支持一个架构"; ARCH="$1"; shift;;
     esac
 done
 
-[[ -z "$ARCH" ]] && { echo "缺少架构参数"; usage; }
+require_positive_integer "构建并发数" "$JOBS"
+[[ -n "$ARCH" ]] || error "缺少架构参数"
 [[ -d "$SRC_DIR" ]] || { echo "内核源码不存在: $SRC_DIR"; exit 1; }
 
 case "$ARCH" in

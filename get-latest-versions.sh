@@ -35,7 +35,7 @@ Options:
 Examples:
   $(basename "$0")                        # 表格形式显示最新版本
   $(basename "$0") --json                 # JSON 格式输出
-  eval "$($(basename "$0") --shell)"       # 将最新版本导入当前 shell 环境
+  eval "\$(./$(basename "$0") --shell)"       # 将最新版本导入当前 shell 环境
 EOF
     exit 0
 }
@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
         --json)   OUTPUT_FORMAT="json"; shift;;
         --shell)  OUTPUT_FORMAT="shell"; shift;;
         -h|--help) usage;;
-        *) echo "Unknown option: $1" >&2; usage;;
+        *) error "未知选项: $1";;
     esac
 done
 

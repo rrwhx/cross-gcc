@@ -60,7 +60,7 @@ usage() {
 
 构建后处理选项:
   --enable-sanitizer / --disable-sanitizer 是否构建 GCC sanitizer 运行库 (默认开启)
-  --enable-gdb / --disable-gdb 是否编译 gdb (默认关闭)
+  --enable-gdb / --disable-gdb 是否编译 gdb (默认: $ENABLE_GDB)
                  binutils 为 git 源时随 binutils 一起编译；为 release 源码包时单独下载 gdb 编译
   --static         静态链接工具链自身的可执行文件 (gcc/as/ld/gdb 等)，
                    产物不依赖 host 的 libc/libstdc++，可随意拷贝到同架构机器执行。
