@@ -36,6 +36,42 @@ SKIP_LIBS=""   # 逗号分隔的字符串，避免空数组在 set -u 下的兼�
 ONLY_LIBS=""
 CLEAN_BUILD=false
 
+# 判断某个库是否应该编译
+should_build() {
+    local lib="$1"
+
+    # 如果指定了 --only，则仅编译列表中的库
+    if [[ -n "$ONLY_LIBS" ]]; then
+        [[ ",$ONLY_LIBS," == *",$lib,"* ]] || return 1
+    fi
+
+    # 如果在 --skip 列表中，则跳过
+    if [[ -n "$SKIP_LIBS" ]]; then
+        [[ ",$SKIP_LIBS," != *",$lib,"* ]] || return 1
+    fi
+
+    return 0
+}
+
+# 校验用户指定的库名，支持重复选项和逗号分隔的列表。
+validate_library_names() {
+    local option="$1" value="$2" lib def known
+    local names=()
+    [[ -n "$value" && "$value" != ,* && "$value" != *, && "$value" != *,,* ]] \
+        || error "$option 的库名列表不能为空或包含空项"
+    IFS=',' read -ra names <<< "$value"
+    for lib in "${names[@]}"; do
+        known=false
+        for def in "${LIB_DEFS[@]}"; do
+            if [[ "${def%%|*}" == "$lib" ]]; then
+                known=true
+                break
+            fi
+        done
+        [[ "$known" == true ]] || error "未知库名: $lib（$option）"
+    done
+}
+
 usage() {
     cat <<EOF
 用法: $(basename "$0") --target TARGET --toolchain-dir DIR [选项]
@@ -57,21 +93,32 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --target)        TARGET="$2"; shift 2;;
-        --toolchain-dir) TOOLCHAIN_DIR="$2"; shift 2;;
-        --work-dir)      WORK_DIR="$2"; shift 2;;
-        --skip)          SKIP_LIBS="${SKIP_LIBS:+${SKIP_LIBS},}$2"; shift 2;;
-        --only)          ONLY_LIBS="${ONLY_LIBS:+${ONLY_LIBS},}$2"; shift 2;;
-        -j|--threads)    THREADS="$2"; shift 2;;
+        --target)        require_option_value "$@"; TARGET="$2"; shift 2;;
+        --toolchain-dir) require_option_value "$@"; TOOLCHAIN_DIR="$2"; shift 2;;
+        --work-dir)      require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --skip)          require_option_value "$@"; validate_library_names "$1" "$2"; SKIP_LIBS="${SKIP_LIBS:+${SKIP_LIBS},}$2"; shift 2;;
+        --only)          require_option_value "$@"; validate_library_names "$1" "$2"; ONLY_LIBS="${ONLY_LIBS:+${ONLY_LIBS},}$2"; shift 2;;
+        -j|--threads)    require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
         --clean)         CLEAN_BUILD=true; shift;;
         -h|--help)       usage;;
         *)               error "未知选项: $1"; usage;;
     esac
 done
 
+require_positive_integer "构建线程数" "$THREADS"
+
 if [[ -z "$TARGET" || -z "$TOOLCHAIN_DIR" ]]; then
     error "--target 和 --toolchain-dir 参数为必需。"
 fi
+
+# 空选择不能报告构建成功，在创建目录和获取源码前拒绝。
+selected_count=0
+for def in "${LIB_DEFS[@]}"; do
+    if should_build "${def%%|*}"; then
+        selected_count=$((selected_count + 1))
+    fi
+done
+[[ "$selected_count" -gt 0 ]] || error "未选中任何依赖库，请检查 --only 和 --skip"
 
 # ---------------------------------------------------------------------------
 # 目录与工具链设置
@@ -113,23 +160,6 @@ info "交叉编译器: $CC"
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
-
-# 判断某个库是否应该编译
-should_build() {
-    local lib="$1"
-
-    # 如果指定了 --only，则仅编译列表中的库
-    if [[ -n "$ONLY_LIBS" ]]; then
-        [[ ",$ONLY_LIBS," == *",$lib,"* ]] || return 1
-    fi
-
-    # 如果在 --skip 列表中，则跳过
-    if [[ -n "$SKIP_LIBS" ]]; then
-        [[ ",$SKIP_LIBS," != *",$lib,"* ]] || return 1
-    fi
-
-    return 0
-}
 
 # 从库定义字符串中解析各字段
 parse_lib_def() {

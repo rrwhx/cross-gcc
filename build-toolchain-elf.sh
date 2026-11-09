@@ -71,18 +71,18 @@ EOF
 # 解析参数
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --arch)        ARCH="$2"; shift 2;;
-        --work-dir)    WORK_DIR="$2"; shift 2;;
-        --download-dir)DOWNLOAD_DIR="$2"; shift 2;;
-        --src-dir)     SRC_DIR="$2"; shift 2;;
-        --build-dir)   BUILD_DIR="$2"; shift 2;;
-        --log-dir)     LOG_DIR="$2"; shift 2;;
-        --install-dir) INSTALL_DIR="$2"; shift 2;;
-        --threads|-j)  THREADS="$2"; shift 2;;
-        --mirror)      MIRROR="$2"; shift 2;;
-        --binutils-ver)BINUTILS_VER="$2"; shift 2;;
-        --gcc-ver)     GCC_VER="$2"; shift 2;;
-        --newlib-ver)  NEWLIB_VER="$2"; shift 2;;
+        --arch)        require_option_value "$@"; ARCH="$2"; shift 2;;
+        --work-dir)    require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --download-dir)require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
+        --src-dir)     require_option_value "$@"; SRC_DIR="$2"; shift 2;;
+        --build-dir)   require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
+        --log-dir)     require_option_value "$@"; LOG_DIR="$2"; shift 2;;
+        --install-dir) require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
+        --threads|-j)  require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        --mirror)      require_option_value "$@"; MIRROR="$2"; shift 2;;
+        --binutils-ver)require_option_value "$@"; BINUTILS_VER="$2"; shift 2;;
+        --gcc-ver)     require_option_value "$@"; GCC_VER="$2"; shift 2;;
+        --newlib-ver)  require_option_value "$@"; NEWLIB_VER="$2"; shift 2;;
         --fresh)       FRESH_BUILD=true; shift;;
         --static)      STATIC_BUILD=true; shift;;
         --clean)       CLEAN_BUILD=true; shift;;
@@ -91,6 +91,8 @@ while [[ $# -gt 0 ]]; do
         *)             error "未知选项: $1"; usage;;
     esac
 done
+
+require_positive_integer "构建线程数" "$THREADS"
 
 # 检查必须参数
 if [[ -z "$ARCH" ]]; then

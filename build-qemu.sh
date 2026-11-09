@@ -79,14 +79,14 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -s|--src)      SRC_DIR="$2";    shift 2 ;;
-        -b|--build)    BUILD_DIR="$2";  shift 2 ;;
-        -p|--prefix)   PREFIX="$2";     shift 2 ;;
-        -a|--arch)     ARCH_LIST="$2";  shift 2 ;;
-        -t|--targets)  TARGETS="$2";    shift 2 ;;
-        -j|--jobs)     JOBS="$2";       shift 2 ;;
-        -r|--repo)     REPO="$2";       shift 2 ;;
-        --ref)         REF="$2";        shift 2 ;;
+        -s|--src)      require_option_value "$@"; SRC_DIR="$2";    shift 2 ;;
+        -b|--build)    require_option_value "$@"; BUILD_DIR="$2";  shift 2 ;;
+        -p|--prefix)   require_option_value "$@"; PREFIX="$2";     shift 2 ;;
+        -a|--arch)     require_option_value "$@"; ARCH_LIST="$2";  shift 2 ;;
+        -t|--targets)  require_option_value "$@"; TARGETS="$2";    shift 2 ;;
+        -j|--jobs)     require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2";       shift 2 ;;
+        -r|--repo)     require_option_value "$@"; REPO="$2";       shift 2 ;;
+        --ref)         require_option_value "$@"; REF="$2";        shift 2 ;;
         --install)     DO_INSTALL=true;  shift  ;;
         --no-install)  DO_INSTALL=false; shift  ;;
         --deps)        DO_DEPS=true;     shift  ;;
@@ -96,6 +96,8 @@ while [[ $# -gt 0 ]]; do
         *) error "未知选项: $1"; usage ;;
     esac
 done
+
+require_positive_integer "构建线程数" "$JOBS"
 
 # ---------------------------------------------------------------------------
 # 计算 target-list：系统模拟，以及 Linux 主机可用的 Linux 用户态模拟

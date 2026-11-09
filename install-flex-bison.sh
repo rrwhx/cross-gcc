@@ -71,19 +71,21 @@ KEEP_BUILD=false
 WITH_GMP_MPFR=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -p|--prefix)        PREFIX="$2";        shift 2 ;;
-    -j|--jobs)          JOBS="$2";          shift 2 ;;
-    --flex-version)     FLEX_VERSION="$2";  shift 2 ;;
-    --bison-version)    BISON_VERSION="$2"; shift 2 ;;
-    --texinfo-version)  TEXINFO_VERSION="$2"; shift 2 ;;
+    -p|--prefix)        require_option_value "$@"; PREFIX="$2";        shift 2 ;;
+    -j|--jobs)          require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2";          shift 2 ;;
+    --flex-version)     require_option_value "$@"; FLEX_VERSION="$2";  shift 2 ;;
+    --bison-version)    require_option_value "$@"; BISON_VERSION="$2"; shift 2 ;;
+    --texinfo-version)  require_option_value "$@"; TEXINFO_VERSION="$2"; shift 2 ;;
     --with-gmp-mpfr)    WITH_GMP_MPFR=true; shift   ;;
-    --gmp-version)      GMP_VERSION="$2";   shift 2 ;;
-    --mpfr-version)     MPFR_VERSION="$2";  shift 2 ;;
+    --gmp-version)      require_option_value "$@"; GMP_VERSION="$2";   shift 2 ;;
+    --mpfr-version)     require_option_value "$@"; MPFR_VERSION="$2";  shift 2 ;;
     --keep-build)       KEEP_BUILD=true;    shift   ;;
     -h|--help)          usage ;;
     *) error "未知参数: $1，使用 --help 查看帮助" ;;
   esac
 done
+
+require_positive_integer "构建线程数" "$JOBS"
 
 FLEX_URL="https://github.com/westes/flex/releases/download/v${FLEX_VERSION}/flex-${FLEX_VERSION}.tar.gz"
 BISON_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/bison/bison-${BISON_VERSION}.tar.xz"

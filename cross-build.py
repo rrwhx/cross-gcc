@@ -1245,7 +1245,7 @@ def main():
     parser.add_argument("--no-install", action="store_true", help="仅构建不安装")
     parser.add_argument("--install-dir", default="", help="安装目录 (默认: sysroot 或 build/_install)")
     parser.add_argument("--work-dir", default=".", help="工作目录 (默认: 当前目录)")
-    parser.add_argument("-j", "--jobs", type=int, default=0, help="并行编译线程数")
+    parser.add_argument("-j", "--jobs", type=int, help="并行编译线程数（正整数，默认自动检测）")
     parser.add_argument("--cc", default="", help="C 编译器 (覆盖自动推导)")
     parser.add_argument("--cxx", default="", help="C++ 编译器 (覆盖自动推导)")
     parser.add_argument("--manifest", default="", help="输出构建清单 JSON 路径")
@@ -1258,6 +1258,8 @@ def main():
                         help="只打印构建计划 (顺序/源码/链接方式), 不下载不构建")
 
     args = parser.parse_args()
+    if args.jobs is not None and args.jobs < 1:
+        parser.error("-j/--jobs 必须为正整数")
 
     # 配置式扩展: 从 JSON 加载/覆盖包定义 (无需修改本脚本即可新增构建)
     for recipe in args.recipes:

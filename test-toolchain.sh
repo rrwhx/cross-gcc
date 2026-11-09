@@ -59,12 +59,12 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --toolchain-dir) TOOLCHAIN_DIR="$2"; shift 2;;
-        --target)        TARGET="$2"; shift 2;;
-        --work-dir)      WORK_DIR="$2"; shift 2;;
-        --qemu-dir)      QEMU_DIR="$2"; shift 2;;
-        --run-mode)      RUN_MODE="$2"; shift 2;;
-        --languages)     LANGUAGE_LIST="$2"; shift 2;;
+        --toolchain-dir) require_option_value "$@"; TOOLCHAIN_DIR="$2"; shift 2;;
+        --target)        require_option_value "$@"; TARGET="$2"; shift 2;;
+        --work-dir)      require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --qemu-dir)      require_option_value "$@"; QEMU_DIR="$2"; shift 2;;
+        --run-mode)      require_option_value "$@"; RUN_MODE="$2"; shift 2;;
+        --languages)     require_option_value "$@"; LANGUAGE_LIST="$2"; shift 2;;
         --strict)        STRICT=true; shift;;
         -h|--help)       usage;;
         *)               error "未知选项: $1"; usage;;

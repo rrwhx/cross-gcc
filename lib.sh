@@ -29,6 +29,17 @@ step()  { _log "$GREEN" STEP "$@"; }
 ok()    { _log "$BLUE" OK "$@"; }
 warn()  { _log "$YELLOW" WARN "$@" >&2; }
 
+# 校验带值选项，避免缺值或误把下一选项作为值；保留显式空值（如 --runtimes ""）。
+require_option_value() {
+    [[ $# -ge 2 && "$2" != --* && "$2" != -[[:alpha:]]* ]] \
+        || error "选项 $1 缺少参数值"
+}
+
+# 只检查正整数，不限制用户手动指定的并发上限。
+require_positive_integer() {
+    [[ "${2:-}" =~ ^0*[1-9][0-9]*$ ]] || error "$1 必须为正整数: ${2:-<空>}"
+}
+
 # 跨平台 CPU 线程数检测 (可被各脚本直接使用)
 THREADS=${THREADS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 

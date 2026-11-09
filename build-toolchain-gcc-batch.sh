@@ -24,12 +24,16 @@ declare -a extra_args=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch|--architecture|-a)
+            require_option_value "$@"
             # 按逗号分割用户输入的架构列表
+            [[ -n "$2" && "$2" != ,* && "$2" != *, && "$2" != *,,* ]] || error "选项 $1 的列表不能为空或包含空项"
             IFS=',' read -ra arch_list <<< "$2"
             shift 2  # 跳过选项和值
             ;;
         --libc|--libc-type|-l)
+            require_option_value "$@"
             # 按逗号分割用户输入的 libc 列表
+            [[ -n "$2" && "$2" != ,* && "$2" != *, && "$2" != *,,* ]] || error "选项 $1 的列表不能为空或包含空项"
             IFS=',' read -ra libc_list <<< "$2"
             shift 2
             ;;
@@ -58,6 +62,8 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+require_positive_integer "构建线程数" "$THREADS"
 
 # 如果用户未指定参数，使用默认值
 [[ ${#arch_list[@]} -eq 0 ]] && arch_list=("${default_arch_list[@]}")

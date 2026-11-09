@@ -68,19 +68,21 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --arch)           ARCH="$2"; shift 2;;
-        --cross-compile)  CROSS_COMPILE="$2"; shift 2;;
-        --work-dir)       WORK_DIR="$2"; shift 2;;
-        --busybox-ver)    BUSYBOX_VER="$2"; shift 2;;
-        --output)         OUTPUT="$2"; shift 2;;
+        --arch)           require_option_value "$@"; ARCH="$2"; shift 2;;
+        --cross-compile)  require_option_value "$@"; CROSS_COMPILE="$2"; shift 2;;
+        --work-dir)       require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --busybox-ver)    require_option_value "$@"; BUSYBOX_VER="$2"; shift 2;;
+        --output)         require_option_value "$@"; OUTPUT="$2"; shift 2;;
         --coremark)       WITH_COREMARK=true; shift;;
-        --add-file)       ADD_FILES+=("$2"); shift 2;;
-        -j|--threads)     THREADS="$2"; shift 2;;
+        --add-file)       require_option_value "$@"; ADD_FILES+=("$2"); shift 2;;
+        -j|--threads)     require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
         --clean)          CLEAN_BUILD=true; shift;;
         -h|--help)        usage;;
         *)                error "未知选项: $1"; usage;;
     esac
 done
+
+require_positive_integer "构建线程数" "$THREADS"
 
 if [[ -z "$ARCH" || -z "$CROSS_COMPILE" ]]; then
     error "--arch 和 --cross-compile 参数为必需。"

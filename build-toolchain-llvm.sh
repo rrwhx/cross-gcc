@@ -87,19 +87,19 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --arch)                  ARCH="$2"; shift 2;;
-        --llvm-ver)              LLVM_VER="$2"; shift 2;;
-        --src-dir)               SRC_DIR="$2"; shift 2;;
-        --work-dir)              WORK_DIR="$2"; shift 2;;
-        --download-dir)          DOWNLOAD_DIR="$2"; shift 2;;
-        --target-gcc-toolchain)  TARGET_GCC_TOOLCHAIN="$2"; shift 2;;
-        --target-sysroot)        TARGET_SYSROOT="$2"; shift 2;;
-        --build-dir)             BUILD_DIR="$2"; shift 2;;
-        --install-dir)           INSTALL_DIR="$2"; shift 2;;
-        --log-dir)               LOG_DIR="$2"; shift 2;;
-        --link-jobs)             LINK_JOBS="$2"; shift 2;;
-        -j|--threads)            THREADS="$2"; shift 2;;
-        --mirror)                MIRROR="$2"; shift 2;;
+        --arch)                  require_option_value "$@"; ARCH="$2"; shift 2;;
+        --llvm-ver)              require_option_value "$@"; LLVM_VER="$2"; shift 2;;
+        --src-dir)               require_option_value "$@"; SRC_DIR="$2"; shift 2;;
+        --work-dir)              require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --download-dir)          require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
+        --target-gcc-toolchain)  require_option_value "$@"; TARGET_GCC_TOOLCHAIN="$2"; shift 2;;
+        --target-sysroot)        require_option_value "$@"; TARGET_SYSROOT="$2"; shift 2;;
+        --build-dir)             require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
+        --install-dir)           require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
+        --log-dir)               require_option_value "$@"; LOG_DIR="$2"; shift 2;;
+        --link-jobs)             require_option_value "$@"; require_positive_integer "$1" "$2"; LINK_JOBS="$2"; shift 2;;
+        -j|--threads)            require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        --mirror)                require_option_value "$@"; MIRROR="$2"; shift 2;;
         --static)                STATIC_BUILD=true; shift;;
         --fresh)                 FRESH_BUILD=true; shift;;
         --clean)                 CLEAN_BUILD=true; shift;;
@@ -108,6 +108,11 @@ while [[ $# -gt 0 ]]; do
         *)                       error "未知选项: $1"; usage;;
     esac
 done
+
+require_positive_integer "构建线程数" "$THREADS"
+if [[ -n "$LINK_JOBS" ]]; then
+    require_positive_integer "链接并发数" "$LINK_JOBS"
+fi
 
 # ==============================================================================
 # 参数验证

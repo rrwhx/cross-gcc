@@ -49,16 +49,22 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -v|--version)
+            require_option_value "$@"
             LLVM_VERSION="$2"; shift 2;;
         -a|--arch)
+            require_option_value "$@"
+            [[ -n "$2" && "$2" != ,* && "$2" != *, && "$2" != *,,* ]] || error "选项 $1 的列表不能为空或包含空项"
             IFS=',' read -ra arch_list <<< "$2"; shift 2;;
         --gcc-dir)
+            require_option_value "$@"
             GCC_DIR_PATTERN="$2"; shift 2;;
         -h|--help) usage;;
         *)
             extra_args+=("$1"); shift;;
     esac
 done
+
+require_positive_integer "构建线程数" "$THREADS"
 
 if [[ -z "$LLVM_VERSION" ]]; then
     error "--version 参数为必需。"

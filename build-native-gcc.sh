@@ -90,18 +90,18 @@ EOF
 # 解析参数
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --work-dir)    WORK_DIR="$2"; shift 2;;
-        --download-dir)DOWNLOAD_DIR="$2"; shift 2;;
-        --src-dir)     SRC_DIR="$2"; shift 2;;
-        --build-dir)   BUILD_DIR="$2"; shift 2;;
-        --log-dir)     LOG_DIR="$2"; shift 2;;
-        --install-dir) INSTALL_DIR="$2"; shift 2;;
-        -j|--threads)  THREADS="$2"; shift 2;;
-        --mirror)      MIRROR="$2"; shift 2;;
-        --languages)   GCC_LANGUAGES="$2"; shift 2;;
-        --binutils-ver)BINUTILS_VER="$2"; shift 2;;
-        --gcc-ver)     GCC_VER="$2"; shift 2;;
-        --gdb-ver)     GDB_VER="$2"; shift 2;;
+        --work-dir)    require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --download-dir)require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
+        --src-dir)     require_option_value "$@"; SRC_DIR="$2"; shift 2;;
+        --build-dir)   require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
+        --log-dir)     require_option_value "$@"; LOG_DIR="$2"; shift 2;;
+        --install-dir) require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
+        -j|--threads)  require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        --mirror)      require_option_value "$@"; MIRROR="$2"; shift 2;;
+        --languages)   require_option_value "$@"; GCC_LANGUAGES="$2"; shift 2;;
+        --binutils-ver)require_option_value "$@"; BINUTILS_VER="$2"; shift 2;;
+        --gcc-ver)     require_option_value "$@"; GCC_VER="$2"; shift 2;;
+        --gdb-ver)     require_option_value "$@"; GDB_VER="$2"; shift 2;;
         --enable-sanitizer) ENABLE_SANITIZER=true; shift;;
         --disable-sanitizer) ENABLE_SANITIZER=false; shift;;
         --enable-gdb)  ENABLE_GDB=true; shift;;
@@ -114,6 +114,8 @@ while [[ $# -gt 0 ]]; do
         *)             error "未知选项: $1"; usage;;
     esac
 done
+
+require_positive_integer "构建线程数" "$THREADS"
 
 # host 三元组（native: build == host == target）
 if ! command -v gcc >/dev/null 2>&1; then

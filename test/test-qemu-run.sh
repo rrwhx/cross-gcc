@@ -92,9 +92,9 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --qemu-dir)    QEMU_DIR="$2"; shift 2;;
-        --images-dir)  IMAGES_DIR="$2"; shift 2;;
-        --timeout)     TIMEOUT="$2"; shift 2;;
+        --qemu-dir)    require_option_value "$@"; QEMU_DIR="$2"; shift 2;;
+        --images-dir)  require_option_value "$@"; IMAGES_DIR="$2"; shift 2;;
+        --timeout)     require_option_value "$@"; require_positive_integer "$1" "$2"; TIMEOUT="$2"; shift 2;;
         --verbose)     VERBOSE=true; shift;;
         --strict)      STRICT=true; shift;;
         -h|--help)     usage;;
@@ -102,6 +102,8 @@ while [[ $# -gt 0 ]]; do
         *)             ARCHS+=("$1"); shift;;
     esac
 done
+
+require_positive_integer "运行超时" "$TIMEOUT"
 
 [[ ${#ARCHS[@]} -eq 0 ]] && ARCHS=("${ALL_ARCHS[@]}")
 
