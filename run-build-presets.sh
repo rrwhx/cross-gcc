@@ -12,7 +12,7 @@ fi
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
 # 在公共库补默认值前，记录用户显式设置的编译并发。
-preset_threads="${THREADS:-}"
+preset_jobs="${JOBS:-}"
 source "$SCRIPT_DIR/lib.sh"
 failed_cmds=()
 
@@ -30,7 +30,7 @@ run_build() {
 # LLVM 自动并发按编译 4 GiB/任务、链接 10 GiB/任务估算，手动设置优先。
 run_llvm_build() {
     local memory_mb="" cpu_count compile_jobs link_jobs child_jobs
-    local requested_compile="$preset_threads" requested_link="${LLVM_LINK_JOBS:-}" previous="" arg
+    local requested_compile="$preset_jobs" requested_link="${LLVM_LINK_JOBS:-}" previous="" arg
     for arg in "$@"; do
         case "$previous" in
             -j|--jobs)    requested_compile="$arg";;

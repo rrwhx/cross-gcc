@@ -25,7 +25,6 @@ BUILD_DIR=""
 PREFIX=""
 TARGETS=""
 ARCH_LIST=""
-JOBS="$THREADS"
 REPO="https://${MIRROR}/git/qemu.git"
 # QEMU_REF 默认值来自 versions.env (由 lib.sh 加载)，可用环境变量或 --ref 覆盖
 REF="$QEMU_REF"

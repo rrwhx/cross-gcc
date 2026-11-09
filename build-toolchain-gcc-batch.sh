@@ -63,8 +63,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-require_positive_integer "构建线程数" "$THREADS"
-
 # 如果用户未指定参数，使用默认值
 [[ ${#arch_list[@]} -eq 0 ]] && arch_list=("${default_arch_list[@]}")
 [[ ${#libc_list[@]} -eq 0 ]] && libc_list=("${default_libc_list[@]}")

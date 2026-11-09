@@ -41,7 +41,7 @@ require_positive_integer() {
 }
 
 # 跨平台 CPU 线程数检测 (可被各脚本直接使用)
-THREADS=${THREADS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
+JOBS=${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 
 # 默认下载镜像源 (可被环境变量或各脚本 --mirror 覆盖)
 # 备选: mirrors.tuna.tsinghua.edu.cn, mirrors.bfsu.edu.cn, mirror.nju.edu.cn

@@ -1245,7 +1245,8 @@ def main():
     parser.add_argument("--no-install", action="store_true", help="仅构建不安装")
     parser.add_argument("--install-dir", default="", help="安装目录 (默认: sysroot 或 build/_install)")
     parser.add_argument("--work-dir", default=".", help="工作目录 (默认: 当前目录)")
-    parser.add_argument("-j", "--jobs", type=int, help="并行编译线程数（正整数，默认自动检测）")
+    parser.add_argument("-j", "--jobs", type=int, default=os.environ.get("JOBS") or None,
+                        help="并行编译线程数（正整数，默认读取 JOBS，其次自动检测）")
     parser.add_argument("--cc", default="", help="C 编译器 (覆盖自动推导)")
     parser.add_argument("--cxx", default="", help="C++ 编译器 (覆盖自动推导)")
     parser.add_argument("--manifest", default="", help="输出构建清单 JSON 路径")

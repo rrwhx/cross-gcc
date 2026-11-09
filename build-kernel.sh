@@ -47,7 +47,7 @@ usage() {
                     x86_64 时无论哪种配置都会强制启用 CONFIG_PVH (vmlinux 可直接被 QEMU 加载)
   --output          输出目录 (默认: <work-dir>/kernel-<arch>)
   --mirror          下载镜像源 (默认: ${MIRROR})
-  -j,--jobs         并行编译线程数 (默认: ${THREADS})
+  -j,--jobs         并行编译线程数 (默认: ${JOBS})
   --clean           构建完成后删除构建目录和日志目录
   -h,--help         显示帮助
 
@@ -70,14 +70,14 @@ while [[ $# -gt 0 ]]; do
         --defconfig)      require_option_value "$@"; DEFCONFIG="$2"; shift 2;;
         --output)         require_option_value "$@"; OUTPUT="$2"; shift 2;;
         --mirror)         require_option_value "$@"; MIRROR="$2"; shift 2;;
-        -j|--jobs)        require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)        require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --clean)          CLEAN_BUILD=true; shift;;
         -h|--help)        usage;;
         *)                error "未知选项: $1"; usage;;
     esac
 done
 
-require_positive_integer "构建线程数" "$THREADS"
+require_positive_integer "构建线程数" "$JOBS"
 
 if [[ -z "$ARCH" || -z "$CROSS_COMPILE" ]]; then
     error "--arch 和 --cross-compile 参数为必需。"
@@ -215,9 +215,9 @@ fi
 # ---------------------------------------------------------------------------
 step "=== 编译内核 ==="
 info "工作目录: $BUILD_DIR"
-info "make -j${THREADS} ARCH=$KERNEL_ARCH CROSS_COMPILE=$CROSS_COMPILE"
+info "make -j${JOBS} ARCH=$KERNEL_ARCH CROSS_COMPILE=$CROSS_COMPILE"
 build_step "kernel_build" "$LOG_DIR" \
-    make -C "$BUILD_DIR" -j"${THREADS}" \
+    make -C "$BUILD_DIR" -j"${JOBS}" \
     ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE"
 
 # ---------------------------------------------------------------------------

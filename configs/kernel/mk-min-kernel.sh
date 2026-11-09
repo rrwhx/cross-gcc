@@ -2,13 +2,16 @@
 # 为指定架构生成 QEMU virt 最小内核配置并构建
 set -uo pipefail
 
+# 获取公共配置和日志函数。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+source "$SCRIPT_DIR/../../lib.sh"
+
 # ---------------------------------------------------------------------------
 # 默认配置 (均可用环境变量或命令行覆盖)
 # ---------------------------------------------------------------------------
 LINUX_SRC="${LINUX_SRC:-/dev/shm/lxy497151/downloads/linux-7.1.1}"
 TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-/rvhome/lxy497151/cross-gcc/gcc_161-glibc_243}"
 WORK_DIR="${WORK_DIR:-/dev/shm/lxy497151}"
-THREADS="${THREADS:-96}"
 BUILD_DIR=""
 CROSS_COMPILE=""
 CONFIG_ONLY=false
@@ -26,7 +29,7 @@ usage() {
   --cross-compile P    显式交叉编译前缀, 覆盖由 --toolchains-dir 推导的值
   --work-dir DIR       构建目录父路径 (默认: \$WORK_DIR 或 $WORK_DIR)
   --build-dir DIR      构建输出目录 (默认: <work-dir>/build-kernel-<arch>)
-  -j, --jobs N         并行编译线程数 (默认: $THREADS)
+  -j, --jobs N         并行编译线程数 (默认: $JOBS)
   --config-only        只生成 .config, 不编译
   --savedefconfig F    构建后执行 make savedefconfig 并把结果复制到 F
   -h, --help           显示帮助
@@ -47,7 +50,7 @@ while [[ $# -gt 0 ]]; do
         --cross-compile)  CROSS_COMPILE="$2"; shift 2;;
         --work-dir)       WORK_DIR="$2"; shift 2;;
         --build-dir)      BUILD_DIR="$2"; shift 2;;
-        -j|--jobs)           THREADS="$2"; shift 2;;
+        -j|--jobs)           JOBS="$2"; shift 2;;
         --config-only)    CONFIG_ONLY=true; shift;;
         --savedefconfig)  SAVEDEFCONFIG_OUT="$2"; shift 2;;
         -h|--help)        usage;;
@@ -223,7 +226,7 @@ if $CONFIG_ONLY; then
 fi
 
 echo "=== $ARCH_NAME config done, building... ==="
-$MAKE -j"$THREADS" > "$BUILD_DIR/build.log" 2>&1
+$MAKE -j"$JOBS" > "$BUILD_DIR/build.log" 2>&1
 rc=$?
 if [ $rc -ne 0 ]; then
     echo "BUILD FAIL ($ARCH_NAME), last lines:"

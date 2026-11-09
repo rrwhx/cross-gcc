@@ -35,7 +35,7 @@ usage() {
   --build-dir    构建工作目录 (默认: WORK_DIR/build-TARGET)
   --log-dir      日志目录 (默认: WORK_DIR/logs-TARGET)
   --install-dir  工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
-  -j,--jobs      构建线程数 (默认: $THREADS)
+  -j,--jobs      构建线程数 (默认: $JOBS)
   --mirror       下载镜像源 (默认: $MIRROR)
 
 版本控制选项(支持 'git[:REF]' 格式):
@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
         --build-dir)   require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
         --log-dir)     require_option_value "$@"; LOG_DIR="$2"; shift 2;;
         --install-dir) require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
-        -j|--jobs)     require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)     require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --mirror)      require_option_value "$@"; MIRROR="$2"; shift 2;;
         --binutils-ver)require_option_value "$@"; BINUTILS_VER="$2"; shift 2;;
         --gcc-ver)     require_option_value "$@"; GCC_VER="$2"; shift 2;;
@@ -92,7 +92,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-require_positive_integer "构建线程数" "$THREADS"
+require_positive_integer "构建线程数" "$JOBS"
 
 # 检查必须参数
 if [[ -z "$ARCH" ]]; then
@@ -224,7 +224,7 @@ info "下载目录: $DOWNLOAD_DIR"
 info "源码目录: $SRC_DIR"
 info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
-info "构建线程数: $THREADS"
+info "构建线程数: $JOBS"
 
 step "获取源代码"
 dl_files=()
@@ -272,11 +272,11 @@ build_step "configure" "${LOG_DIR_BINUTILS}" \
 
 # 静态构建时先跑完子目录 configure (不带 -all-static, 否则 gcc 无法识别该选项)
 if [[ "$STATIC_BUILD" == true ]]; then
-    build_step "configure-host" "${LOG_DIR_BINUTILS}" make -j${THREADS} configure-host
+    build_step "configure-host" "${LOG_DIR_BINUTILS}" make -j${JOBS} configure-host
 fi
 
 build_step "build" "${LOG_DIR_BINUTILS}" \
-    make -j${THREADS} "${binutils_make_args[@]}"
+    make -j${JOBS} "${binutils_make_args[@]}"
 
 build_step "install" "${LOG_DIR_BINUTILS}" \
     make install-strip "${binutils_make_args[@]}"
@@ -317,7 +317,7 @@ build_step "configure" "${LOG_DIR_GCC_INITIAL}" \
     "${gcc_static_args[@]}"
 
 build_step "build" "${LOG_DIR_GCC_INITIAL}" \
-    make -j${THREADS} all-gcc
+    make -j${JOBS} all-gcc
 
 build_step "install" "${LOG_DIR_GCC_INITIAL}" \
     make install-gcc
@@ -341,7 +341,7 @@ build_step  "configure" "${LOG_DIR_NEWLIB}" \
     CXXFLAGS_FOR_TARGET="-O2 -D_POSIX_MODE -ffunction-sections -fdata-sections"
 
 build_step "build" "${LOG_DIR_NEWLIB}" \
-    make -j${THREADS}
+    make -j${JOBS}
 
 build_step "install" "${LOG_DIR_NEWLIB}" \
     make install
@@ -375,7 +375,7 @@ build_step "configure" "${LOG_DIR_GCC_FINAL}" \
     "${gcc_static_args[@]}"
 
 build_step "build" "${LOG_DIR_GCC_FINAL}" \
-    make -j${THREADS}
+    make -j${JOBS}
 
 build_step "install" "${LOG_DIR_GCC_FINAL}" \
     make install-strip-host install-target

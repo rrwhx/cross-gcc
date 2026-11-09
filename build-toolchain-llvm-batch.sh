@@ -64,8 +64,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-require_positive_integer "构建线程数" "$THREADS"
-
 if [[ -z "$LLVM_VERSION" ]]; then
     error "--llvm-ver 参数为必需。"
 fi

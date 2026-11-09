@@ -58,7 +58,7 @@ usage() {
   --log-dir           日志目录 (默认: WORK_DIR/logs-llvm-ARCH)
   --link-jobs         并行链接作业数 (命令行 > LLVM_LINK_JOBS 环境变量)
                       均未指定时不额外设置链接并发。
-  -j,--jobs           并行编译线程数 (默认: ${THREADS})
+  -j,--jobs           并行编译线程数 (默认: ${JOBS})
   --mirror            下载镜像源 (默认: $MIRROR)
   --static            静态链接工具链自身的可执行文件 (clang/lld/flang 等)，产物不依赖 host
                       的 libc/libstdc++，可随意拷贝到同架构机器执行。需要 host 提供 libc.a
@@ -98,7 +98,7 @@ while [[ $# -gt 0 ]]; do
         --install-dir)           require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
         --log-dir)               require_option_value "$@"; LOG_DIR="$2"; shift 2;;
         --link-jobs)             require_option_value "$@"; require_positive_integer "$1" "$2"; LINK_JOBS="$2"; shift 2;;
-        -j|--jobs)               require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)               require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --mirror)                require_option_value "$@"; MIRROR="$2"; shift 2;;
         --static)                STATIC_BUILD=true; shift;;
         --fresh)                 FRESH_BUILD=true; shift;;
@@ -109,7 +109,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-require_positive_integer "构建线程数" "$THREADS"
+require_positive_integer "构建线程数" "$JOBS"
 if [[ -n "$LINK_JOBS" ]]; then
     require_positive_integer "链接并发数" "$LINK_JOBS"
 fi
@@ -178,7 +178,7 @@ info "工作目录: ${WORK_DIR}"
 info "构建目录: ${BUILD_DIR}"
 info "安装目录: ${INSTALL_DIR}"
 info "日志目录: ${LOG_DIR}"
-info "构建线程数: ${THREADS}"
+info "构建线程数: ${JOBS}"
 info "静态链接: $([[ "$STATIC_BUILD" == true ]] && echo 开启 || echo 关闭)"
 
 if [[ -n "$TARGET_GCC_TOOLCHAIN" && -n "$TARGET_SYSROOT" ]]; then
@@ -296,11 +296,11 @@ build_step "configure" "${LOG_DIR}" \
 
 step "=== 构建 LLVM ==="
 cd "${BUILD_DIR}"
-build_step "build" "${LOG_DIR}" ninja -j"${THREADS}"
+build_step "build" "${LOG_DIR}" ninja -j"${JOBS}"
 
 step "=== 安装 LLVM ==="
 cd "${BUILD_DIR}"
-build_step "install" "${LOG_DIR}" ninja -j"${THREADS}" install
+build_step "install" "${LOG_DIR}" ninja -j"${JOBS}" install
 
 if [[ "$STATIC_BUILD" == true ]]; then
     static_check_paths=()

@@ -80,7 +80,7 @@ usage() {
   --work-dir       工作目录前缀 (默认: 当前目录)
   --skip           跳过指定的库，多次使用指定多个 (例如: --skip lz4 --skip snappy)
   --only           仅编译指定的库，多次使用指定多个 (例如: --only zlib --only zstd)
-  -j,--jobs        并行编译线程数 (默认: ${THREADS})
+  -j,--jobs        并行编译线程数 (默认: ${JOBS})
   --clean          构建完成后删除构建目录和日志目录
   -h,--help        显示帮助
 示例:
@@ -98,14 +98,14 @@ while [[ $# -gt 0 ]]; do
         --work-dir)      require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --skip)          require_option_value "$@"; validate_library_names "$1" "$2"; SKIP_LIBS="${SKIP_LIBS:+${SKIP_LIBS},}$2"; shift 2;;
         --only)          require_option_value "$@"; validate_library_names "$1" "$2"; ONLY_LIBS="${ONLY_LIBS:+${ONLY_LIBS},}$2"; shift 2;;
-        -j|--jobs)       require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)       require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --clean)         CLEAN_BUILD=true; shift;;
         -h|--help)       usage;;
         *)               error "未知选项: $1"; usage;;
     esac
 done
 
-require_positive_integer "构建线程数" "$THREADS"
+require_positive_integer "构建线程数" "$JOBS"
 
 if [[ -z "$TARGET" || -z "$TOOLCHAIN_DIR" ]]; then
     error "--target 和 --toolchain-dir 参数为必需。"
@@ -215,7 +215,7 @@ build_package() {
                         ./configure --host="${TARGET}" --prefix=/usr "${extra_args[@]}"
                 fi
                 build_step "${lib_name}_build" "$LOG_DIR" \
-                    make -j"${THREADS}"
+                    make -j"${JOBS}"
                 build_step "${lib_name}_install" "$LOG_DIR" \
                     make install DESTDIR="${TARGET_SYSROOT}"
             )
@@ -225,7 +225,7 @@ build_package() {
             (
                 cd "$build_pkg_dir"
                 build_step "${lib_name}_build" "$LOG_DIR" \
-                    make -j"${THREADS}" CC="$CC" CXX="$CXX" AR="$AR" PREFIX=/usr "${extra_args[@]}"
+                    make -j"${JOBS}" CC="$CC" CXX="$CXX" AR="$AR" PREFIX=/usr "${extra_args[@]}"
                 build_step "${lib_name}_install" "$LOG_DIR" \
                     make install DESTDIR="${TARGET_SYSROOT}" \
                     CC="$CC" CXX="$CXX" AR="$AR" PREFIX=/usr "${extra_args[@]}"
@@ -255,7 +255,7 @@ build_package() {
                 build_step "${lib_name}_configure" "$LOG_DIR" \
                     cmake "$src_pkg_dir" "${cmake_args[@]}"
                 build_step "${lib_name}_build" "$LOG_DIR" \
-                    make -j"${THREADS}"
+                    make -j"${JOBS}"
                 build_step "${lib_name}_install" "$LOG_DIR" \
                     make install DESTDIR="${TARGET_SYSROOT}"
             )

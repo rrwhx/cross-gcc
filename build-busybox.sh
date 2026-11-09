@@ -53,7 +53,7 @@ usage() {
                     打包为 /root/coremark 并输出 coremark-<arch> 产物
   --add-file S[:D]  复制额外文件/目录到 initramfs (目录递归拷贝),
                     D 为 initramfs 内目标路径 (默认: /root/<名称>, 可多次指定)
-  -j,--jobs         并行编译线程数 (默认: ${THREADS})
+  -j,--jobs         并行编译线程数 (默认: ${JOBS})
   --clean           构建完成后删除构建目录和日志目录
   -h,--help         显示帮助
 
@@ -75,14 +75,14 @@ while [[ $# -gt 0 ]]; do
         --output)         require_option_value "$@"; OUTPUT="$2"; shift 2;;
         --coremark)       WITH_COREMARK=true; shift;;
         --add-file)       require_option_value "$@"; ADD_FILES+=("$2"); shift 2;;
-        -j|--jobs)        require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)        require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --clean)          CLEAN_BUILD=true; shift;;
         -h|--help)        usage;;
         *)                error "未知选项: $1"; usage;;
     esac
 done
 
-require_positive_integer "构建线程数" "$THREADS"
+require_positive_integer "构建线程数" "$JOBS"
 
 if [[ -z "$ARCH" || -z "$CROSS_COMPILE" ]]; then
     error "--arch 和 --cross-compile 参数为必需。"
@@ -189,9 +189,9 @@ info "已启用 CONFIG_STATIC，已禁用 CONFIG_TC/SHA_HWACCEL"
 
 step "=== 编译 BusyBox ==="
 info "工作目录: $BUILD_DIR"
-info "make -j${THREADS} ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE"
+info "make -j${JOBS} ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE"
 build_step "busybox_build" "$LOG_DIR" \
-    make -C "$BUILD_DIR" -j"${THREADS}" \
+    make -C "$BUILD_DIR" -j"${JOBS}" \
     HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
     ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE"
 

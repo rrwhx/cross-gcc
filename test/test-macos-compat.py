@@ -34,7 +34,7 @@ class MacOSCompatibility(unittest.TestCase):
         self.bin.mkdir()
         self.trace = self.work / "trace"
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
-                        TRACE=str(self.trace), THREADS="2", TEST_OS="Darwin")
+                        TRACE=str(self.trace), JOBS="2", TEST_OS="Darwin")
         for key in ("CC", "CXX", "HOSTCC", "HOSTCXX", "BUILD_CC", "GCC_MAJOR", "CHOST"):
             self.env.pop(key, None)
         self.script(self.bin / "uname", 'printf "%s\\n" "$TEST_OS"')

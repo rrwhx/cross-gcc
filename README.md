@@ -34,7 +34,7 @@
 | `build-qemu.sh` | 从源码构建 QEMU（系统模拟 + 用户态模拟），供测试脚本使用 |
 
 `run-build-presets.sh` 为 LLVM 配方自动设置默认并发：编译按 4 GiB/任务、链接按 10 GiB/任务估算，向下取整后限制在 1 到 CPU 逻辑核数之间。
-手动设置优先于自动值，且不受内存或 CPU 上限截断：编译读取 `THREADS`，命令行 `-j/--jobs` 优先；链接读取 `LLVM_LINK_JOBS`，配方中的 `--link-jobs` 优先。
+手动设置优先于自动值，且不受内存或 CPU 上限截断：编译读取 `JOBS`，命令行 `-j/--jobs` 优先；链接读取 `LLVM_LINK_JOBS`，配方中的 `--link-jobs` 优先。
 runtimes 子构建默认取编译和链接并发的较小值，可用 `CMAKE_BUILD_PARALLEL_LEVEL` 覆盖；安装阶段也遵循编译并发设置。
 
 ---
@@ -170,7 +170,8 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
 | `--archive` | 构建后打包为 tar.xz 并删除原目录 |
 | `--static` | 静态链接工具链自身的可执行文件，可拷贝到同架构其他机器执行 |
 
-参数统一使用 `-j/--jobs` 指定编译并发、`--组件-ver` 指定组件版本，源码、构建、安装等目录使用 `--xxx-dir`。
+编译并发统一按命令行 `-j/--jobs` > `JOBS` 环境变量 > 自动检测的优先级设置。
+参数使用 `-j/--jobs` 指定编译并发、`--组件-ver` 指定组件版本，源码、构建、安装等目录使用 `--xxx-dir`。
 LLVM 批量入口使用 `--llvm-ver`，工具链目录使用 `--toolchain-dir`（批量入口允许 `{ARCH}` 模板）。
 QEMU 使用 `--src-dir`、`--build-dir`、`--install-dir`；flex/bison 安装脚本同样使用 `--install-dir`。
 `--src-dir` 在 GCC 构建入口中指多组件源码的存放目录，在 LLVM/QEMU/内核入口中指具体源码树。

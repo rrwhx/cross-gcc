@@ -28,7 +28,6 @@ TEXINFO_VERSION="${TEXINFO_VERSION:-7.3}"
 GMP_VERSION="${GMP_VERSION:-6.3.0}"
 MPFR_VERSION="${MPFR_VERSION:-4.2.2}"
 
-JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)}"
 # 为了兼容 macOS 较新版 Clang，避免 implicit-function-declaration 错误
 export CFLAGS="-g -O2 -Wno-implicit-function-declaration"
 

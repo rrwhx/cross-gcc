@@ -46,7 +46,7 @@ usage() {
   --build-dir    构建工作目录 (默认: WORK_DIR/build-native-HOST)
   --log-dir      日志目录 (默认: WORK_DIR/logs-native-HOST)
   --install-dir  工具链安装前缀 (默认: WORK_DIR/native-HOST)
-  -j,--jobs      构建线程数 (默认: $THREADS)
+  -j,--jobs      构建线程数 (默认: $JOBS)
   --mirror       下载镜像源 (默认: $MIRROR)
   --languages    GCC 启用的语言 (默认: $GCC_LANGUAGES)
 
@@ -96,7 +96,7 @@ while [[ $# -gt 0 ]]; do
         --build-dir)   require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
         --log-dir)     require_option_value "$@"; LOG_DIR="$2"; shift 2;;
         --install-dir) require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
-        -j|--jobs)     require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)     require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --mirror)      require_option_value "$@"; MIRROR="$2"; shift 2;;
         --languages)   require_option_value "$@"; GCC_LANGUAGES="$2"; shift 2;;
         --binutils-ver)require_option_value "$@"; BINUTILS_VER="$2"; shift 2;;
@@ -115,7 +115,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-require_positive_integer "构建线程数" "$THREADS"
+require_positive_integer "构建线程数" "$JOBS"
 
 # host 三元组（native: build == host == target）
 if ! command -v gcc >/dev/null 2>&1; then
@@ -231,7 +231,7 @@ info "下载目录: $DOWNLOAD_DIR"
 info "源码目录: $SRC_DIR"
 info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
-info "构建线程数: $THREADS"
+info "构建线程数: $JOBS"
 
 # 确保 GCC 依赖 (gmp/mpfr/mpc/isl) 已下载并解压 (幂等, 由 prereq_done 标记守护)
 ensure_gcc_prerequisites() {
@@ -300,11 +300,11 @@ build_step "configure" "${LOG_DIR_BINUTILS}" \
 # 静态构建时先跑完子目录 configure (不带 -all-static, 否则 gcc 无法识别该选项)
 if [[ "$STATIC_BUILD" == true ]]; then
     build_step "configure-host" "${LOG_DIR_BINUTILS}" \
-        make -j${THREADS} configure-host
+        make -j${JOBS} configure-host
 fi
 
 build_step "build" "${LOG_DIR_BINUTILS}" \
-    make -j${THREADS} "${binutils_make_args[@]}"
+    make -j${JOBS} "${binutils_make_args[@]}"
 
 build_step "install" "${LOG_DIR_BINUTILS}" \
     make install-strip "${binutils_make_args[@]}"
@@ -325,10 +325,10 @@ if [[ "$BUILD_GDB_SEPARATE" == true ]]; then
     # 仅构建/安装 gdb 组件, 避免覆盖 binutils 已安装的 bfd/opcodes 等
     if [[ "$STATIC_BUILD" == true ]]; then
         build_step "configure-host" "${LOG_DIR_GDB}" \
-            make -j${THREADS} configure-host
+            make -j${JOBS} configure-host
     fi
     build_step "build" "${LOG_DIR_GDB}" \
-        make -j${THREADS} all-gdb "${gdb_make_args[@]}"
+        make -j${JOBS} all-gdb "${gdb_make_args[@]}"
     build_step "install" "${LOG_DIR_GDB}" \
         make install-gdb "${gdb_make_args[@]}"
 fi
@@ -358,7 +358,7 @@ build_step "configure" "${LOG_DIR_GCC}" \
     "${gcc_extra_args[@]}"
 
 build_step "build" "${LOG_DIR_GCC}" \
-    make -j${THREADS}
+    make -j${JOBS}
 
 build_step "install" "${LOG_DIR_GCC}" \
     make install-strip-host install-target
