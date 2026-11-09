@@ -28,7 +28,7 @@ ARCH=""
 WORK_DIR=$(pwd)
 SRC_DIR=""
 DOWNLOAD_DIR=""
-TARGET_GCC_TOOLCHAIN=""
+TOOLCHAIN_DIR=""
 TARGET_SYSROOT=""
 BUILD_DIR=""
 INSTALL_DIR=""
@@ -92,7 +92,7 @@ while [[ $# -gt 0 ]]; do
         --src-dir)               require_option_value "$@"; SRC_DIR="$2"; shift 2;;
         --work-dir)              require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --download-dir)          require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
-        --toolchain-dir)         require_option_value "$@"; TARGET_GCC_TOOLCHAIN="$2"; shift 2;;
+        --toolchain-dir)         require_option_value "$@"; TOOLCHAIN_DIR="$2"; shift 2;;
         --target-sysroot)        require_option_value "$@"; TARGET_SYSROOT="$2"; shift 2;;
         --build-dir)             require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
         --install-dir)           require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
@@ -122,7 +122,7 @@ if [[ -z "$ARCH" ]]; then
     error "--arch 参数为必需。"
 fi
 
-if [[ ( -n "$TARGET_GCC_TOOLCHAIN" && -z "$TARGET_SYSROOT" ) || ( -z "$TARGET_GCC_TOOLCHAIN" && -n "$TARGET_SYSROOT" ) ]]; then
+if [[ ( -n "$TOOLCHAIN_DIR" && -z "$TARGET_SYSROOT" ) || ( -z "$TOOLCHAIN_DIR" && -n "$TARGET_SYSROOT" ) ]]; then
     error "--toolchain-dir 和 --target-sysroot 必须同时使用。"
 fi
 
@@ -181,10 +181,10 @@ info "日志目录: ${LOG_DIR}"
 info "构建线程数: ${JOBS}"
 info "静态链接: $([[ "$STATIC_BUILD" == true ]] && echo 开启 || echo 关闭)"
 
-if [[ -n "$TARGET_GCC_TOOLCHAIN" && -n "$TARGET_SYSROOT" ]]; then
-    TARGET_GCC_TOOLCHAIN=$(realpath "$TARGET_GCC_TOOLCHAIN")
+if [[ -n "$TOOLCHAIN_DIR" && -n "$TARGET_SYSROOT" ]]; then
+    TOOLCHAIN_DIR=$(realpath "$TOOLCHAIN_DIR")
     TARGET_SYSROOT=$(realpath "$TARGET_SYSROOT")
-    info "目标 GCC: ${TARGET_GCC_TOOLCHAIN}"
+    info "目标 GCC: ${TOOLCHAIN_DIR}"
     info "目标 Sysroot: ${TARGET_SYSROOT}"
 fi
 
@@ -199,11 +199,11 @@ CMAKE_EXTRA_ARGS=()
 # 仅设置目标三元组不会改变 CMake 的系统判断，Darwin 上会误走 macOS 运行库分支。
 # 最终以 ; 拼接传入 runtimes/builtins (compiler-rt / flang-rt)。
 runtimes_sub_args=("-DCMAKE_SYSTEM_NAME=Linux")
-if [[ -n "$TARGET_GCC_TOOLCHAIN" && -n "$TARGET_SYSROOT" ]]; then
+if [[ -n "$TOOLCHAIN_DIR" && -n "$TARGET_SYSROOT" ]]; then
     runtimes_sub_args+=(
         "-DCMAKE_SYSROOT=${TARGET_SYSROOT}"
-        "-DCMAKE_C_FLAGS=--gcc-toolchain=${TARGET_GCC_TOOLCHAIN}"
-        "-DCMAKE_CXX_FLAGS=--gcc-toolchain=${TARGET_GCC_TOOLCHAIN}"
+        "-DCMAKE_C_FLAGS=--gcc-toolchain=${TOOLCHAIN_DIR}"
+        "-DCMAKE_CXX_FLAGS=--gcc-toolchain=${TOOLCHAIN_DIR}"
     )
     if [[ "$ARCH" == "x86_64" ]]; then
         runtimes_sub_args+=("-DCAN_TARGET_i386=OFF")

@@ -25,9 +25,9 @@ setup_error_trap
 ARCH=""
 CROSS_COMPILE=""
 WORK_DIR=$(pwd)
-LINUX_SRC=""
+SRC_DIR=""
 DEFCONFIG=""
-OUTPUT=""
+OUTPUT_DIR=""
 CLEAN_BUILD=false
 
 usage() {
@@ -66,9 +66,9 @@ while [[ $# -gt 0 ]]; do
         --cross-compile)  require_option_value "$@"; CROSS_COMPILE="$2"; shift 2;;
         --work-dir)       require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --linux-ver)      require_option_value "$@"; LINUX_VER="$2"; shift 2;;
-        --src-dir)        require_option_value "$@"; LINUX_SRC="$2"; shift 2;;
+        --src-dir)        require_option_value "$@"; SRC_DIR="$2"; shift 2;;
         --defconfig)      require_option_value "$@"; DEFCONFIG="$2"; shift 2;;
-        --output)         require_option_value "$@"; OUTPUT="$2"; shift 2;;
+        --output)         require_option_value "$@"; OUTPUT_DIR="$2"; shift 2;;
         --mirror)         require_option_value "$@"; MIRROR="$2"; shift 2;;
         -j|--jobs)        require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --clean)          CLEAN_BUILD=true; shift;;
@@ -122,9 +122,9 @@ WORK_DIR=$(realpath "$WORK_DIR")
 DOWNLOAD_DIR="${WORK_DIR}/downloads"
 BUILD_DIR="${WORK_DIR}/build-kernel-${ARCH}"
 LOG_DIR="${WORK_DIR}/logs-kernel-${ARCH}"
-OUTPUT="${OUTPUT:-${WORK_DIR}/kernel-${ARCH}}"
+OUTPUT_DIR="${OUTPUT_DIR:-${WORK_DIR}/kernel-${ARCH}}"
 
-mkdir -p "$DOWNLOAD_DIR" "$BUILD_DIR" "$LOG_DIR" "$OUTPUT"
+mkdir -p "$DOWNLOAD_DIR" "$BUILD_DIR" "$LOG_DIR" "$OUTPUT_DIR"
 
 info "ARCH=$ARCH (KERNEL_ARCH=$KERNEL_ARCH)"
 info "CROSS_COMPILE=$CROSS_COMPILE"
@@ -132,22 +132,22 @@ info "Linux 版本: $LINUX_VER"
 info "内核配置: ${DEFCONFIG:-defconfig + kvm_guest.config}"
 info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
-info "输出目录: $OUTPUT"
+info "输出目录: $OUTPUT_DIR"
 
 # ---------------------------------------------------------------------------
 # 阶段 1: 获取内核源码
 # ---------------------------------------------------------------------------
-if [[ -n "$LINUX_SRC" ]]; then
-    LINUX_SRC=$(realpath "$LINUX_SRC")
-    if [[ ! -d "$LINUX_SRC" ]]; then
-        error "指定的内核源码目录不存在: $LINUX_SRC"
+if [[ -n "$SRC_DIR" ]]; then
+    SRC_DIR=$(realpath "$SRC_DIR")
+    if [[ ! -d "$SRC_DIR" ]]; then
+        error "指定的内核源码目录不存在: $SRC_DIR"
     fi
-    info "使用已有内核源码: $LINUX_SRC"
+    info "使用已有内核源码: $SRC_DIR"
 elif [[ "$LINUX_VER" == git* ]]; then
     step "=== 克隆 Linux 内核源码 ==="
-    LINUX_SRC="$DOWNLOAD_DIR/linux"
+    SRC_DIR="$DOWNLOAD_DIR/linux"
     parse_git_ver "$LINUX_VER"
-    git_clone "https://${MIRROR}/git/linux.git" "$LINUX_SRC" 1 "$_GIT_REF"
+    git_clone "https://${MIRROR}/git/linux.git" "$SRC_DIR" 1 "$_GIT_REF"
 else
     step "=== 下载 Linux 内核源码 ==="
     LINUX_MAJOR_VER="${LINUX_VER%%.*}"
@@ -156,10 +156,10 @@ else
     download "$LINUX_URL" "$ARCHIVE_FILE"
 
     step "=== 解压源码 ==="
-    LINUX_SRC="$DOWNLOAD_DIR/linux-${LINUX_VER}"
-    if [[ ! -d "$LINUX_SRC" ]]; then
+    SRC_DIR="$DOWNLOAD_DIR/linux-${LINUX_VER}"
+    if [[ ! -d "$SRC_DIR" ]]; then
         info "解压: linux-${LINUX_VER}.tar.xz"
-        extract_source_archive "$ARCHIVE_FILE" "$LINUX_SRC"
+        extract_source_archive "$ARCHIVE_FILE" "$SRC_DIR"
     else
         info "源码目录已存在，跳过解压"
     fi
@@ -172,27 +172,27 @@ step "=== 配置内核 ==="
 assert_safe_to_delete "$BUILD_DIR"
 rm -rf "$BUILD_DIR" && mkdir -p "$BUILD_DIR"
 
-info "工作目录: $LINUX_SRC"
+info "工作目录: $SRC_DIR"
 info "清理源码树 (mrproper)"
 build_step "kernel_mrproper" "$LOG_DIR" \
-    make -C "$LINUX_SRC" ARCH="$KERNEL_ARCH" mrproper
+    make -C "$SRC_DIR" ARCH="$KERNEL_ARCH" mrproper
 
 if [[ -n "$DEFCONFIG" ]]; then
     # 自定义 config: 复制为 .config 后用 olddefconfig 补齐缺省项 (不改动内核源码树)
     info "使用自定义内核配置: $DEFCONFIG"
     cp "$DEFCONFIG" "$BUILD_DIR/.config"
     build_step "kernel_olddefconfig" "$LOG_DIR" \
-        make -C "$LINUX_SRC" O="$BUILD_DIR" \
+        make -C "$SRC_DIR" O="$BUILD_DIR" \
         ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
 else
     info "生成 defconfig (ARCH=$KERNEL_ARCH CROSS_COMPILE=$CROSS_COMPILE)"
     build_step "kernel_defconfig" "$LOG_DIR" \
-        make -C "$LINUX_SRC" O="$BUILD_DIR" \
+        make -C "$SRC_DIR" O="$BUILD_DIR" \
         ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" defconfig
 
     info "合并 kvm_guest.config 片段"
     build_step "kernel_kvm_guest_config" "$LOG_DIR" \
-        make -C "$LINUX_SRC" O="$BUILD_DIR" \
+        make -C "$SRC_DIR" O="$BUILD_DIR" \
         ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" kvm_guest.config
 fi
 
@@ -200,10 +200,10 @@ fi
 # 对任何配置来源 (defconfig / --defconfig) 都生效
 if [[ "$KERNEL_ARCH" == "x86" ]]; then
     info "x86: 启用 CONFIG_HYPERVISOR_GUEST + CONFIG_PVH"
-    "$LINUX_SRC/scripts/config" --file "$BUILD_DIR/.config" \
+    "$SRC_DIR/scripts/config" --file "$BUILD_DIR/.config" \
         -e HYPERVISOR_GUEST -e PVH
     build_step "kernel_olddefconfig_pvh" "$LOG_DIR" \
-        make -C "$LINUX_SRC" O="$BUILD_DIR" \
+        make -C "$SRC_DIR" O="$BUILD_DIR" \
         ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
     grep -q '^CONFIG_PVH=y' "$BUILD_DIR/.config" \
         || error "CONFIG_PVH 启用失败, 请检查 .config 依赖 (HYPERVISOR_GUEST)"
@@ -225,11 +225,11 @@ build_step "kernel_build" "$LOG_DIR" \
 # ---------------------------------------------------------------------------
 step "=== 安装模块 ==="
 if grep -q '^CONFIG_MODULES=y' "$BUILD_DIR/.config"; then
-    info "安装模块到: $OUTPUT"
+    info "安装模块到: $OUTPUT_DIR"
     build_step "kernel_modules_install" "$LOG_DIR" \
         make -C "$BUILD_DIR" modules_install \
         ARCH="$KERNEL_ARCH" CROSS_COMPILE="$CROSS_COMPILE" \
-        INSTALL_MOD_PATH="$OUTPUT"
+        INSTALL_MOD_PATH="$OUTPUT_DIR"
 else
     info "内核未启用模块 (CONFIG_MODULES 未开启)，跳过 modules_install"
 fi
@@ -237,7 +237,7 @@ fi
 step "=== 复制内核镜像 ==="
 # 复制 vmlinux
 if [[ -f "$BUILD_DIR/vmlinux" ]]; then
-    cp "$BUILD_DIR/vmlinux" "$OUTPUT/"
+    cp "$BUILD_DIR/vmlinux" "$OUTPUT_DIR/"
     info "已复制: vmlinux"
 fi
 
@@ -245,36 +245,36 @@ fi
 BOOT_DIR="$BUILD_DIR/arch/$KERNEL_ARCH/boot"
 for img in Image Image.gz bzImage zImage; do
     if [[ -f "$BOOT_DIR/$img" ]]; then
-        cp "$BOOT_DIR/$img" "$OUTPUT/"
+        cp "$BOOT_DIR/$img" "$OUTPUT_DIR/"
         info "已复制: $img"
     fi
 done
 
 # 复制 .config 与 System.map (便于复现构建与符号调试)
 if [[ -f "$BUILD_DIR/.config" ]]; then
-    cp "$BUILD_DIR/.config" "$OUTPUT/config"
+    cp "$BUILD_DIR/.config" "$OUTPUT_DIR/config"
     info "已复制: config"
 fi
 if [[ -f "$BUILD_DIR/System.map" ]]; then
-    cp "$BUILD_DIR/System.map" "$OUTPUT/System.map"
+    cp "$BUILD_DIR/System.map" "$OUTPUT_DIR/System.map"
     info "已复制: System.map"
 fi
 
 # ---------------------------------------------------------------------------
 # 输出产物信息
 # ---------------------------------------------------------------------------
-OUTPUT=$(realpath "$OUTPUT")
+OUTPUT_DIR=$(realpath "$OUTPUT_DIR")
 ok "Linux ${LINUX_VER} 交叉编译完成！"
-info "产物目录: $OUTPUT"
+info "产物目录: $OUTPUT_DIR"
 
-if [[ -f "$OUTPUT/vmlinux" ]]; then
-    info "$(file "$OUTPUT/vmlinux")"
+if [[ -f "$OUTPUT_DIR/vmlinux" ]]; then
+    info "$(file "$OUTPUT_DIR/vmlinux")"
 fi
 
 echo -e "内核产物:"
 for f in vmlinux Image Image.gz bzImage zImage config System.map; do
-    if [[ -f "$OUTPUT/$f" ]]; then
-        echo -e "  ${GREEN}$(ls -lh "$OUTPUT/$f")${NC}"
+    if [[ -f "$OUTPUT_DIR/$f" ]]; then
+        echo -e "  ${GREEN}$(ls -lh "$OUTPUT_DIR/$f")${NC}"
     fi
 done
 

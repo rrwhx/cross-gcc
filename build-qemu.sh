@@ -22,7 +22,7 @@ setup_error_trap
 # ---------------------------------------------------------------------------
 SRC_DIR=""
 BUILD_DIR=""
-PREFIX=""
+INSTALL_DIR=""
 TARGETS=""
 ARCH_LIST=""
 REPO="https://${MIRROR}/git/qemu.git"
@@ -80,7 +80,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --src-dir)     require_option_value "$@"; SRC_DIR="$2";    shift 2 ;;
         --build-dir)   require_option_value "$@"; BUILD_DIR="$2";  shift 2 ;;
-        --install-dir) require_option_value "$@"; PREFIX="$2";     shift 2 ;;
+        --install-dir) require_option_value "$@"; INSTALL_DIR="$2";     shift 2 ;;
         -a|--arch)     require_option_value "$@"; ARCH_LIST="$2";  shift 2 ;;
         -t|--targets)  require_option_value "$@"; TARGETS="$2";    shift 2 ;;
         -j|--jobs)     require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2";       shift 2 ;;
@@ -139,11 +139,11 @@ if [[ "$STATIC_BUILD" == true ]]; then
     STATIC_SUFFIX="-static"
 fi
 BUILD_DIR="${BUILD_DIR:-$SRC_DIR/build$STATIC_SUFFIX}"
-PREFIX="${PREFIX:-$PWD/qemu-install$STATIC_SUFFIX}"
+INSTALL_DIR="${INSTALL_DIR:-$PWD/qemu-install$STATIC_SUFFIX}"
 
 info "源码目录: $SRC_DIR"
 info "构建目录: $BUILD_DIR"
-info "安装前缀: $PREFIX"
+info "安装前缀: $INSTALL_DIR"
 info "target-list: $TARGETS"
 info "构建线程数: $JOBS"
 info "静态链接: $([[ "$STATIC_BUILD" == true ]] && echo 开启 || echo 关闭)"
@@ -274,7 +274,7 @@ if [[ "$STATIC_BUILD" == true ]]; then
 fi
 
 "$SRC_DIR/configure" \
-    --prefix="$PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --target-list="$TARGETS" \
     --disable-werror \
     "${configure_extra_args[@]}"
@@ -283,16 +283,16 @@ step "=== 编译 QEMU (并行 $JOBS) ==="
 make -j"$JOBS"
 
 if [[ "$DO_INSTALL" == true ]]; then
-    step "=== 安装 QEMU 到 $PREFIX ==="
+    step "=== 安装 QEMU 到 $INSTALL_DIR ==="
     make install
-    PREFIX=$(realpath "$PREFIX")
+    INSTALL_DIR=$(realpath "$INSTALL_DIR")
 
     if [[ "$STATIC_BUILD" == true ]]; then
-        verify_static_binaries "$PREFIX"/bin/qemu-* || true
+        verify_static_binaries "$INSTALL_DIR"/bin/qemu-* || true
     fi
 
-    ok "完成。二进制位于 ${GREEN}${PREFIX}/bin${NC}"
-    info "测试脚本可使用: --qemu-dir ${PREFIX}/bin"
+    ok "完成。二进制位于 ${GREEN}${INSTALL_DIR}/bin${NC}"
+    info "测试脚本可使用: --qemu-dir ${INSTALL_DIR}/bin"
 else
     BUILD_DIR=$(realpath "$BUILD_DIR")
     ok "完成 (跳过安装 --no-install)。二进制位于 ${GREEN}${BUILD_DIR}${NC}"

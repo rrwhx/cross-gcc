@@ -215,10 +215,9 @@ LOG_DIR_GCC_FINAL="$LOG_DIR/gcc-final"
 LOG_DIR_NEWLIB="$LOG_DIR/newlib"
 
 # 设置安装前缀和目标 sysroot
-CROSS_PREFIX="$INSTALL_DIR"
 TARGET_SYSROOT="$INSTALL_DIR/$TARGET"
 mkdir -p "$TARGET_SYSROOT"
-info "工具链安装前缀: $CROSS_PREFIX"
+info "工具链安装前缀: $INSTALL_DIR"
 info "目标 sysroot: $TARGET_SYSROOT"
 info "下载目录: $DOWNLOAD_DIR"
 info "源码目录: $SRC_DIR"
@@ -249,7 +248,7 @@ step "解压源代码"
 extract_dl_files "$DOWNLOAD_DIR" "$SRC_DIR"
 
 # 导出环境变量以便工具链之间找到
-export PATH="${CROSS_PREFIX}/bin:${PATH}"
+export PATH="${INSTALL_DIR}/bin:${PATH}"
 
 # 构建Binutils
 step "=== 构建 Binutils ==="
@@ -259,7 +258,7 @@ cd "$BUILD_DIR_BINUTILS" || error "无法进入构建目录"
 build_step "configure" "${LOG_DIR_BINUTILS}" \
     "$SRC_DIR_BINUTILS/configure" \
     --target="$TARGET" \
-    --prefix="$CROSS_PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --disable-multilib \
     --enable-plugins \
     --disable-werror \
@@ -299,7 +298,7 @@ build_step "configure" "${LOG_DIR_GCC_INITIAL}" \
     "${gcc_configure_env[@]}" \
     "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
-    --prefix="$CROSS_PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --disable-bootstrap \
     --disable-multilib \
     --disable-shared \
@@ -307,7 +306,7 @@ build_step "configure" "${LOG_DIR_GCC_INITIAL}" \
     --disable-tls \
     --enable-languages=c,c++ \
     --with-newlib \
-    --with-sysroot="${CROSS_PREFIX}/${TARGET}" \
+    --with-sysroot="${INSTALL_DIR}/${TARGET}" \
     --disable-libmudflap \
     --disable-libssp \
     --disable-libquadmath \
@@ -328,11 +327,11 @@ mkdir -p "$BUILD_DIR_NEWLIB"
 cd "$BUILD_DIR_NEWLIB" || error "无法进入构建目录"
 
 build_step  "configure" "${LOG_DIR_NEWLIB}" \
-    env CC_FOR_TARGET="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
-    CXX_FOR_TARGET="${CROSS_PREFIX}/bin/${TARGET}-g++" \
+    env CC_FOR_TARGET="${INSTALL_DIR}/bin/${TARGET}-gcc" \
+    CXX_FOR_TARGET="${INSTALL_DIR}/bin/${TARGET}-g++" \
     "$SRC_DIR_NEWLIB/configure" \
     --target="$TARGET" \
-    --prefix="$CROSS_PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --enable-newlib-io-long-double \
     --enable-newlib-io-long-long \
     --enable-newlib-io-c99-formats \
@@ -356,14 +355,14 @@ build_step "configure" "${LOG_DIR_GCC_FINAL}" \
     "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
     --disable-bootstrap \
-    --prefix="$CROSS_PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --disable-multilib \
     --disable-shared \
     --disable-threads \
     --enable-languages=c,c++ \
     --enable-tls \
     --with-newlib \
-    --with-sysroot="${CROSS_PREFIX}/${TARGET}" \
+    --with-sysroot="${INSTALL_DIR}/${TARGET}" \
     --with-native-system-header-dir=/include \
     --disable-libmudflap \
     --disable-libssp \
@@ -382,20 +381,20 @@ build_step "install" "${LOG_DIR_GCC_FINAL}" \
 
 # 完成输出
 ok "=== 构建完成 ==="
-echo -e "交叉编译器路径: ${GREEN}${CROSS_PREFIX}/bin${NC}"
-echo -e "系统根目录: ${GREEN}${CROSS_PREFIX}/${TARGET}${NC}"
+echo -e "交叉编译器路径: ${GREEN}${INSTALL_DIR}/bin${NC}"
+echo -e "系统根目录: ${GREEN}${INSTALL_DIR}/${TARGET}${NC}"
 echo -e "日志目录: ${GREEN}${LOG_DIR}${NC}"
 
 # 静态链接校验：确认关键可执行文件不再依赖动态库
 if [[ "$STATIC_BUILD" == true ]]; then
-    libexec_dir="$(dirname "$("${CROSS_PREFIX}/bin/${TARGET}-gcc" -print-prog-name=cc1 2>/dev/null || true)")"
+    libexec_dir="$(dirname "$("${INSTALL_DIR}/bin/${TARGET}-gcc" -print-prog-name=cc1 2>/dev/null || true)")"
     verify_static_binaries \
-        "${CROSS_PREFIX}/bin/${TARGET}-as" "${CROSS_PREFIX}/bin/${TARGET}-ld" \
-        "${CROSS_PREFIX}/bin/${TARGET}-ar" "${CROSS_PREFIX}/bin/${TARGET}-objdump" \
-        "${CROSS_PREFIX}/bin/${TARGET}-gcc" "${CROSS_PREFIX}/bin/${TARGET}-g++" \
+        "${INSTALL_DIR}/bin/${TARGET}-as" "${INSTALL_DIR}/bin/${TARGET}-ld" \
+        "${INSTALL_DIR}/bin/${TARGET}-ar" "${INSTALL_DIR}/bin/${TARGET}-objdump" \
+        "${INSTALL_DIR}/bin/${TARGET}-gcc" "${INSTALL_DIR}/bin/${TARGET}-g++" \
         "${libexec_dir}/cc1" "${libexec_dir}/cc1plus" || true
 fi
 
 # 构建后处理
 clean_build_dir "$BUILD_DIR" "$LOG_DIR" "$CLEAN_BUILD"
-archive_toolchain "$CROSS_PREFIX" "$ARCHIVE_RESULT"
+archive_toolchain "$INSTALL_DIR" "$ARCHIVE_RESULT"

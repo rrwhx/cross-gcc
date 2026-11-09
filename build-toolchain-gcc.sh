@@ -314,10 +314,9 @@ LOG_DIR_GLIBC="$LOG_DIR/glibc"
 LOG_DIR_MUSL="$LOG_DIR/musl"
 
 # 设置安装前缀和目标 sysroot
-CROSS_PREFIX="$INSTALL_DIR"
 TARGET_SYSROOT="$INSTALL_DIR/$TARGET"
 mkdir -p "$TARGET_SYSROOT"
-info "工具链安装前缀: $CROSS_PREFIX"
+info "工具链安装前缀: $INSTALL_DIR"
 info "目标 sysroot: $TARGET_SYSROOT"
 info "下载目录: $DOWNLOAD_DIR"
 info "源码目录: $SRC_DIR"
@@ -354,7 +353,7 @@ cd "$BUILD_DIR_BINUTILS" || error "无法进入构建目录"
 build_step "configure" "${LOG_DIR_BINUTILS}" \
     "$SRC_DIR_BINUTILS/configure" \
     --target="$TARGET" \
-    --prefix="$CROSS_PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --disable-multilib \
     "${binutils_feature_args[@]}" \
     --disable-gprofng \
@@ -391,7 +390,7 @@ build_step "configure" "${LOG_DIR_GCC_INITIAL}" \
     "${gcc_configure_env[@]}" \
     "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
-    --prefix="$CROSS_PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --disable-multilib \
     --disable-bootstrap \
     --enable-checking=release \
@@ -421,7 +420,7 @@ step "=== 准备Linux头文件 ==="
 cd "$SRC_DIR_LINUX" || error "无法进入Linux源码目录"
 build_step "headers" "${LOG_DIR_GLIBC}" \
     make HOSTCC="$HOSTCC" HOSTCXX="$HOSTCXX" \
-    ARCH="${CROSS_KERNEL_NAME}" INSTALL_HDR_PATH="${CROSS_PREFIX}/${TARGET}/usr" headers_install
+    ARCH="${CROSS_KERNEL_NAME}" INSTALL_HDR_PATH="${INSTALL_DIR}/${TARGET}/usr" headers_install
 
 # 构建 C 库（glibc 或 musl）
 if [[ "$LIBC" == "glibc" ]]; then
@@ -431,8 +430,8 @@ if [[ "$LIBC" == "glibc" ]]; then
     cd "$BUILD_DIR_GLIBC" || error "无法进入构建目录"
 
     build_step  "configure" "${LOG_DIR_GLIBC}" \
-        env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
-        CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
+        env CC="${INSTALL_DIR}/bin/${TARGET}-gcc" \
+        CXX="${INSTALL_DIR}/bin/${TARGET}-g++" \
         BUILD_CC="$BUILD_CC" \
         "$SRC_DIR_GLIBC/configure" \
         --build="$($BUILD_CC -dumpmachine)" \
@@ -440,8 +439,8 @@ if [[ "$LIBC" == "glibc" ]]; then
         --target="$TARGET" \
         --prefix="/usr" \
         --exec-prefix="/usr" \
-        --with-headers="${CROSS_PREFIX}/${TARGET}/usr/include" \
-        --with-binutils="${CROSS_PREFIX}/$TARGET/bin" \
+        --with-headers="${INSTALL_DIR}/${TARGET}/usr/include" \
+        --with-binutils="${INSTALL_DIR}/$TARGET/bin" \
         --disable-multilib \
         --without-selinux \
         --disable-werror \
@@ -451,7 +450,7 @@ if [[ "$LIBC" == "glibc" ]]; then
         make -j${JOBS}
 
     build_step "install" "${LOG_DIR_GLIBC}" \
-        make install DESTDIR="${CROSS_PREFIX}/${TARGET}"
+        make install DESTDIR="${INSTALL_DIR}/${TARGET}"
 else
     step "=== 构建 musl ==="
     mkdir -p "$BUILD_DIR_MUSL"
@@ -500,9 +499,9 @@ int sprintf(char *s, const char *fmt, ...)
 EOF
 
     build_step  "configure" "${LOG_DIR_MUSL}" \
-        env CC="${CROSS_PREFIX}/bin/${TARGET}-gcc" \
-        CXX="${CROSS_PREFIX}/bin/${TARGET}-g++" \
-        CROSS_COMPILE="${CROSS_PREFIX}/bin/${TARGET}-" \
+        env CC="${INSTALL_DIR}/bin/${TARGET}-gcc" \
+        CXX="${INSTALL_DIR}/bin/${TARGET}-g++" \
+        CROSS_COMPILE="${INSTALL_DIR}/bin/${TARGET}-" \
         "$SRC_DIR_MUSL/configure" \
         --build="$($BUILD_CC -dumpmachine)" \
         --host="$TARGET" \
@@ -514,9 +513,9 @@ EOF
         make -j${JOBS}
 
     build_step "install" "${LOG_DIR_MUSL}" \
-        make install DESTDIR="${CROSS_PREFIX}/${TARGET}"
+        make install DESTDIR="${INSTALL_DIR}/${TARGET}"
 
-cat > ${CROSS_PREFIX}/${TARGET}/usr/include/execinfo.h <<EOF
+cat > "${INSTALL_DIR}/${TARGET}/usr/include/execinfo.h" <<EOF
 #ifndef _EXECINFO_H
 #define _EXECINFO_H 1
 
@@ -540,13 +539,13 @@ build_step "configure" "${LOG_DIR_GCC_FINAL}" \
     "${gcc_configure_env[@]}" \
     "$SRC_DIR_GCC/configure" \
     --target="$TARGET" \
-    --prefix="$CROSS_PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --disable-multilib \
     --disable-bootstrap \
     --enable-checking=release \
     --enable-languages=c,c++,fortran,lto \
-    --with-sysroot="${CROSS_PREFIX}/${TARGET}" \
-    --with-build-sysroot="${CROSS_PREFIX}/${TARGET}" \
+    --with-sysroot="${INSTALL_DIR}/${TARGET}" \
+    --with-build-sysroot="${INSTALL_DIR}/${TARGET}" \
     --enable-threads=posix \
     --enable-shared \
     --disable-nls \
@@ -563,14 +562,14 @@ build_step "install" "${LOG_DIR_GCC_FINAL}" \
 
 # 完成输出
 ok "=== 构建完成 ==="
-echo -e "交叉编译器路径: ${GREEN}${CROSS_PREFIX}/bin${NC}"
-echo -e "系统根目录: ${GREEN}${CROSS_PREFIX}/${TARGET}${NC}"
+echo -e "交叉编译器路径: ${GREEN}${INSTALL_DIR}/bin${NC}"
+echo -e "系统根目录: ${GREEN}${INSTALL_DIR}/${TARGET}${NC}"
 echo -e "日志目录: ${GREEN}${LOG_DIR}${NC}"
 
-# 在 GCC 完整安装后，查找 ${CROSS_PREFIX}/lib* 下是否存在 libgcc_s.so
+# 在 GCC 完整安装后，查找 ${INSTALL_DIR}/lib* 下是否存在 libgcc_s.so
 # 若找到，则在目标 sysroot 下创建到该 lib 目录的相对符号链接（带安全检查）
 step "=== 链接 libgcc_s.so 所在的 lib 目录到目标 sysroot ==="
-for libdir in "${CROSS_PREFIX}"/lib*; do
+for libdir in "${INSTALL_DIR}"/lib*; do
     # 只处理存在且为目录的条目
     if [[ ! -d "${libdir}" ]]; then
         continue
@@ -606,16 +605,16 @@ done
 
 # 静态链接校验：确认关键可执行文件不再依赖动态库
 if [[ "$STATIC_BUILD" == true ]]; then
-    libexec_dir="$(dirname "$("${CROSS_PREFIX}/bin/${TARGET}-gcc" -print-prog-name=cc1 2>/dev/null || true)")"
+    libexec_dir="$(dirname "$("${INSTALL_DIR}/bin/${TARGET}-gcc" -print-prog-name=cc1 2>/dev/null || true)")"
     verify_static_binaries \
-        "${CROSS_PREFIX}/bin/${TARGET}-as" "${CROSS_PREFIX}/bin/${TARGET}-ld" \
-        "${CROSS_PREFIX}/bin/${TARGET}-ar" "${CROSS_PREFIX}/bin/${TARGET}-objdump" \
-        "${CROSS_PREFIX}/bin/${TARGET}-gcc" "${CROSS_PREFIX}/bin/${TARGET}-g++" \
-        "${CROSS_PREFIX}/bin/${TARGET}-gfortran" \
-        "${CROSS_PREFIX}/bin/${TARGET}-gdb" \
+        "${INSTALL_DIR}/bin/${TARGET}-as" "${INSTALL_DIR}/bin/${TARGET}-ld" \
+        "${INSTALL_DIR}/bin/${TARGET}-ar" "${INSTALL_DIR}/bin/${TARGET}-objdump" \
+        "${INSTALL_DIR}/bin/${TARGET}-gcc" "${INSTALL_DIR}/bin/${TARGET}-g++" \
+        "${INSTALL_DIR}/bin/${TARGET}-gfortran" \
+        "${INSTALL_DIR}/bin/${TARGET}-gdb" \
         "${libexec_dir}/cc1" "${libexec_dir}/cc1plus" "${libexec_dir}/f951" || true
 fi
 
 # 构建后处理
 clean_build_dir "$BUILD_DIR" "$LOG_DIR" "$CLEAN_BUILD"
-archive_toolchain "$CROSS_PREFIX" "$ARCHIVE_RESULT"
+archive_toolchain "$INSTALL_DIR" "$ARCHIVE_RESULT"

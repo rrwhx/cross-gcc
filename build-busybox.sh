@@ -30,7 +30,7 @@ COREMARK_GIT="https://github.com/eembc/coremark.git"
 ARCH=""
 CROSS_COMPILE=""
 WORK_DIR=$(pwd)
-OUTPUT=""
+OUTPUT_FILE=""
 CLEAN_BUILD=false
 WITH_COREMARK=false
 ADD_FILES=()
@@ -72,7 +72,7 @@ while [[ $# -gt 0 ]]; do
         --cross-compile)  require_option_value "$@"; CROSS_COMPILE="$2"; shift 2;;
         --work-dir)       require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --busybox-ver)    require_option_value "$@"; BUSYBOX_VER="$2"; shift 2;;
-        --output)         require_option_value "$@"; OUTPUT="$2"; shift 2;;
+        --output)         require_option_value "$@"; OUTPUT_FILE="$2"; shift 2;;
         --coremark)       WITH_COREMARK=true; shift;;
         --add-file)       require_option_value "$@"; ADD_FILES+=("$2"); shift 2;;
         -j|--jobs)        require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
@@ -111,7 +111,7 @@ DOWNLOAD_DIR="${WORK_DIR}/downloads"
 SRC_DIR="${WORK_DIR}/src-busybox-${ARCH}"
 BUILD_DIR="${WORK_DIR}/build-busybox-${ARCH}"
 LOG_DIR="${WORK_DIR}/logs-busybox-${ARCH}"
-OUTPUT="${OUTPUT:-${WORK_DIR}/initrd-${ARCH}.cpio}"
+OUTPUT_FILE="${OUTPUT_FILE:-${WORK_DIR}/initrd-${ARCH}.cpio}"
 
 mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR"
 
@@ -156,7 +156,7 @@ info "BusyBox 版本: $BUSYBOX_VER"
 info "源码目录: $BUSYBOX_SRC"
 info "构建目录: $BUILD_DIR"
 info "日志目录: $LOG_DIR"
-info "输出文件: $OUTPUT"
+info "输出文件: $OUTPUT_FILE"
 
 # ---------------------------------------------------------------------------
 # 配置与编译
@@ -423,21 +423,21 @@ busybox poweroff -f
 INIT_EOF
 chmod 755 "$INITRAMFS_DIR/init"
 
-info "打包 cpio: $OUTPUT"
+info "打包 cpio: $OUTPUT_FILE"
 # cpio 会把 "N blocks" 写到 stderr, 原先用 2>/dev/null 静音, 但这也把真实错误
 # 一起丢了 —— 打包失败时只剩一个空/残缺的 .cpio 而看不到原因。改为收集 stderr,
 # 成功时当进度信息打印, 失败时原样抛出。
 _cpio_err="$BUILD_DIR/cpio.stderr"
-if ! (cd "$INITRAMFS_DIR" && find . | cpio -o -H newc) > "$OUTPUT" 2>"$_cpio_err"; then
+if ! (cd "$INITRAMFS_DIR" && find . | cpio -o -H newc) > "$OUTPUT_FILE" 2>"$_cpio_err"; then
     cat "$_cpio_err" >&2
-    error "cpio 打包失败: $OUTPUT (源目录: $INITRAMFS_DIR)"
+    error "cpio 打包失败: $OUTPUT_FILE (源目录: $INITRAMFS_DIR)"
 fi
 info "cpio: $(tr '\n' ' ' < "$_cpio_err")"
 rm -f "$_cpio_err"
 
-OUTPUT=$(realpath "$OUTPUT")
+OUTPUT_FILE=$(realpath "$OUTPUT_FILE")
 ok "BusyBox ${BUSYBOX_VER} 交叉编译完成！"
-echo -e "initramfs: ${GREEN}${OUTPUT}${NC} ($(du -h "$OUTPUT" | cut -f1))"
+echo -e "initramfs: ${GREEN}${OUTPUT_FILE}${NC} ($(du -h "$OUTPUT_FILE" | cut -f1))"
 
 # CoreMark 发布产物: 与 initrd-<arch>.cpio 并列, 不受 --clean 影响
 if [[ "$WITH_COREMARK" == true ]]; then

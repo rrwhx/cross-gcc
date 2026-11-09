@@ -14,12 +14,12 @@ source "$SCRIPT_DIR/lib.sh"
 # 默认配置
 # ---------------------------------------------------------------------------
 declare -a default_arch_list=(aarch64 loongarch64 riscv64 x86_64)
-GCC_DIR_PATTERN=""
+TOOLCHAIN_DIR_PATTERN=""
 
 # ---------------------------------------------------------------------------
 # 参数解析
 # ---------------------------------------------------------------------------
-LLVM_VERSION=""
+LLVM_VER=""
 declare -a arch_list=()
 declare -a extra_args=()
 
@@ -50,27 +50,27 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --llvm-ver)
             require_option_value "$@"
-            LLVM_VERSION="$2"; shift 2;;
+            LLVM_VER="$2"; shift 2;;
         -a|--arch)
             require_option_value "$@"
             [[ -n "$2" && "$2" != ,* && "$2" != *, && "$2" != *,,* ]] || error "选项 $1 的列表不能为空或包含空项"
             IFS=',' read -ra arch_list <<< "$2"; shift 2;;
         --toolchain-dir)
             require_option_value "$@"
-            GCC_DIR_PATTERN="$2"; shift 2;;
+            TOOLCHAIN_DIR_PATTERN="$2"; shift 2;;
         -h|--help) usage;;
         *)
             extra_args+=("$1"); shift;;
     esac
 done
 
-if [[ -z "$LLVM_VERSION" ]]; then
+if [[ -z "$LLVM_VER" ]]; then
     error "--llvm-ver 参数为必需。"
 fi
 
-[[ "$LLVM_VERSION" != *,* ]] || error "每次仅支持一个 LLVM 版本；请分别调用并指定不同的 --work-dir。"
+[[ "$LLVM_VER" != *,* ]] || error "每次仅支持一个 LLVM 版本；请分别调用并指定不同的 --work-dir。"
 
-if [[ -z "$GCC_DIR_PATTERN" ]]; then
+if [[ -z "$TOOLCHAIN_DIR_PATTERN" ]]; then
     error "--toolchain-dir 参数为必需。"
 fi
 
@@ -83,32 +83,32 @@ declare -a failed_list=()
 declare -a failed_cmds=()
 
 info "==============================================="
-info "LLVM 版本: $LLVM_VERSION"
+info "LLVM 版本: $LLVM_VER"
 info "目标架构: ${arch_list[*]}"
-info "GCC 目录模板: $GCC_DIR_PATTERN"
+info "GCC 目录模板: $TOOLCHAIN_DIR_PATTERN"
 info "==============================================="
 
 for arch in "${arch_list[@]}"; do
-    gcc_dir="${GCC_DIR_PATTERN//\{ARCH\}/$arch}"
+    toolchain_dir="${TOOLCHAIN_DIR_PATTERN//\{ARCH\}/$arch}"
 
     step "======================================================================"
-    info "开始构建 LLVM：VER=$LLVM_VERSION, ARCH=$arch"
+    info "开始构建 LLVM：VER=$LLVM_VER, ARCH=$arch"
     step "======================================================================"
 
     # 先打印完整命令: 批量构建时需要能直接拿单条命令出来重跑
     cmd=("$SCRIPT_DIR/build-toolchain-llvm.sh"
          --arch "$arch"
-         --llvm-ver "$LLVM_VERSION"
-         --toolchain-dir "$gcc_dir"
-         --target-sysroot "$gcc_dir/${arch}-linux-gnu"
+         --llvm-ver "$LLVM_VER"
+         --toolchain-dir "$toolchain_dir"
+         --target-sysroot "$toolchain_dir/${arch}-linux-gnu"
          "${extra_args[@]}")
     info "执行: $(format_cmd "${cmd[@]}")"
 
     if "${cmd[@]}"; then
-        ok "构建成功：LLVM $LLVM_VERSION / $arch"
+        ok "构建成功：LLVM $LLVM_VER / $arch"
     else
-        warn "构建失败：LLVM $LLVM_VERSION / $arch"
-        failed_list+=("LLVM $LLVM_VERSION / $arch")
+        warn "构建失败：LLVM $LLVM_VER / $arch"
+        failed_list+=("LLVM $LLVM_VER / $arch")
         failed_cmds+=("$(format_cmd "${cmd[@]}")")
     fi
 done

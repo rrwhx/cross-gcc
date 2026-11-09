@@ -18,15 +18,15 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 source "$SCRIPT_DIR/lib.sh"
 
 # ─── 可配置变量 ──────────────────────────────────────────────
-PREFIX="${PREFIX:-$HOME/.local}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local}"
 BUILD_DIR="${BUILD_DIR:-/tmp/build_flex_bison_$$}"
 
-FLEX_VERSION="${FLEX_VERSION:-2.6.4}"
-BISON_VERSION="${BISON_VERSION:-3.8.2}"
-TEXINFO_VERSION="${TEXINFO_VERSION:-7.3}"
+FLEX_VER="${FLEX_VER:-2.6.4}"
+BISON_VER="${BISON_VER:-3.8.2}"
+TEXINFO_VER="${TEXINFO_VER:-7.3}"
 # 与 GCC contrib/download_prerequisites 保持一致的版本
-GMP_VERSION="${GMP_VERSION:-6.3.0}"
-MPFR_VERSION="${MPFR_VERSION:-4.2.2}"
+GMP_VER="${GMP_VER:-6.3.0}"
+MPFR_VER="${MPFR_VER:-4.2.2}"
 
 # 为了兼容 macOS 较新版 Clang，避免 implicit-function-declaration 错误
 export CFLAGS="-g -O2 -Wno-implicit-function-declaration"
@@ -39,26 +39,26 @@ usage() {
 选项:
   --install-dir PATH     安装前缀 (默认: \$HOME/.local)
   -j, --jobs N           并行编译数 (默认: nproc)
-  --flex-ver VER         flex 版本 (默认: ${FLEX_VERSION})
-  --bison-ver VER        bison 版本 (默认: ${BISON_VERSION})
-  --texinfo-ver VER      texinfo 版本 (默认: ${TEXINFO_VERSION})
+  --flex-ver VER         flex 版本 (默认: ${FLEX_VER})
+  --bison-ver VER        bison 版本 (默认: ${BISON_VER})
+  --texinfo-ver VER      texinfo 版本 (默认: ${TEXINFO_VER})
   --with-gmp-mpfr         额外编译安装静态 gmp + mpfr (默认关闭)
                           用于 --static --enable-gdb 的工具链构建: gdb 14+ 依赖
                           GMP/MPFR，而多数发行版只提供动态库
-  --gmp-ver VER          gmp 版本 (默认: ${GMP_VERSION})
-  --mpfr-ver VER         mpfr 版本 (默认: ${MPFR_VERSION})
+  --gmp-ver VER          gmp 版本 (默认: ${GMP_VER})
+  --mpfr-ver VER         mpfr 版本 (默认: ${MPFR_VER})
   --keep-build            安装后保留构建目录
   -h, --help              显示帮助
 
 环境变量:
-  PREFIX          等同于 --install-dir
+  INSTALL_DIR          等同于 --install-dir
   JOBS            等同于 --jobs
   BUILD_DIR       构建目录 (默认: /tmp/build_flex_bison_PID)
 
 示例:
   $0
   $0 --install-dir /opt/tools --jobs 8
-  PREFIX=/usr/local $0
+  INSTALL_DIR=/usr/local $0
   # 为静态 gdb 准备依赖，随后按提示导出 LIBRARY_PATH/C_INCLUDE_PATH
   $0 --with-gmp-mpfr
 EOF
@@ -70,14 +70,14 @@ KEEP_BUILD=false
 WITH_GMP_MPFR=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --install-dir)      require_option_value "$@"; PREFIX="$2";        shift 2 ;;
+    --install-dir)      require_option_value "$@"; INSTALL_DIR="$2";        shift 2 ;;
     -j|--jobs)          require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2";          shift 2 ;;
-    --flex-ver)         require_option_value "$@"; FLEX_VERSION="$2";  shift 2 ;;
-    --bison-ver)        require_option_value "$@"; BISON_VERSION="$2"; shift 2 ;;
-    --texinfo-ver)      require_option_value "$@"; TEXINFO_VERSION="$2"; shift 2 ;;
+    --flex-ver)         require_option_value "$@"; FLEX_VER="$2";  shift 2 ;;
+    --bison-ver)        require_option_value "$@"; BISON_VER="$2"; shift 2 ;;
+    --texinfo-ver)      require_option_value "$@"; TEXINFO_VER="$2"; shift 2 ;;
     --with-gmp-mpfr)    WITH_GMP_MPFR=true; shift   ;;
-    --gmp-ver)          require_option_value "$@"; GMP_VERSION="$2";   shift 2 ;;
-    --mpfr-ver)         require_option_value "$@"; MPFR_VERSION="$2";  shift 2 ;;
+    --gmp-ver)          require_option_value "$@"; GMP_VER="$2";   shift 2 ;;
+    --mpfr-ver)         require_option_value "$@"; MPFR_VER="$2";  shift 2 ;;
     --keep-build)       KEEP_BUILD=true;    shift   ;;
     -h|--help)          usage ;;
     *) error "未知参数: $1，使用 --help 查看帮助" ;;
@@ -86,11 +86,11 @@ done
 
 require_positive_integer "构建线程数" "$JOBS"
 
-FLEX_URL="https://github.com/westes/flex/releases/download/v${FLEX_VERSION}/flex-${FLEX_VERSION}.tar.gz"
-BISON_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/bison/bison-${BISON_VERSION}.tar.xz"
-TEXINFO_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/texinfo/texinfo-${TEXINFO_VERSION}.tar.xz"
-GMP_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/gmp/gmp-${GMP_VERSION}.tar.xz"
-MPFR_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/mpfr/mpfr-${MPFR_VERSION}.tar.xz"
+FLEX_URL="https://github.com/westes/flex/releases/download/v${FLEX_VER}/flex-${FLEX_VER}.tar.gz"
+BISON_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/bison/bison-${BISON_VER}.tar.xz"
+TEXINFO_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/texinfo/texinfo-${TEXINFO_VER}.tar.xz"
+GMP_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/gmp/gmp-${GMP_VER}.tar.xz"
+MPFR_URL="https://mirrors.tuna.tsinghua.edu.cn/gnu/mpfr/mpfr-${MPFR_VER}.tar.xz"
 
 # ─── 清理函数 ────────────────────────────────────────────────
 cleanup() {
@@ -135,7 +135,7 @@ build_and_install() {
   local src_dir="$2"
   local extra_flags="${3:-}"
 
-  info "配置 $name (prefix=$PREFIX, jobs=$JOBS)..."
+  info "配置 $name (prefix=$INSTALL_DIR, jobs=$JOBS)..."
   pushd "$src_dir" > /dev/null
 
   local tag
@@ -145,7 +145,7 @@ build_and_install() {
   local install_log="$BUILD_DIR/${tag}_install.log"
 
   if ! ./configure \
-    --prefix="$PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --disable-dependency-tracking \
     $extra_flags > "$conf_log" 2>&1; then
     tail -n 20 "$conf_log"
@@ -170,13 +170,13 @@ build_and_install() {
 
 # ─── 验证安装 ────────────────────────────────────────────────
 verify() {
-  local bin_dir="$PREFIX/bin"
+  local bin_dir="$INSTALL_DIR/bin"
   local all_ok=true
 
   echo ""
   info "═══ 验证安装结果 ═══"
 
-  # 临时将 $PREFIX/bin 加入 PATH 进行验证
+  # 临时将 $INSTALL_DIR/bin 加入 PATH 进行验证
   export PATH="$bin_dir:$PATH"
 
   for tool in flex bison makeinfo; do
@@ -199,7 +199,7 @@ verify() {
 
   # 额外检查 flex 库 (glibc 需要 libfl)
   local libfl
-  libfl=$(find "$PREFIX/lib" -name "libfl*" 2>/dev/null | head -1)
+  libfl=$(find "$INSTALL_DIR/lib" -name "libfl*" 2>/dev/null | head -1)
   if [[ -n "$libfl" ]]; then
     echo -e "  ${GREEN}✓${NC} libfl => $libfl"
   else
@@ -210,10 +210,10 @@ verify() {
   if [[ "$WITH_GMP_MPFR" == true ]]; then
     local lib
     for lib in libgmp.a libmpfr.a; do
-      if [[ -f "$PREFIX/lib/$lib" ]]; then
-        echo -e "  ${GREEN}✓${NC} $lib => $PREFIX/lib/$lib"
+      if [[ -f "$INSTALL_DIR/lib/$lib" ]]; then
+        echo -e "  ${GREEN}✓${NC} $lib => $INSTALL_DIR/lib/$lib"
       else
-        echo -e "  ${RED}✗${NC} 未找到静态库: $PREFIX/lib/$lib"
+        echo -e "  ${RED}✗${NC} 未找到静态库: $INSTALL_DIR/lib/$lib"
         all_ok=false
       fi
     done
@@ -234,23 +234,23 @@ print_env_hint() {
   echo " 请将以下内容加入您的 shell 配置文件"
   echo " (~/.bashrc / ~/.zshrc / ~/.profile):"
   echo ""
-  echo "   export PATH=\"${PREFIX}/bin:\$PATH\""
-  echo "   export LD_LIBRARY_PATH=\"${PREFIX}/lib:\$LD_LIBRARY_PATH\""
+  echo "   export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+  echo "   export LD_LIBRARY_PATH=\"${INSTALL_DIR}/lib:\$LD_LIBRARY_PATH\""
   echo "   # macOS 用户请考虑设置 (如果 SIP 允许):"
-  echo "   # export DYLD_LIBRARY_PATH=\"${PREFIX}/lib:\$DYLD_LIBRARY_PATH\""
+  echo "   # export DYLD_LIBRARY_PATH=\"${INSTALL_DIR}/lib:\$DYLD_LIBRARY_PATH\""
   echo ""
   echo " 立即生效（当前 shell）:"
-  echo "   export PATH=\"${PREFIX}/bin:\$PATH\""
+  echo "   export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
   echo ""
   echo " 在 glibc 构建时指定工具:"
   echo "   ../configure --prefix=<glibc安装路径> \\"
-  echo "     LEX=\"${PREFIX}/bin/flex\" \\"
-  echo "     YACC=\"${PREFIX}/bin/bison -y\""
+  echo "     LEX=\"${INSTALL_DIR}/bin/flex\" \\"
+  echo "     YACC=\"${INSTALL_DIR}/bin/bison -y\""
   if [[ "$WITH_GMP_MPFR" == true ]]; then
     echo ""
     echo " 用于静态 gdb (--static --enable-gdb)，两个变量都需要:"
-    echo "   export LIBRARY_PATH=\"${PREFIX}/lib:\$LIBRARY_PATH\"      # gcc 找 libgmp.a/libmpfr.a"
-    echo "   export C_INCLUDE_PATH=\"${PREFIX}/include:\$C_INCLUDE_PATH\"  # gdb configure 找 gmp.h/mpfr.h"
+    echo "   export LIBRARY_PATH=\"${INSTALL_DIR}/lib:\$LIBRARY_PATH\"      # gcc 找 libgmp.a/libmpfr.a"
+    echo "   export C_INCLUDE_PATH=\"${INSTALL_DIR}/include:\$C_INCLUDE_PATH\"  # gdb configure 找 gmp.h/mpfr.h"
     echo "   ./build-toolchain-gcc.sh --arch riscv64 --libc glibc \\"
     echo "     --binutils-ver git --static --enable-gdb"
   fi
@@ -263,14 +263,14 @@ main() {
   echo "=========================================================="
   echo " flex + bison + texinfo 自动构建安装脚本"
   echo "=========================================================="
-  echo " flex 版本    : ${FLEX_VERSION}"
-  echo " bison 版本   : ${BISON_VERSION}"
-  echo " texinfo 版本 : ${TEXINFO_VERSION}"
+  echo " flex 版本    : ${FLEX_VER}"
+  echo " bison 版本   : ${BISON_VER}"
+  echo " texinfo 版本 : ${TEXINFO_VER}"
   if [[ "$WITH_GMP_MPFR" == true ]]; then
-    echo " gmp 版本     : ${GMP_VERSION} (静态)"
-    echo " mpfr 版本    : ${MPFR_VERSION} (静态)"
+    echo " gmp 版本     : ${GMP_VER} (静态)"
+    echo " mpfr 版本    : ${MPFR_VER} (静态)"
   fi
-  echo " 安装前缀    : ${PREFIX}"
+  echo " 安装前缀    : ${INSTALL_DIR}"
   echo " 构建目录    : ${BUILD_DIR}"
   echo "=========================================================="
   echo -e "${NC}"
@@ -278,12 +278,12 @@ main() {
   check_deps
 
   # 创建目录
-  mkdir -p "$BUILD_DIR" "$PREFIX/bin" "$PREFIX/lib"
+  mkdir -p "$BUILD_DIR" "$INSTALL_DIR/bin" "$INSTALL_DIR/lib"
 
   # ── 下载源码 ──
-  local flex_tar="$BUILD_DIR/flex-${FLEX_VERSION}.tar.gz"
-  local bison_tar="$BUILD_DIR/bison-${BISON_VERSION}.tar.xz"
-  local texinfo_tar="$BUILD_DIR/texinfo-${TEXINFO_VERSION}.tar.xz"
+  local flex_tar="$BUILD_DIR/flex-${FLEX_VER}.tar.gz"
+  local bison_tar="$BUILD_DIR/bison-${BISON_VER}.tar.xz"
+  local texinfo_tar="$BUILD_DIR/texinfo-${TEXINFO_VER}.tar.xz"
 
   download "$FLEX_URL"    "$flex_tar"
   download "$BISON_URL"   "$bison_tar"
@@ -300,7 +300,7 @@ main() {
 
   # ── 构建安装 flex ──
   echo ""
-  info "━━━ 开始构建 flex ${FLEX_VERSION} ━━━"
+  info "━━━ 开始构建 flex ${FLEX_VER} ━━━"
   # flex 可能需要 autoreconf（部分版本）
   if [[ ! -f "$flex_src/configure" ]]; then
     info "运行 autoreconf..."
@@ -308,23 +308,23 @@ main() {
     autoreconf -fi
     popd > /dev/null
   fi
-  build_and_install "flex ${FLEX_VERSION}" "$flex_src"
+  build_and_install "flex ${FLEX_VER}" "$flex_src"
 
   # ── 构建安装 bison ──
   echo ""
-  info "━━━ 开始构建 bison ${BISON_VERSION} ━━━"
+  info "━━━ 开始构建 bison ${BISON_VER} ━━━"
   # bison 需要 m4，已在依赖检查中确认
-  build_and_install "bison ${BISON_VERSION}" "$bison_src"
+  build_and_install "bison ${BISON_VER}" "$bison_src"
 
   # ── 构建安装 texinfo ──
   echo ""
-  info "━━━ 开始构建 texinfo ${TEXINFO_VERSION} ━━━"
-  build_and_install "texinfo ${TEXINFO_VERSION}" "$texinfo_src"
+  info "━━━ 开始构建 texinfo ${TEXINFO_VER} ━━━"
+  build_and_install "texinfo ${TEXINFO_VER}" "$texinfo_src"
 
   # ── 可选: 静态 gmp + mpfr (静态 gdb 依赖) ──
   if [[ "$WITH_GMP_MPFR" == true ]]; then
-    local gmp_tar="$BUILD_DIR/gmp-${GMP_VERSION}.tar.xz"
-    local mpfr_tar="$BUILD_DIR/mpfr-${MPFR_VERSION}.tar.xz"
+    local gmp_tar="$BUILD_DIR/gmp-${GMP_VER}.tar.xz"
+    local mpfr_tar="$BUILD_DIR/mpfr-${MPFR_VER}.tar.xz"
     local gmp_src="$BUILD_DIR/gmp-src"
     local mpfr_src="$BUILD_DIR/mpfr-src"
 
@@ -334,13 +334,13 @@ main() {
     extract  "$mpfr_tar" "$mpfr_src"
 
     echo ""
-    info "━━━ 开始构建 gmp ${GMP_VERSION} (静态) ━━━"
-    build_and_install "gmp ${GMP_VERSION}" "$gmp_src" "--disable-shared --enable-static"
+    info "━━━ 开始构建 gmp ${GMP_VER} (静态) ━━━"
+    build_and_install "gmp ${GMP_VER}" "$gmp_src" "--disable-shared --enable-static"
 
     echo ""
-    info "━━━ 开始构建 mpfr ${MPFR_VERSION} (静态) ━━━"
-    build_and_install "mpfr ${MPFR_VERSION}" "$mpfr_src" \
-      "--disable-shared --enable-static --with-gmp=$PREFIX"
+    info "━━━ 开始构建 mpfr ${MPFR_VER} (静态) ━━━"
+    build_and_install "mpfr ${MPFR_VER}" "$mpfr_src" \
+      "--disable-shared --enable-static --with-gmp=$INSTALL_DIR"
   fi
 
   # ── 验证 ──

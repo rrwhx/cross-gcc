@@ -176,6 +176,8 @@ LLVM 批量入口使用 `--llvm-ver`，工具链目录使用 `--toolchain-dir`�
 QEMU 使用 `--src-dir`、`--build-dir`、`--install-dir`；flex/bison 安装脚本同样使用 `--install-dir`。
 `--src-dir` 在 GCC 构建入口中指多组件源码的存放目录，在 LLVM/QEMU/内核入口中指具体源码树。
 最小内核辅助脚本的 `--toolchains-dir` 指含多套 `cross-<triple>/` 的父目录。
+脚本中的安装根目录统一使用 `INSTALL_DIR`，组件版本使用 `*_VER`，输出路径区分
+`OUTPUT_FILE` 与 `OUTPUT_DIR`；上游构建工具的 `--prefix`、`PREFIX` 和 `DESTDIR` 按各自接口传递。
 
 `--static` 只影响工具链自身的 host 可执行文件（`gcc`/`as`/`ld`/`clang`/`lld` 等），
 目标侧库（glibc/musl/newlib/libgcc/compiler-rt）仍按原方式构建，不受影响。

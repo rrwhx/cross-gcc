@@ -225,8 +225,7 @@ LOG_DIR_GCC="$LOG_DIR/gcc"
 LOG_DIR_GDB="$LOG_DIR/gdb"
 
 # 设置安装前缀
-INSTALL_PREFIX="$INSTALL_DIR"
-info "工具链安装前缀: $INSTALL_PREFIX"
+info "工具链安装前缀: $INSTALL_DIR"
 info "下载目录: $DOWNLOAD_DIR"
 info "源码目录: $SRC_DIR"
 info "构建目录: $BUILD_DIR"
@@ -280,7 +279,7 @@ step "解压源代码"
 extract_dl_files "$DOWNLOAD_DIR" "$SRC_DIR"
 
 # 让后续 GCC 构建优先使用本次编译安装的 binutils（as/ld/ar 等）
-export PATH="${INSTALL_PREFIX}/bin:${PATH}"
+export PATH="${INSTALL_DIR}/bin:${PATH}"
 
 # 构建 Binutils（native: 不指定 --target）
 step "=== 构建 Binutils ==="
@@ -289,7 +288,7 @@ cd "$BUILD_DIR_BINUTILS" || error "无法进入构建目录"
 
 build_step "configure" "${LOG_DIR_BINUTILS}" \
     "$SRC_DIR_BINUTILS/configure" \
-    --prefix="$INSTALL_PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --disable-multilib \
     "${binutils_feature_args[@]}" \
     --disable-nls \
@@ -316,7 +315,7 @@ if [[ "$BUILD_GDB_SEPARATE" == true ]]; then
     cd "$BUILD_DIR_GDB" || error "无法进入构建目录"
     build_step "configure" "${LOG_DIR_GDB}" \
         "$SRC_DIR_GDB/configure" \
-        --prefix="$INSTALL_PREFIX" \
+        --prefix="$INSTALL_DIR" \
         --disable-multilib \
         --disable-nls \
         --disable-werror \
@@ -345,7 +344,7 @@ cd "$BUILD_DIR_GCC" || error "无法进入构建目录"
 build_step "configure" "${LOG_DIR_GCC}" \
     "${gcc_configure_env[@]}" \
     "$SRC_DIR_GCC/configure" \
-    --prefix="$INSTALL_PREFIX" \
+    --prefix="$INSTALL_DIR" \
     --disable-multilib \
     --disable-bootstrap \
     --enable-checking=release \
@@ -367,16 +366,16 @@ build_step "install" "${LOG_DIR_GCC}" \
 ok "=== 构建完成 ==="
 
 # 运行时动态库目录（多数 64 位平台为 lib64，部分平台为 lib）
-RUNTIME_LIBDIR="${INSTALL_PREFIX}/lib64"
-[[ -d "$RUNTIME_LIBDIR" ]] || RUNTIME_LIBDIR="${INSTALL_PREFIX}/lib"
+RUNTIME_LIBDIR="${INSTALL_DIR}/lib64"
+[[ -d "$RUNTIME_LIBDIR" ]] || RUNTIME_LIBDIR="${INSTALL_DIR}/lib"
 
-echo -e "本地编译器路径: ${GREEN}${INSTALL_PREFIX}/bin${NC}"
+echo -e "本地编译器路径: ${GREEN}${INSTALL_DIR}/bin${NC}"
 echo -e "运行时库目录:   ${GREEN}${RUNTIME_LIBDIR}${NC}"
 echo -e "日志目录:       ${GREEN}${LOG_DIR}${NC}"
 echo ""
 echo -e "使用方法:"
 echo -e "  # 1) 将编译器加入 PATH"
-echo -e "  ${GREEN}export PATH=\"${INSTALL_PREFIX}/bin:\$PATH\"${NC}"
+echo -e "  ${GREEN}export PATH=\"${INSTALL_DIR}/bin:\$PATH\"${NC}"
 echo -e "  # 运行新编译器生成的 C++/共享库程序时，需让新版 libstdc++/libgcc_s 可被加载，任选其一:"
 echo -e "  # 2) 运行前设置动态库搜索路径"
 echo -e "  ${GREEN}export LD_LIBRARY_PATH=\"${RUNTIME_LIBDIR}:\$LD_LIBRARY_PATH\"${NC}"
@@ -387,13 +386,13 @@ echo -e "  ${GREEN}g++ -static-libstdc++ -static-libgcc prog.cpp${NC}"
 
 # 静态链接校验：确认关键可执行文件不再依赖动态库
 if [[ "$STATIC_BUILD" == true ]]; then
-    libexec_dir="$(dirname "$("${INSTALL_PREFIX}/bin/gcc" -print-prog-name=cc1 2>/dev/null || true)")"
+    libexec_dir="$(dirname "$("${INSTALL_DIR}/bin/gcc" -print-prog-name=cc1 2>/dev/null || true)")"
     verify_static_binaries \
-        "${INSTALL_PREFIX}/bin/as" "${INSTALL_PREFIX}/bin/ld" "${INSTALL_PREFIX}/bin/ar" \
-        "${INSTALL_PREFIX}/bin/objdump" "${INSTALL_PREFIX}/bin/gcc" "${INSTALL_PREFIX}/bin/g++" \
-        "${INSTALL_PREFIX}/bin/gdb" "${libexec_dir}/cc1" "${libexec_dir}/cc1plus" || true
+        "${INSTALL_DIR}/bin/as" "${INSTALL_DIR}/bin/ld" "${INSTALL_DIR}/bin/ar" \
+        "${INSTALL_DIR}/bin/objdump" "${INSTALL_DIR}/bin/gcc" "${INSTALL_DIR}/bin/g++" \
+        "${INSTALL_DIR}/bin/gdb" "${libexec_dir}/cc1" "${libexec_dir}/cc1plus" || true
 fi
 
 # 构建后处理
 clean_build_dir "$BUILD_DIR" "$LOG_DIR" "$CLEAN_BUILD"
-archive_toolchain "$INSTALL_PREFIX" "$ARCHIVE_RESULT"
+archive_toolchain "$INSTALL_DIR" "$ARCHIVE_RESULT"

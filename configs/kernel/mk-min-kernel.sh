@@ -9,14 +9,14 @@ source "$SCRIPT_DIR/../../lib.sh"
 # ---------------------------------------------------------------------------
 # 默认配置 (均可用环境变量或命令行覆盖)
 # ---------------------------------------------------------------------------
-LINUX_SRC="${LINUX_SRC:-/dev/shm/lxy497151/downloads/linux-7.1.1}"
-TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-/rvhome/lxy497151/cross-gcc/gcc_161-glibc_243}"
+SRC_DIR="${SRC_DIR:-/dev/shm/lxy497151/downloads/linux-7.1.1}"
+TOOLCHAINS_DIR="${TOOLCHAINS_DIR:-/rvhome/lxy497151/cross-gcc/gcc_161-glibc_243}"
 WORK_DIR="${WORK_DIR:-/dev/shm/lxy497151}"
 BUILD_DIR=""
 CROSS_COMPILE=""
 CONFIG_ONLY=false
-SAVEDEFCONFIG_OUT=""
-ARCH_NAME=""
+DEFCONFIG_OUTPUT_FILE=""
+ARCH=""
 
 usage() {
     cat <<EOF
@@ -24,8 +24,8 @@ usage() {
 
 生成 QEMU virt 最小内核配置 (defconfig + 裁剪) 并构建
 
-  --src-dir DIR        内核源码树 (默认: \$LINUX_SRC 或 $LINUX_SRC)
-  --toolchains-dir DIR 多架构工具链父目录, 含 cross-<triple>/bin (默认: \$TOOLCHAIN_DIR)
+  --src-dir DIR        内核源码树 (默认: \$SRC_DIR 或 $SRC_DIR)
+  --toolchains-dir DIR 多架构工具链父目录, 含 cross-<triple>/bin (默认: \$TOOLCHAINS_DIR)
   --cross-compile P    显式交叉编译前缀, 覆盖由 --toolchains-dir 推导的值
   --work-dir DIR       构建目录父路径 (默认: \$WORK_DIR 或 $WORK_DIR)
   --build-dir DIR      构建输出目录 (默认: <work-dir>/build-kernel-<arch>)
@@ -38,59 +38,58 @@ usage() {
   $(basename "$0") riscv64
   $(basename "$0") --config-only aarch64
   $(basename "$0") --savedefconfig ./x86_64_qemu_virt_min_defconfig x86_64
-  LINUX_SRC=~/src/linux-7.2 $(basename "$0") loongarch64
+  SRC_DIR=~/src/linux-7.2 $(basename "$0") loongarch64
 EOF
     exit 0
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --src-dir)          LINUX_SRC="$2"; shift 2;;
-        --toolchains-dir) TOOLCHAIN_DIR="$2"; shift 2;;
+        --src-dir)          SRC_DIR="$2"; shift 2;;
+        --toolchains-dir) TOOLCHAINS_DIR="$2"; shift 2;;
         --cross-compile)  CROSS_COMPILE="$2"; shift 2;;
         --work-dir)       WORK_DIR="$2"; shift 2;;
         --build-dir)      BUILD_DIR="$2"; shift 2;;
         -j|--jobs)           JOBS="$2"; shift 2;;
         --config-only)    CONFIG_ONLY=true; shift;;
-        --savedefconfig)  SAVEDEFCONFIG_OUT="$2"; shift 2;;
+        --savedefconfig)  DEFCONFIG_OUTPUT_FILE="$2"; shift 2;;
         -h|--help)        usage;;
         -*)               echo "未知选项: $1" >&2; exit 1;;
-        *)                ARCH_NAME="$1"; shift;;
+        *)                ARCH="$1"; shift;;
     esac
 done
 
-[[ -z "$ARCH_NAME" ]] && { echo "缺少架构参数"; usage; }
-[[ -d "$LINUX_SRC" ]] || { echo "内核源码不存在: $LINUX_SRC"; exit 1; }
+[[ -z "$ARCH" ]] && { echo "缺少架构参数"; usage; }
+[[ -d "$SRC_DIR" ]] || { echo "内核源码不存在: $SRC_DIR"; exit 1; }
 
-case "$ARCH_NAME" in
-    riscv64)     KARCH=riscv;     TRIPLE=riscv64-linux-gnu ;;
-    aarch64)     KARCH=arm64;     TRIPLE=aarch64-linux-gnu ;;
-    x86_64)      KARCH=x86;       TRIPLE=x86_64-linux-gnu ;;
-    loongarch64) KARCH=loongarch; TRIPLE=loongarch64-linux-gnu ;;
-    *) echo "不支持的架构: $ARCH_NAME"; exit 1 ;;
+case "$ARCH" in
+    riscv64)     KERNEL_ARCH=riscv;     TARGET=riscv64-linux-gnu ;;
+    aarch64)     KERNEL_ARCH=arm64;     TARGET=aarch64-linux-gnu ;;
+    x86_64)      KERNEL_ARCH=x86;       TARGET=x86_64-linux-gnu ;;
+    loongarch64) KERNEL_ARCH=loongarch; TARGET=loongarch64-linux-gnu ;;
+    *) echo "不支持的架构: $ARCH"; exit 1 ;;
 esac
 
-CROSS_COMPILE="${CROSS_COMPILE:-$TOOLCHAIN_DIR/cross-$TRIPLE/bin/$TRIPLE-}"
-BUILD_DIR="${BUILD_DIR:-$WORK_DIR/build-kernel-$ARCH_NAME}"
-CFG="$LINUX_SRC/scripts/config"
+CROSS_COMPILE="${CROSS_COMPILE:-$TOOLCHAINS_DIR/cross-$TARGET/bin/$TARGET-}"
+BUILD_DIR="${BUILD_DIR:-$WORK_DIR/build-kernel-$ARCH}"
 
 command -v "${CROSS_COMPILE}gcc" >/dev/null 2>&1 || \
     { echo "找不到交叉编译器: ${CROSS_COMPILE}gcc"; exit 1; }
 
-MAKE="make -C $LINUX_SRC O=$BUILD_DIR ARCH=$KARCH CROSS_COMPILE=$CROSS_COMPILE"
+make_cmd=("${MAKE:-make}" -C "$SRC_DIR" "O=$BUILD_DIR" "ARCH=$KERNEL_ARCH" "CROSS_COMPILE=$CROSS_COMPILE")
 mkdir -p "$BUILD_DIR"
 
-echo "ARCH=$ARCH_NAME (KERNEL_ARCH=$KARCH)"
-echo "LINUX_SRC=$LINUX_SRC"
+echo "ARCH=$ARCH (KERNEL_ARCH=$KERNEL_ARCH)"
+echo "SRC_DIR=$SRC_DIR"
 echo "CROSS_COMPILE=$CROSS_COMPILE"
 echo "BUILD_DIR=$BUILD_DIR"
 
-$MAKE defconfig >/dev/null || exit 1
+"${make_cmd[@]}" defconfig >/dev/null || exit 1
 
-C="$CFG --file $BUILD_DIR/.config"
+config_cmd=("$SRC_DIR/scripts/config" --file "$BUILD_DIR/.config")
 
 # ---- 通用裁剪(与 riscv_qemu_virt_min_defconfig 同思路) ----
-$C -e EXPERT \
+"${config_cmd[@]}" -e EXPERT \
    -d NET -d ETHERNET -d NETDEVICES -d WLAN -d WIRELESS \
    -d USB_SUPPORT -d SOUND -d DRM -d FB -d FB_CORE -d VT -d HID_SUPPORT -d INPUT -d SERIO \
    -d I2C -d SPI -d GPIOLIB -d MMC -d SCSI -d ATA -d MD -d NEW_LEDS -d RTC_CLASS \
@@ -137,10 +136,10 @@ $C -e EXPERT \
    -d CRYPTO_CTR -d CRYPTO >/dev/null
 
 # ---- 架构特化 ----
-case "$ARCH_NAME" in
+case "$ARCH" in
 riscv64)
     # 控制台: 8250 ttyS0 + SBI earlycon; 关机: syscon-poweroff; 仅 QEMU virt 平台
-    $C -e NONPORTABLE -d EFI -d PCI \
+    "${config_cmd[@]}" -e NONPORTABLE -d EFI -d PCI \
        -e SERIAL_8250 -e SERIAL_8250_CONSOLE -e SERIAL_OF_PLATFORM \
        --set-val SERIAL_8250_NR_UARTS 1 --set-val SERIAL_8250_RUNTIME_UARTS 1 \
        -d SERIAL_8250_16550A_VARIANTS -d SERIAL_8250_DW -d SERIAL_SIFIVE \
@@ -155,7 +154,7 @@ riscv64)
     ;;
 aarch64)
     # 控制台: PL011 (ttyAMA0), 依赖 ARM_AMBA; 关机: PSCI(内建)
-    $C -e ARM_AMBA -e SERIAL_AMBA_PL011 -e SERIAL_AMBA_PL011_CONSOLE \
+    "${config_cmd[@]}" -e ARM_AMBA -e SERIAL_AMBA_PL011 -e SERIAL_AMBA_PL011_CONSOLE \
        -d SERIAL_8250 -d PCI -d ACPI -d EFI \
        -d ARM_SMMU -d ARM_SMMU_V3 -d ARM_PMU -d ARM_SDE_INTERFACE \
        -d ARM64_SME -d ARM64_PTR_AUTH -d ARM64_BTI -d ARM64_MTE \
@@ -163,18 +162,18 @@ aarch64)
        -d SOCIONEXT_SYNQUACER_PREITS \
        -d COMPAT -d PM -d HOTPLUG_CPU -d VEXPRESS_CONFIG >/dev/null
     # 动态枚举并关闭全部厂商平台 (来自 Kconfig.platforms, 保留 virt 所需的通用部分)
-    for opt in $(grep -oE '^config ARCH_[A-Z0-9_]+' "$LINUX_SRC/arch/arm64/Kconfig.platforms" | awk '{print $2}'); do
-        $C -d "$opt" >/dev/null
+    for opt in $(grep -oE '^config ARCH_[A-Z0-9_]+' "$SRC_DIR/arch/arm64/Kconfig.platforms" | awk '{print $2}'); do
+        "${config_cmd[@]}" -d "$opt" >/dev/null
     done
     # 批量关闭 CPU erratum 软件规避 (QEMU TCG 无需)
     for opt in $(grep -oE '^CONFIG_[A-Z0-9_]*ERRATUM[A-Z0-9_]*=y' "$BUILD_DIR/.config" | sed 's/^CONFIG_//;s/=y//'); do
-        $C -d "$opt" >/dev/null
+        "${config_cmd[@]}" -d "$opt" >/dev/null
     done
     ;;
 x86_64)
     # 控制台: 8250 ttyS0; 关机: ACPI S5 (保留 ACPI+PCI)
     # bzImage 必须压缩, 选解压指令数最少的 LZ4 (gzip 解压约多花 1.2亿条指令)
-    $C -d KERNEL_GZIP -e KERNEL_LZ4 \
+    "${config_cmd[@]}" -d KERNEL_GZIP -e KERNEL_LZ4 \
        -e SERIAL_8250 -e SERIAL_8250_CONSOLE \
        --set-val SERIAL_8250_NR_UARTS 1 --set-val SERIAL_8250_RUNTIME_UARTS 1 \
        -d SERIAL_8250_16550A_VARIANTS \
@@ -195,7 +194,7 @@ x86_64)
 loongarch64)
     # 控制台: 8250 ttyS0; 直接 -kernel vmlinux 引导; 保留 ACPI+PCI(关机依赖)
     # 注: swiotlb 为架构无条件分配, 测量时用 cmdline "swiotlb=16" 压到 256KB
-    $C -e SERIAL_8250 -e SERIAL_8250_CONSOLE -e SERIAL_OF_PLATFORM \
+    "${config_cmd[@]}" -e SERIAL_8250 -e SERIAL_8250_CONSOLE -e SERIAL_OF_PLATFORM \
        --set-val SERIAL_8250_NR_UARTS 1 --set-val SERIAL_8250_RUNTIME_UARTS 1 \
        -d SERIAL_8250_16550A_VARIANTS \
        -e ACPI -e PCI -d EFI_STUB \
@@ -208,36 +207,36 @@ loongarch64)
     ;;
 esac
 
-$MAKE olddefconfig >/dev/null || exit 1
+"${make_cmd[@]}" olddefconfig >/dev/null || exit 1
 
 # ---- 二次收敛: 处理被 select/choice 翻回来的项 ----
 # 注: 本版本内核 PREEMPT_NONE 仅限 ARCH_NO_PREEMPT 架构;
 #     统一使用 choice 默认的 PREEMPT_LAZY, 与 riscv 实际状态一致
-$C -d CGROUPS -d CPU_FREQ -d NLS -d PM_DEBUG \
+"${config_cmd[@]}" -d CGROUPS -d CPU_FREQ -d NLS -d PM_DEBUG \
    -d PREEMPT -d PREEMPT_DYNAMIC -d PREEMPT_VOLUNTARY -e PREEMPT_LAZY >/dev/null
 
-$MAKE olddefconfig >/dev/null || exit 1
+"${make_cmd[@]}" olddefconfig >/dev/null || exit 1
 echo "--- 关键项校验:"
 grep -E '^CONFIG_(PREEMPT|PREEMPT_NONE|PREEMPT_LAZY|CGROUPS|CPU_FREQ|SMP|SCHED_AUTOGROUP)=y' "$BUILD_DIR/.config"
 
 if $CONFIG_ONLY; then
-    echo "=== $ARCH_NAME config done (--config-only, 跳过编译) ==="
+    echo "=== $ARCH config done (--config-only, 跳过编译) ==="
     exit 0
 fi
 
-echo "=== $ARCH_NAME config done, building... ==="
-$MAKE -j"$JOBS" > "$BUILD_DIR/build.log" 2>&1
+echo "=== $ARCH config done, building... ==="
+"${make_cmd[@]}" -j"$JOBS" > "$BUILD_DIR/build.log" 2>&1
 rc=$?
 if [ $rc -ne 0 ]; then
-    echo "BUILD FAIL ($ARCH_NAME), last lines:"
+    echo "BUILD FAIL ($ARCH), last lines:"
     tail -20 "$BUILD_DIR/build.log"
     exit $rc
 fi
-echo "BUILD OK ($ARCH_NAME)"
-ls -la "$BUILD_DIR/arch/$KARCH/boot/" "$BUILD_DIR/vmlinux" 2>/dev/null | grep -E 'Image|vmlinux' | head -5
+echo "BUILD OK ($ARCH)"
+ls -la "$BUILD_DIR/arch/$KERNEL_ARCH/boot/" "$BUILD_DIR/vmlinux" 2>/dev/null | grep -E 'Image|vmlinux' | head -5
 
-if [[ -n "$SAVEDEFCONFIG_OUT" ]]; then
-    $MAKE savedefconfig >/dev/null 2>&1 && \
-        cp "$BUILD_DIR/defconfig" "$SAVEDEFCONFIG_OUT" && \
-        echo "savedefconfig -> $SAVEDEFCONFIG_OUT ($(wc -l < "$SAVEDEFCONFIG_OUT") 行)"
+if [[ -n "$DEFCONFIG_OUTPUT_FILE" ]]; then
+    "${make_cmd[@]}" savedefconfig >/dev/null 2>&1 && \
+        cp "$BUILD_DIR/defconfig" "$DEFCONFIG_OUTPUT_FILE" && \
+        echo "savedefconfig -> $DEFCONFIG_OUTPUT_FILE ($(wc -l < "$DEFCONFIG_OUTPUT_FILE") 行)"
 fi
