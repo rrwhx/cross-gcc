@@ -7,6 +7,7 @@ on:
       - 'build-toolchain-gcc.sh'
       - 'build-toolchain-elf.sh'
       - 'lib.sh'
+      - 'versions.env'
       - 'prepare-gcc.sh'
       - 'install-prerequisites.sh'
       - 'get-latest-versions.sh'
@@ -18,6 +19,7 @@ on:
       - 'build-toolchain-gcc.sh'
       - 'build-toolchain-elf.sh'
       - 'lib.sh'
+      - 'versions.env'
       - 'prepare-gcc.sh'
       - 'install-prerequisites.sh'
       - 'get-latest-versions.sh'
@@ -26,37 +28,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  versions:
     runs-on: ubuntu-22.04
-
-    strategy:
-      matrix:
-        include:
-          - arch: riscv64
-            libc: glibc
-          - arch: loongarch64
-            libc: glibc
-          - arch: aarch64
-            libc: glibc
-          - arch: x86_64
-            libc: glibc
-          - arch: riscv32
-            libc: glibc
-          - arch: riscv64
-            libc: musl
-          # 裸机工具链 (newlib)，由 build-toolchain-elf.sh 构建；
-          # 该脚本已在 paths 触发列表中，此前没有任何 job 覆盖它。
-          - arch: riscv64
-            libc: newlib
+    outputs:
+      gcc_ver: ${{ steps.versions.outputs.gcc_ver }}
+      binutils_ver: ${{ steps.versions.outputs.binutils_ver }}
+      glibc_ver: ${{ steps.versions.outputs.glibc_ver }}
+      musl_ver: ${{ steps.versions.outputs.musl_ver }}
+      linux_ver: ${{ steps.versions.outputs.linux_ver }}
+      version_source: ${{ steps.versions.outputs.version_source }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          ./install-prerequisites.sh
 
       # 优先用上游最新版; 取不到则回落到 versions.env 的固定版本。
       # 关键是无论走哪条路都如实输出"实际使用的版本"与来源: 之前这里是
@@ -99,10 +83,8 @@ jobs:
                                  glibc "$GLIBC_VER" musl "$MUSL_VER" Linux "$LINUX_VER"
           echo "::endgroup::"
 
-      # release job 与 build job 是两个 job, 若各自再 fetch 一次可能拿到不同结果,
-      # 导致说明与产物不符。故由 build 侧把实际用的版本落成 artifact 传过去。
+      # 构建矩阵和发布说明共用本次解析结果，避免各任务独立查询或回退导致版本不一致。
       - name: Save resolved versions (once)
-        if: matrix.arch == 'riscv64' && matrix.libc == 'glibc'
         run: |
           mkdir -p versioninfo
           {
@@ -116,12 +98,44 @@ jobs:
           cat versioninfo/versions.txt
 
       - name: Upload resolved versions (once)
-        if: matrix.arch == 'riscv64' && matrix.libc == 'glibc'
         uses: actions/upload-artifact@v7
         with:
           name: toolchain-versions
           path: versioninfo/versions.txt
           retention-days: 7
+
+  build:
+    needs: versions
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        include:
+          - arch: riscv64
+            libc: glibc
+          - arch: loongarch64
+            libc: glibc
+          - arch: aarch64
+            libc: glibc
+          - arch: x86_64
+            libc: glibc
+          - arch: riscv32
+            libc: glibc
+          - arch: riscv64
+            libc: musl
+          # 裸机工具链 (newlib)，由 build-toolchain-elf.sh 构建；
+          # 该脚本已在 paths 触发列表中，此前没有任何 job 覆盖它。
+          - arch: riscv64
+            libc: newlib
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          ./install-prerequisites.sh
 
       - name: Compute target triple
         id: triple
@@ -145,12 +159,12 @@ jobs:
           ARCH: ${{ matrix.arch }}
           LIBC: ${{ matrix.libc }}
           TRIPLE: ${{ steps.triple.outputs.target }}
-          GCC_VER: ${{ steps.versions.outputs.gcc_ver }}
-          BINUTILS_VER: ${{ steps.versions.outputs.binutils_ver }}
-          GLIBC_VER: ${{ steps.versions.outputs.glibc_ver }}
-          MUSL_VER: ${{ steps.versions.outputs.musl_ver }}
-          LINUX_VER: ${{ steps.versions.outputs.linux_ver }}
-          VERSION_SOURCE: ${{ steps.versions.outputs.version_source }}
+          GCC_VER: ${{ needs.versions.outputs.gcc_ver }}
+          BINUTILS_VER: ${{ needs.versions.outputs.binutils_ver }}
+          GLIBC_VER: ${{ needs.versions.outputs.glibc_ver }}
+          MUSL_VER: ${{ needs.versions.outputs.musl_ver }}
+          LINUX_VER: ${{ needs.versions.outputs.linux_ver }}
+          VERSION_SOURCE: ${{ needs.versions.outputs.version_source }}
         run: |
           echo "::group::runner 环境"
           echo "matrix        : ARCH=$ARCH LIBC=$LIBC TRIPLE=$TRIPLE"
@@ -180,11 +194,11 @@ jobs:
           ARCH: ${{ matrix.arch }}
           LIBC: ${{ matrix.libc }}
           TRIPLE: ${{ steps.triple.outputs.target }}
-          GCC_VER: ${{ steps.versions.outputs.gcc_ver }}
-          BINUTILS_VER: ${{ steps.versions.outputs.binutils_ver }}
-          GLIBC_VER: ${{ steps.versions.outputs.glibc_ver }}
-          MUSL_VER: ${{ steps.versions.outputs.musl_ver }}
-          LINUX_VER: ${{ steps.versions.outputs.linux_ver }}
+          GCC_VER: ${{ needs.versions.outputs.gcc_ver }}
+          BINUTILS_VER: ${{ needs.versions.outputs.binutils_ver }}
+          GLIBC_VER: ${{ needs.versions.outputs.glibc_ver }}
+          MUSL_VER: ${{ needs.versions.outputs.musl_ver }}
+          LINUX_VER: ${{ needs.versions.outputs.linux_ver }}
         run: |
           if [ "$LIBC" = newlib ]; then
             ./build-toolchain-elf.sh --arch "$ARCH" \
