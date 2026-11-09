@@ -40,9 +40,9 @@ usage() {
 
 从源码构建 QEMU。默认构建 riscv64 系统模拟；Linux 主机还构建 Linux 用户态模拟。
 
-  -s,--src DIR       QEMU 源码目录 (默认: ./qemu, 缺失时从 --repo 克隆 --ref)
-  -b,--build DIR     out-of-tree 构建目录 (默认: <src>/build)
-  -p,--prefix DIR    安装前缀 (默认: ./qemu-install)
+  --src-dir DIR     QEMU 源码目录 (默认: ./qemu, 缺失时从 --repo 克隆 --ref)
+  --build-dir DIR   out-of-tree 构建目录 (默认: <src-dir>/build)
+  --install-dir DIR 安装前缀 (默认: ./qemu-install)
   -a,--arch LIST     架构列表 (逗号分隔), 每个展开为 <arch>-softmmu
                      Linux 主机另加 <arch>-linux-user
                      (例如: aarch64,loongarch64,riscv64,x86_64)
@@ -67,10 +67,10 @@ usage() {
   $(basename "$0") -a aarch64,loongarch64,riscv64,x86_64
   $(basename "$0") -t riscv64-linux-user -j 16 --deps         # 首次构建: 自动装依赖 (需 sudo)
   $(basename "$0") -t riscv64-linux-user --static             # 静态 qemu-riscv64，可拷贝
-  $(basename "$0") -s ~/qemu --ref master -p ~/qemu_upstream
+  $(basename "$0") --src-dir ~/qemu --ref master --install-dir ~/qemu_upstream
 
-安装完成后，测试脚本可通过 --qemu-dir 指向 <prefix>/bin 使用:
-  ./test-qemu-run.sh --qemu-dir ./qemu-install/bin
+安装完成后，测试脚本可通过 --qemu-dir 指向 <install-dir>/bin 使用:
+  ./test/test-qemu-run.sh --qemu-dir ./qemu-install/bin
   ./test-toolchain.sh --toolchain-dir ./cross-riscv64-linux-gnu --target riscv64-linux-gnu \\
       --run-mode all --qemu-dir ./qemu-install/bin
 EOF
@@ -79,9 +79,9 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -s|--src)      require_option_value "$@"; SRC_DIR="$2";    shift 2 ;;
-        -b|--build)    require_option_value "$@"; BUILD_DIR="$2";  shift 2 ;;
-        -p|--prefix)   require_option_value "$@"; PREFIX="$2";     shift 2 ;;
+        --src-dir)     require_option_value "$@"; SRC_DIR="$2";    shift 2 ;;
+        --build-dir)   require_option_value "$@"; BUILD_DIR="$2";  shift 2 ;;
+        --install-dir) require_option_value "$@"; PREFIX="$2";     shift 2 ;;
         -a|--arch)     require_option_value "$@"; ARCH_LIST="$2";  shift 2 ;;
         -t|--targets)  require_option_value "$@"; TARGETS="$2";    shift 2 ;;
         -j|--jobs)     require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2";       shift 2 ;;

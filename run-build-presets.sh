@@ -33,7 +33,7 @@ run_llvm_build() {
     local requested_compile="$preset_threads" requested_link="${LLVM_LINK_JOBS:-}" previous="" arg
     for arg in "$@"; do
         case "$previous" in
-            -j|--threads) requested_compile="$arg";;
+            -j|--jobs)    requested_compile="$arg";;
             --link-jobs) requested_link="$arg";;
         esac
         previous="$arg"
@@ -74,7 +74,7 @@ run_llvm_build() {
     info "LLVM 可用内存约 ${memory_mb} MiB，CPU ${cpu_count}，编译并发 ${compile_jobs}，链接并发 ${link_jobs}，子构建并发 ${child_jobs}"
     # runtimes 子构建默认取较低的并发，也允许用户显式覆盖。
     run_build env CMAKE_BUILD_PARALLEL_LEVEL="$child_jobs" \
-        "$@" --threads "$compile_jobs" --link-jobs "$link_jobs"
+        "$@" --jobs "$compile_jobs" --link-jobs "$link_jobs"
 }
 
 run_build "$SCRIPT_DIR/build-toolchain-gcc-batch.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l musl  --gcc-ver 16.2.0 --musl-ver 1.2.6  --binutils-ver 2.46.1 --work-dir gcc_162-musl_126
@@ -89,9 +89,9 @@ run_build "$SCRIPT_DIR/build-toolchain-gcc-batch.sh" "$@" -a aarch64,loongarch64
 # ./build-toolchain-gcc-batch.sh "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 9.5.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --work-dir gcc_95-glibc_241
 
 
-run_llvm_build "$SCRIPT_DIR/build-toolchain-llvm-batch.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ -v git:llvmorg-23.1.5 --work-dir llvm_2315/
-run_llvm_build "$SCRIPT_DIR/build-toolchain-llvm-batch.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ -v git:llvmorg-22.1.8 --work-dir llvm_2218/
-run_llvm_build "$SCRIPT_DIR/build-toolchain-llvm-batch.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --gcc-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ -v git --work-dir llvm_dev/
+run_llvm_build "$SCRIPT_DIR/build-toolchain-llvm-batch.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --toolchain-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ --llvm-ver git:llvmorg-23.1.5 --work-dir llvm_2315/
+run_llvm_build "$SCRIPT_DIR/build-toolchain-llvm-batch.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --toolchain-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ --llvm-ver git:llvmorg-22.1.8 --work-dir llvm_2218/
+run_llvm_build "$SCRIPT_DIR/build-toolchain-llvm-batch.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --toolchain-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ --llvm-ver git --work-dir llvm_dev/
 
 
 # ./build-toolchain-gcc.sh "$@" --arch x86_64 --libc glibc --gcc-ver 16.2.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --download-dir ./x86_64/downloads/ --work-dir x86_64/gcc_162-glibc_243

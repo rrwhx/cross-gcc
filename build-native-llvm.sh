@@ -65,7 +65,7 @@ usage() {
   --enable-sanitizer / --disable-sanitizer 是否构建 compiler-rt sanitizer 运行库 (默认开启)
   --link-jobs         并行链接作业数 (命令行 > LLVM_LINK_JOBS 环境变量)
                       均未指定时不额外设置链接并发。
-  -j,--threads        并行编译线程数 (默认: ${THREADS})
+  -j,--jobs           并行编译线程数 (默认: ${THREADS})
   --mirror            下载镜像源 (默认: $MIRROR)
   --static            静态链接工具链自身的可执行文件 (clang/lld/flang 等)，产物不依赖 host
                       的 libc/libstdc++，可随意拷贝到同架构机器执行。需要 host 提供 libc.a
@@ -105,7 +105,7 @@ while [[ $# -gt 0 ]]; do
         --enable-sanitizer)      ENABLE_SANITIZER=true; shift;;
         --disable-sanitizer)     ENABLE_SANITIZER=false; shift;;
         --link-jobs)             require_option_value "$@"; require_positive_integer "$1" "$2"; LINK_JOBS="$2"; shift 2;;
-        -j|--threads)            require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)               require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
         --mirror)                require_option_value "$@"; MIRROR="$2"; shift 2;;
         --static)                STATIC_BUILD=true; shift;;
         --fresh)                 FRESH_BUILD=true; shift;;

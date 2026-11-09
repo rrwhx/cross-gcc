@@ -25,37 +25,37 @@ declare -a extra_args=()
 
 usage() {
     cat <<EOF
-用法: $(basename "$0") --version VER --arch ARCHS [选项] [其他选项传递给 build-toolchain-llvm.sh]
+用法: $(basename "$0") --llvm-ver VER --arch ARCHS [选项] [其他选项传递给 build-toolchain-llvm.sh]
 
 批量构建单版本 × 多架构 LLVM/Clang 工具链
 
-  -v,--version <VER>     LLVM 版本（单个版本，必填，支持 git[:REF]）
-  -a,--arch <ARCHS>      目标架构列表（逗号分隔，默认: ${default_arch_list[*]}）
-  --gcc-dir <PATTERN>    GCC 工具链目录模板（必填，{ARCH} 会被替换为当前架构）
-  -h,--help              显示帮助
+  --llvm-ver VER          LLVM 版本（单个版本，必填，支持 git[:REF]）
+  -a,--arch ARCHS          目标架构列表（逗号分隔，默认: ${default_arch_list[*]}）
+  --toolchain-dir PATTERN  GCC 工具链目录模板（必填，{ARCH} 会被替换为当前架构）
+  -h,--help               显示帮助
 
 其他选项将直接传递给 build-toolchain-llvm.sh，例如：
-  --mirror, --fresh, --clean, --archive, --link-jobs, --static, -j, --work-dir
+  --mirror, --fresh, --clean, --archive, --link-jobs, --static, -j/--jobs, --work-dir
 
 示例:
-  $(basename "$0") -v 22.1.8 -a riscv64,aarch64 --gcc-dir ./cross-{ARCH}-linux-gnu
-  $(basename "$0") -v git -a riscv64 --gcc-dir ./cross-{ARCH}-linux-gnu --work-dir ./llvm-dev --fresh
-  $(basename "$0") -v 22.1.8 -a riscv64 --gcc-dir ./cross-{ARCH}-linux-gnu --static --archive
-  $(basename "$0") -v 22.1.8 -a riscv64 --gcc-dir ./gcc_161/cross-{ARCH}-linux-gnu
+  $(basename "$0") --llvm-ver 22.1.8 -a riscv64,aarch64 --toolchain-dir ./cross-{ARCH}-linux-gnu
+  $(basename "$0") --llvm-ver git -a riscv64 --toolchain-dir ./cross-{ARCH}-linux-gnu --work-dir ./llvm-dev --fresh
+  $(basename "$0") --llvm-ver 22.1.8 -a riscv64 --toolchain-dir ./cross-{ARCH}-linux-gnu --static --archive
+  $(basename "$0") --llvm-ver 22.1.8 -a riscv64 --toolchain-dir ./gcc_161/cross-{ARCH}-linux-gnu
 EOF
     exit 0
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -v|--version)
+        --llvm-ver)
             require_option_value "$@"
             LLVM_VERSION="$2"; shift 2;;
         -a|--arch)
             require_option_value "$@"
             [[ -n "$2" && "$2" != ,* && "$2" != *, && "$2" != *,,* ]] || error "选项 $1 的列表不能为空或包含空项"
             IFS=',' read -ra arch_list <<< "$2"; shift 2;;
-        --gcc-dir)
+        --toolchain-dir)
             require_option_value "$@"
             GCC_DIR_PATTERN="$2"; shift 2;;
         -h|--help) usage;;
@@ -67,13 +67,13 @@ done
 require_positive_integer "构建线程数" "$THREADS"
 
 if [[ -z "$LLVM_VERSION" ]]; then
-    error "--version 参数为必需。"
+    error "--llvm-ver 参数为必需。"
 fi
 
 [[ "$LLVM_VERSION" != *,* ]] || error "每次仅支持一个 LLVM 版本；请分别调用并指定不同的 --work-dir。"
 
 if [[ -z "$GCC_DIR_PATTERN" ]]; then
-    error "--gcc-dir 参数为必需。"
+    error "--toolchain-dir 参数为必需。"
 fi
 
 [[ ${#arch_list[@]} -eq 0 ]] && arch_list=("${default_arch_list[@]}")
@@ -101,7 +101,7 @@ for arch in "${arch_list[@]}"; do
     cmd=("$SCRIPT_DIR/build-toolchain-llvm.sh"
          --arch "$arch"
          --llvm-ver "$LLVM_VERSION"
-         --target-gcc-toolchain "$gcc_dir"
+         --toolchain-dir "$gcc_dir"
          --target-sysroot "$gcc_dir/${arch}-linux-gnu"
          "${extra_args[@]}")
     info "执行: $(format_cmd "${cmd[@]}")"

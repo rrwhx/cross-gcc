@@ -57,9 +57,9 @@ class MacOSCompatibility(unittest.TestCase):
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     def qemu(self, *args):
-        return self.run_script("build-qemu.sh", "--src", self.src,
-                               "--build", self.work / "build",
-                               "--prefix", self.work / "install", "--no-install", *args)
+        return self.run_script("build-qemu.sh", "--src-dir", self.src,
+                               "--build-dir", self.work / "build",
+                               "--install-dir", self.work / "install", "--no-install", *args)
 
     def test_qemu_targets(self):
         cases = [
@@ -137,7 +137,7 @@ class MacOSCompatibility(unittest.TestCase):
                 args = ["--arch", "riscv64", "--src-dir", self.src,
                         "--work-dir", self.work]
                 if with_sysroot:
-                    args += ["--target-gcc-toolchain", toolchain,
+                    args += ["--toolchain-dir", toolchain,
                              "--target-sysroot", sysroot]
                 result = self.run_script("build-toolchain-llvm.sh", *args)
                 self.assertEqual(result.returncode, 0, result.stdout)

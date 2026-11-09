@@ -23,14 +23,14 @@ declare -a extra_args=()
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --arch|--architecture|-a)
+        -a|--arch)
             require_option_value "$@"
             # 按逗号分割用户输入的架构列表
             [[ -n "$2" && "$2" != ,* && "$2" != *, && "$2" != *,,* ]] || error "选项 $1 的列表不能为空或包含空项"
             IFS=',' read -ra arch_list <<< "$2"
             shift 2  # 跳过选项和值
             ;;
-        --libc|--libc-type|-l)
+        -l|--libc)
             require_option_value "$@"
             # 按逗号分割用户输入的 libc 列表
             [[ -n "$2" && "$2" != ,* && "$2" != *, && "$2" != *,,* ]] || error "选项 $1 的列表不能为空或包含空项"
@@ -46,7 +46,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "其他选项将直接传递给 build-toolchain-gcc.sh，例如："
             echo "  --binutils-ver, --gcc-ver, --glibc-ver, --musl-ver, --linux-ver"
-            echo "  --clean, --archive, --threads, --download-dir, --static, 等等"
+            echo "  --clean, --archive, --jobs, --download-dir, --static, 等等"
             echo ""
             echo "示例:"
             echo "  $0 --arch aarch64,riscv64 --libc glibc --gcc-ver 14.2.0 --clean"

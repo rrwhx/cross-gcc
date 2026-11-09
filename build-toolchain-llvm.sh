@@ -51,14 +51,14 @@ usage() {
   --src-dir           LLVM 源码目录 (直接指定已解压的源码路径，跳过下载/解压)
   --work-dir          工作目录前缀 (默认: 当前目录)
   --download-dir      源码下载目录 (默认: WORK_DIR/downloads)
-  --target-gcc-toolchain  目标 GCC 工具链目录 (与 --target-sysroot 配对使用)
-  --target-sysroot    目标 sysroot 目录 (与 --target-gcc-toolchain 配对使用)
+  --toolchain-dir     目标 GCC 工具链目录 (与 --target-sysroot 配对使用)
+  --target-sysroot    目标 sysroot 目录 (与 --toolchain-dir 配对使用)
   --build-dir         构建目录 (默认: WORK_DIR/build-llvm-ARCH)
   --install-dir       安装目录 (默认: WORK_DIR/install-llvm-ARCH)
   --log-dir           日志目录 (默认: WORK_DIR/logs-llvm-ARCH)
   --link-jobs         并行链接作业数 (命令行 > LLVM_LINK_JOBS 环境变量)
                       均未指定时不额外设置链接并发。
-  -j,--threads        并行编译线程数 (默认: ${THREADS})
+  -j,--jobs           并行编译线程数 (默认: ${THREADS})
   --mirror            下载镜像源 (默认: $MIRROR)
   --static            静态链接工具链自身的可执行文件 (clang/lld/flang 等)，产物不依赖 host
                       的 libc/libstdc++，可随意拷贝到同架构机器执行。需要 host 提供 libc.a
@@ -79,7 +79,7 @@ usage() {
   $(basename "$0") --arch riscv64 --llvm-ver git
   $(basename "$0") --arch riscv64 --llvm-ver git:llvmorg-22.1.8
   $(basename "$0") --arch aarch64 --src-dir ./llvm-project
-  $(basename "$0") --arch aarch64 --target-gcc-toolchain ./cross-aarch64-linux-gnu --target-sysroot ./cross-aarch64-linux-gnu/aarch64-linux-gnu
+  $(basename "$0") --arch aarch64 --toolchain-dir ./cross-aarch64-linux-gnu --target-sysroot ./cross-aarch64-linux-gnu/aarch64-linux-gnu
   $(basename "$0") --arch riscv64 --static --fresh --link-jobs 2
 EOF
     exit 0
@@ -92,13 +92,13 @@ while [[ $# -gt 0 ]]; do
         --src-dir)               require_option_value "$@"; SRC_DIR="$2"; shift 2;;
         --work-dir)              require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --download-dir)          require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
-        --target-gcc-toolchain)  require_option_value "$@"; TARGET_GCC_TOOLCHAIN="$2"; shift 2;;
+        --toolchain-dir)         require_option_value "$@"; TARGET_GCC_TOOLCHAIN="$2"; shift 2;;
         --target-sysroot)        require_option_value "$@"; TARGET_SYSROOT="$2"; shift 2;;
         --build-dir)             require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
         --install-dir)           require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
         --log-dir)               require_option_value "$@"; LOG_DIR="$2"; shift 2;;
         --link-jobs)             require_option_value "$@"; require_positive_integer "$1" "$2"; LINK_JOBS="$2"; shift 2;;
-        -j|--threads)            require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)               require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
         --mirror)                require_option_value "$@"; MIRROR="$2"; shift 2;;
         --static)                STATIC_BUILD=true; shift;;
         --fresh)                 FRESH_BUILD=true; shift;;
@@ -123,7 +123,7 @@ if [[ -z "$ARCH" ]]; then
 fi
 
 if [[ ( -n "$TARGET_GCC_TOOLCHAIN" && -z "$TARGET_SYSROOT" ) || ( -z "$TARGET_GCC_TOOLCHAIN" && -n "$TARGET_SYSROOT" ) ]]; then
-    error "--target-gcc-toolchain 和 --target-sysroot 必须同时使用。"
+    error "--toolchain-dir 和 --target-sysroot 必须同时使用。"
 fi
 
 # ==============================================================================

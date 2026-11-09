@@ -21,12 +21,12 @@ usage() {
 
 生成 QEMU virt 最小内核配置 (defconfig + 裁剪) 并构建
 
-  --linux-src DIR      内核源码树 (默认: \$LINUX_SRC 或 $LINUX_SRC)
-  --toolchain DIR      工具链根目录, 含 cross-<triple>/bin (默认: \$TOOLCHAIN_DIR)
-  --cross-compile P    显式交叉编译前缀, 覆盖由 --toolchain 推导的值
+  --src-dir DIR        内核源码树 (默认: \$LINUX_SRC 或 $LINUX_SRC)
+  --toolchains-dir DIR 多架构工具链父目录, 含 cross-<triple>/bin (默认: \$TOOLCHAIN_DIR)
+  --cross-compile P    显式交叉编译前缀, 覆盖由 --toolchains-dir 推导的值
   --work-dir DIR       构建目录父路径 (默认: \$WORK_DIR 或 $WORK_DIR)
   --build-dir DIR      构建输出目录 (默认: <work-dir>/build-kernel-<arch>)
-  -j, --threads N      并行编译线程数 (默认: $THREADS)
+  -j, --jobs N         并行编译线程数 (默认: $THREADS)
   --config-only        只生成 .config, 不编译
   --savedefconfig F    构建后执行 make savedefconfig 并把结果复制到 F
   -h, --help           显示帮助
@@ -42,16 +42,16 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --linux-src)      LINUX_SRC="$2"; shift 2;;
-        --toolchain)      TOOLCHAIN_DIR="$2"; shift 2;;
+        --src-dir)          LINUX_SRC="$2"; shift 2;;
+        --toolchains-dir) TOOLCHAIN_DIR="$2"; shift 2;;
         --cross-compile)  CROSS_COMPILE="$2"; shift 2;;
         --work-dir)       WORK_DIR="$2"; shift 2;;
         --build-dir)      BUILD_DIR="$2"; shift 2;;
-        -j|--threads)     THREADS="$2"; shift 2;;
+        -j|--jobs)           THREADS="$2"; shift 2;;
         --config-only)    CONFIG_ONLY=true; shift;;
         --savedefconfig)  SAVEDEFCONFIG_OUT="$2"; shift 2;;
         -h|--help)        usage;;
-        -*)               echo "未知选项: $1"; usage;;
+        -*)               echo "未知选项: $1" >&2; exit 1;;
         *)                ARCH_NAME="$1"; shift;;
     esac
 done

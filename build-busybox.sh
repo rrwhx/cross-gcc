@@ -53,7 +53,7 @@ usage() {
                     打包为 /root/coremark 并输出 coremark-<arch> 产物
   --add-file S[:D]  复制额外文件/目录到 initramfs (目录递归拷贝),
                     D 为 initramfs 内目标路径 (默认: /root/<名称>, 可多次指定)
-  -j,--threads      并行编译线程数 (默认: ${THREADS})
+  -j,--jobs         并行编译线程数 (默认: ${THREADS})
   --clean           构建完成后删除构建目录和日志目录
   -h,--help         显示帮助
 
@@ -75,7 +75,7 @@ while [[ $# -gt 0 ]]; do
         --output)         require_option_value "$@"; OUTPUT="$2"; shift 2;;
         --coremark)       WITH_COREMARK=true; shift;;
         --add-file)       require_option_value "$@"; ADD_FILES+=("$2"); shift 2;;
-        -j|--threads)     require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)        require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
         --clean)          CLEAN_BUILD=true; shift;;
         -h|--help)        usage;;
         *)                error "未知选项: $1"; usage;;

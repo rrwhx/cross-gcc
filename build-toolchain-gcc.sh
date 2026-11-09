@@ -49,7 +49,7 @@ usage() {
   --build-dir    构建工作目录 (默认: WORK_DIR/build-TARGET)
   --log-dir      日志目录 (默认: WORK_DIR/logs-TARGET)
   --install-dir  工具链安装前缀 (默认: WORK_DIR/cross-TARGET)
-  -j,--threads   构建线程数 (默认: $THREADS)
+  -j,--jobs      构建线程数 (默认: $THREADS)
   --mirror       下载镜像源 (默认: $MIRROR, 推荐: mirrors.tuna.tsinghua.edu.cn, mirrors.bfsu.edu.cn, mirror.nju.edu.cn)
 
 版本控制选项(支持 'git[:REF]' 格式):
@@ -101,7 +101,7 @@ while [[ $# -gt 0 ]]; do
         --build-dir)   require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
         --log-dir)     require_option_value "$@"; LOG_DIR="$2"; shift 2;;
         --install-dir) require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
-        --threads|-j)  require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)     require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
         --mirror)      require_option_value "$@"; MIRROR="$2"; shift 2;;
         --binutils-ver)require_option_value "$@"; BINUTILS_VER="$2"; shift 2;;
         --gcc-ver)     require_option_value "$@"; GCC_VER="$2"; shift 2;;

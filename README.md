@@ -34,7 +34,7 @@
 | `build-qemu.sh` | 从源码构建 QEMU（系统模拟 + 用户态模拟），供测试脚本使用 |
 
 `run-build-presets.sh` 为 LLVM 配方自动设置默认并发：编译按 4 GiB/任务、链接按 10 GiB/任务估算，向下取整后限制在 1 到 CPU 逻辑核数之间。
-手动设置优先于自动值，且不受内存或 CPU 上限截断：编译读取 `THREADS`，命令行 `-j/--threads` 优先；链接读取 `LLVM_LINK_JOBS`，配方中的 `--link-jobs` 优先。
+手动设置优先于自动值，且不受内存或 CPU 上限截断：编译读取 `THREADS`，命令行 `-j/--jobs` 优先；链接读取 `LLVM_LINK_JOBS`，配方中的 `--link-jobs` 优先。
 runtimes 子构建默认取编译和链接并发的较小值，可用 `CMAKE_BUILD_PARALLEL_LEVEL` 覆盖；安装阶段也遵循编译并发设置。
 
 ---
@@ -82,25 +82,25 @@ runtimes 子构建默认取编译和链接并发的较小值，可用 `CMAKE_BUI
 ./build-toolchain-llvm.sh \
     --arch aarch64 \
     --target-sysroot ./cross-aarch64-linux-gnu/aarch64-linux-gnu \
-    --target-gcc-toolchain ./cross-aarch64-linux-gnu
+    --toolchain-dir ./cross-aarch64-linux-gnu
 
 # 指定 LLVM 版本
 ./build-toolchain-llvm.sh --arch riscv64 --llvm-ver 21.1.8 \
     --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
-    --target-gcc-toolchain ./cross-riscv64-linux-gnu
+    --toolchain-dir ./cross-riscv64-linux-gnu
 
 # 使用 git 最新版
 ./build-toolchain-llvm.sh --arch riscv64 --llvm-ver git \
     --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
-    --target-gcc-toolchain ./cross-riscv64-linux-gnu
+    --toolchain-dir ./cross-riscv64-linux-gnu
 
-# 批量构建单版本 × 多架构（--version 和 --gcc-dir 必填）
-./build-toolchain-llvm-batch.sh -v 22.1.8 -a riscv64,aarch64 \
-    --gcc-dir ./cross-{ARCH}-linux-gnu
+# 批量构建单版本 × 多架构（--llvm-ver 和 --toolchain-dir 必填）
+./build-toolchain-llvm-batch.sh --llvm-ver 22.1.8 -a riscv64,aarch64 \
+    --toolchain-dir ./cross-{ARCH}-linux-gnu
 
 # 指定工作目录
-./build-toolchain-llvm-batch.sh -v 22.1.8 -a riscv64,aarch64 \
-    --gcc-dir ./gcc_161/cross-{ARCH}-linux-gnu --work-dir ./llvm_2218
+./build-toolchain-llvm-batch.sh --llvm-ver 22.1.8 -a riscv64,aarch64 \
+    --toolchain-dir ./gcc_161/cross-{ARCH}-linux-gnu --work-dir ./llvm_2218
 ```
 
 LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构建不同版本时，分别调用并使用不同的
@@ -163,12 +163,18 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
 | 选项 | 说明 |
 |------|------|
 | `--work-dir` | 工作目录前缀 |
-| `--threads` / `-j` | 并行编译线程数 |
+| `--jobs` / `-j` | 并行编译线程数 |
 | `--mirror` | 下载镜像源（默认清华） |
 | `--fresh` | 构建前清除已有 build/log/install 目录 |
 | `--clean` | 构建后删除构建目录和日志 |
 | `--archive` | 构建后打包为 tar.xz 并删除原目录 |
 | `--static` | 静态链接工具链自身的可执行文件，可拷贝到同架构其他机器执行 |
+
+参数统一使用 `-j/--jobs` 指定编译并发、`--组件-ver` 指定组件版本，源码、构建、安装等目录使用 `--xxx-dir`。
+LLVM 批量入口使用 `--llvm-ver`，工具链目录使用 `--toolchain-dir`（批量入口允许 `{ARCH}` 模板）。
+QEMU 使用 `--src-dir`、`--build-dir`、`--install-dir`；flex/bison 安装脚本同样使用 `--install-dir`。
+`--src-dir` 在 GCC 构建入口中指多组件源码的存放目录，在 LLVM/QEMU/内核入口中指具体源码树。
+最小内核辅助脚本的 `--toolchains-dir` 指含多套 `cross-<triple>/` 的父目录。
 
 `--static` 只影响工具链自身的 host 可执行文件（`gcc`/`as`/`ld`/`clang`/`lld` 等），
 目标侧库（glibc/musl/newlib/libgcc/compiler-rt）仍按原方式构建，不受影响。
@@ -311,7 +317,7 @@ CMAKE_BUILD_PARALLEL_LEVEL=3 CC=clang CXX=clang++ \
 # 在 macOS 上运行、默认生成 RISC-V Linux 程序的 LLVM 工具链
 CMAKE_BUILD_PARALLEL_LEVEL=3 CC=clang CXX=clang++ \
     ./env-macos.sh ./build-toolchain-llvm.sh --arch riscv64 \
-    --target-gcc-toolchain ./cross-riscv64-linux-gnu \
+    --toolchain-dir ./cross-riscv64-linux-gnu \
     --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
     --link-jobs 1 -j 3
 

@@ -41,19 +41,19 @@ usage() {
                     (例如: riscv64-linux-gnu- 或 /path/to/bin/riscv64-linux-gnu-)
   --work-dir        工作目录前缀 (默认: 当前目录)
   --linux-ver       Linux 内核版本 (默认: ${LINUX_VER}, 支持 git[:REF])
-  --linux-src       直接指定已解压的内核源码路径 (跳过下载/解压)
+  --src-dir         直接指定已解压的内核源码路径 (跳过下载/解压)
   --defconfig       使用指定的内核 config 文件 (复制为 .config 后 make olddefconfig)
                     默认不使用，仍为 defconfig + kvm_guest.config
                     x86_64 时无论哪种配置都会强制启用 CONFIG_PVH (vmlinux 可直接被 QEMU 加载)
   --output          输出目录 (默认: <work-dir>/kernel-<arch>)
   --mirror          下载镜像源 (默认: ${MIRROR})
-  -j,--threads      并行编译线程数 (默认: ${THREADS})
+  -j,--jobs         并行编译线程数 (默认: ${THREADS})
   --clean           构建完成后删除构建目录和日志目录
   -h,--help         显示帮助
 
 示例:
   $(basename "$0") --arch riscv64 --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
-  $(basename "$0") --arch riscv64 --cross-compile riscv64-linux-gnu- --linux-src ./downloads/linux-7.1.1
+  $(basename "$0") --arch riscv64 --cross-compile riscv64-linux-gnu- --src-dir ./downloads/linux-7.1.1
   $(basename "$0") --arch riscv64 --linux-ver git:v6.12 --cross-compile riscv64-linux-gnu-
   $(basename "$0") --arch riscv64 --cross-compile riscv64-linux-gnu- --defconfig configs/kernel/riscv_qemu_virt_min_defconfig
 EOF
@@ -66,11 +66,11 @@ while [[ $# -gt 0 ]]; do
         --cross-compile)  require_option_value "$@"; CROSS_COMPILE="$2"; shift 2;;
         --work-dir)       require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --linux-ver)      require_option_value "$@"; LINUX_VER="$2"; shift 2;;
-        --linux-src)      require_option_value "$@"; LINUX_SRC="$2"; shift 2;;
+        --src-dir)        require_option_value "$@"; LINUX_SRC="$2"; shift 2;;
         --defconfig)      require_option_value "$@"; DEFCONFIG="$2"; shift 2;;
         --output)         require_option_value "$@"; OUTPUT="$2"; shift 2;;
         --mirror)         require_option_value "$@"; MIRROR="$2"; shift 2;;
-        -j|--threads)     require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)        require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
         --clean)          CLEAN_BUILD=true; shift;;
         -h|--help)        usage;;
         *)                error "未知选项: $1"; usage;;

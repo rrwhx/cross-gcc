@@ -38,27 +38,27 @@ usage() {
 用法: $0 [选项]
 
 选项:
-  -p, --prefix PATH       安装前缀 (默认: \$HOME/.local)
-  -j, --jobs N            并行编译数 (默认: nproc)
-  --flex-version VER      flex 版本 (默认: ${FLEX_VERSION})
-  --bison-version VER     bison 版本 (默认: ${BISON_VERSION})
-  --texinfo-version VER   texinfo 版本 (默认: ${TEXINFO_VERSION})
+  --install-dir PATH     安装前缀 (默认: \$HOME/.local)
+  -j, --jobs N           并行编译数 (默认: nproc)
+  --flex-ver VER         flex 版本 (默认: ${FLEX_VERSION})
+  --bison-ver VER        bison 版本 (默认: ${BISON_VERSION})
+  --texinfo-ver VER      texinfo 版本 (默认: ${TEXINFO_VERSION})
   --with-gmp-mpfr         额外编译安装静态 gmp + mpfr (默认关闭)
                           用于 --static --enable-gdb 的工具链构建: gdb 14+ 依赖
                           GMP/MPFR，而多数发行版只提供动态库
-  --gmp-version VER       gmp 版本 (默认: ${GMP_VERSION})
-  --mpfr-version VER      mpfr 版本 (默认: ${MPFR_VERSION})
+  --gmp-ver VER          gmp 版本 (默认: ${GMP_VERSION})
+  --mpfr-ver VER         mpfr 版本 (默认: ${MPFR_VERSION})
   --keep-build            安装后保留构建目录
   -h, --help              显示帮助
 
 环境变量:
-  PREFIX          等同于 --prefix
+  PREFIX          等同于 --install-dir
   JOBS            等同于 --jobs
   BUILD_DIR       构建目录 (默认: /tmp/build_flex_bison_PID)
 
 示例:
   $0
-  $0 --prefix /opt/tools --jobs 8
+  $0 --install-dir /opt/tools --jobs 8
   PREFIX=/usr/local $0
   # 为静态 gdb 准备依赖，随后按提示导出 LIBRARY_PATH/C_INCLUDE_PATH
   $0 --with-gmp-mpfr
@@ -71,14 +71,14 @@ KEEP_BUILD=false
 WITH_GMP_MPFR=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -p|--prefix)        require_option_value "$@"; PREFIX="$2";        shift 2 ;;
+    --install-dir)      require_option_value "$@"; PREFIX="$2";        shift 2 ;;
     -j|--jobs)          require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2";          shift 2 ;;
-    --flex-version)     require_option_value "$@"; FLEX_VERSION="$2";  shift 2 ;;
-    --bison-version)    require_option_value "$@"; BISON_VERSION="$2"; shift 2 ;;
-    --texinfo-version)  require_option_value "$@"; TEXINFO_VERSION="$2"; shift 2 ;;
+    --flex-ver)         require_option_value "$@"; FLEX_VERSION="$2";  shift 2 ;;
+    --bison-ver)        require_option_value "$@"; BISON_VERSION="$2"; shift 2 ;;
+    --texinfo-ver)      require_option_value "$@"; TEXINFO_VERSION="$2"; shift 2 ;;
     --with-gmp-mpfr)    WITH_GMP_MPFR=true; shift   ;;
-    --gmp-version)      require_option_value "$@"; GMP_VERSION="$2";   shift 2 ;;
-    --mpfr-version)     require_option_value "$@"; MPFR_VERSION="$2";  shift 2 ;;
+    --gmp-ver)          require_option_value "$@"; GMP_VERSION="$2";   shift 2 ;;
+    --mpfr-ver)         require_option_value "$@"; MPFR_VERSION="$2";  shift 2 ;;
     --keep-build)       KEEP_BUILD=true;    shift   ;;
     -h|--help)          usage ;;
     *) error "未知参数: $1，使用 --help 查看帮助" ;;

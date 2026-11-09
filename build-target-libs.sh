@@ -80,7 +80,7 @@ usage() {
   --work-dir       工作目录前缀 (默认: 当前目录)
   --skip           跳过指定的库，多次使用指定多个 (例如: --skip lz4 --skip snappy)
   --only           仅编译指定的库，多次使用指定多个 (例如: --only zlib --only zstd)
-  -j,--threads     并行编译线程数 (默认: ${THREADS})
+  -j,--jobs        并行编译线程数 (默认: ${THREADS})
   --clean          构建完成后删除构建目录和日志目录
   -h,--help        显示帮助
 示例:
@@ -98,7 +98,7 @@ while [[ $# -gt 0 ]]; do
         --work-dir)      require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --skip)          require_option_value "$@"; validate_library_names "$1" "$2"; SKIP_LIBS="${SKIP_LIBS:+${SKIP_LIBS},}$2"; shift 2;;
         --only)          require_option_value "$@"; validate_library_names "$1" "$2"; ONLY_LIBS="${ONLY_LIBS:+${ONLY_LIBS},}$2"; shift 2;;
-        -j|--threads)    require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
+        -j|--jobs)       require_option_value "$@"; require_positive_integer "$1" "$2"; THREADS="$2"; shift 2;;
         --clean)         CLEAN_BUILD=true; shift;;
         -h|--help)       usage;;
         *)               error "未知选项: $1"; usage;;
