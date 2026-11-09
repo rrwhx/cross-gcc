@@ -13,12 +13,21 @@ else
     RED='' GREEN='' BLUE='' YELLOW='' CYAN='' NC=''
 fi
 
-# 输出函数
-error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
-info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
-step()  { echo -e "${GREEN}[STEP]${NC} $*"; }
-ok()    { echo -e "${BLUE}[OK]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $*" >&2; }
+# 输出函数（默认显示本地日期时间，LOG_TIMESTAMP=0 可关闭）
+_log() {
+    local color="$1" level="$2" timestamp=""
+    shift 2
+    if [[ "${LOG_TIMESTAMP:-1}" != 0 ]]; then
+        timestamp="$(date '+[%Y-%m-%d %H:%M:%S] ')"
+    fi
+    echo -e "${timestamp}${color}[${level}]${NC} $*"
+}
+
+error() { _log "$RED" ERROR "$@" >&2; exit 1; }
+info()  { _log "$CYAN" INFO "$@"; }
+step()  { _log "$GREEN" STEP "$@"; }
+ok()    { _log "$BLUE" OK "$@"; }
+warn()  { _log "$YELLOW" WARN "$@" >&2; }
 
 # 跨平台 CPU 线程数检测 (可被各脚本直接使用)
 THREADS=${THREADS:-$(nproc 2>/dev/null || sysctl -n hw.logicalcpu_max 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
