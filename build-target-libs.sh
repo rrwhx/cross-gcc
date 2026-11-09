@@ -83,10 +83,20 @@ usage() {
   -j,--jobs        并行编译线程数 (默认: ${JOBS})
   --clean          构建完成后删除构建目录和日志目录
   -h,--help        显示帮助
+
+版本覆盖选项（CLI > 对应环境变量 > 库定义中的默认版本）:
+  --zlib-ver VER      zlib 版本，环境变量 ZLIB_VER
+  --zlib-ng-ver VER   zlib-ng 版本，环境变量 ZLIB_NG_VER
+  --lz4-ver VER       lz4 版本，环境变量 LZ4_VER
+  --zstd-ver VER      zstd 版本，环境变量 ZSTD_VER
+  --snappy-ver VER    snappy 版本，环境变量 SNAPPY_VER
+  --jemalloc-ver VER  jemalloc 版本，环境变量 JEMALLOC_VER
+
 示例:
   $(basename "$0") --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu
   $(basename "$0") --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu --only zlib --only zstd
   $(basename "$0") --target aarch64-linux-gnu --toolchain-dir ./cross-aarch64-linux-gnu --skip jemalloc
+  $(basename "$0") --target loongarch64-linux-gnu --toolchain-dir ./cross-loongarch64-linux-gnu --only jemalloc --jemalloc-ver 5.3.1
 EOF
     exit 0
 }
@@ -98,6 +108,13 @@ while [[ $# -gt 0 ]]; do
         --work-dir)      require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --skip)          require_option_value "$@"; validate_library_names "$1" "$2"; SKIP_LIBS="${SKIP_LIBS:+${SKIP_LIBS},}$2"; shift 2;;
         --only)          require_option_value "$@"; validate_library_names "$1" "$2"; ONLY_LIBS="${ONLY_LIBS:+${ONLY_LIBS},}$2"; shift 2;;
+        --zlib-ver|--zlib-ng-ver|--lz4-ver|--zstd-ver|--snappy-ver|--jemalloc-ver)
+            require_option_value "$@"
+            [[ "$2" =~ ^[[:alnum:]][[:alnum:].+_-]*$ ]] || error "$1 的版本号无效: $2"
+            version_var="${1#--}"
+            version_var="${version_var//-/_}"
+            printf -v "${version_var^^}" '%s' "$2"
+            shift 2;;
         -j|--jobs)       require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --clean)         CLEAN_BUILD=true; shift;;
         -h|--help)       usage;;
@@ -169,6 +186,14 @@ parse_lib_def() {
     LIB_URL="${def%%|*}";   def="${def#*|}"
     LIB_BUILD="${def%%|*}"; def="${def#*|}"
     LIB_EXTRA="$def"
+
+    # 从对应的 *_VER 变量读取覆盖值；CLI 解析时直接更新该变量。
+    local version_var="${LIB_NAME//-/_}_VER"
+    version_var="${version_var^^}"
+    LIB_VER="${!version_var:-$LIB_VER}"
+    if should_build "$LIB_NAME"; then
+        [[ "$LIB_VER" =~ ^[[:alnum:]][[:alnum:].+_-]*$ ]] || error "$version_var 的版本号无效: $LIB_VER"
+    fi
 
     # 替换 URL 模板中的版本占位符
     LIB_URL="${LIB_URL//\{VER\}/$LIB_VER}"
