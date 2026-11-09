@@ -19,7 +19,7 @@ GCC_DIR_PATTERN=""
 # ---------------------------------------------------------------------------
 # 参数解析
 # ---------------------------------------------------------------------------
-declare -a version_list=()
+LLVM_VERSION=""
 declare -a arch_list=()
 declare -a extra_args=()
 
@@ -27,9 +27,9 @@ usage() {
     cat <<EOF
 用法: $(basename "$0") --version VER --arch ARCHS [选项] [其他选项传递给 build-toolchain-llvm.sh]
 
-批量构建多版本 × 多架构 LLVM/Clang 工具链
+批量构建单版本 × 多架构 LLVM/Clang 工具链
 
-  -v,--version <VER>     LLVM 版本（逗号分隔，必填，支持 'git'）
+  -v,--version <VER>     LLVM 版本（单个版本，必填，支持 git[:REF]）
   -a,--arch <ARCHS>      目标架构列表（逗号分隔，默认: ${default_arch_list[*]}）
   --gcc-dir <PATTERN>    GCC 工具链目录模板（必填，{ARCH} 会被替换为当前架构）
   -h,--help              显示帮助
@@ -38,10 +38,9 @@ usage() {
   --mirror, --fresh, --clean, --archive, --link-jobs, --static, -j, --work-dir
 
 示例:
-  $(basename "$0") -v 22.1.8 -a riscv64,aarch64
-  $(basename "$0") -v 22.1.8,21.1.8 -a aarch64,loongarch64,riscv64,x86_64
-  $(basename "$0") -v git -a riscv64 --fresh
-  $(basename "$0") -v 22.1.8 -a riscv64 --static --archive
+  $(basename "$0") -v 22.1.8 -a riscv64,aarch64 --gcc-dir ./cross-{ARCH}-linux-gnu
+  $(basename "$0") -v git -a riscv64 --gcc-dir ./cross-{ARCH}-linux-gnu --work-dir ./llvm-dev --fresh
+  $(basename "$0") -v 22.1.8 -a riscv64 --gcc-dir ./cross-{ARCH}-linux-gnu --static --archive
   $(basename "$0") -v 22.1.8 -a riscv64 --gcc-dir ./gcc_161/cross-{ARCH}-linux-gnu
 EOF
     exit 0
@@ -50,7 +49,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -v|--version)
-            IFS=',' read -ra version_list <<< "$2"; shift 2;;
+            LLVM_VERSION="$2"; shift 2;;
         -a|--arch)
             IFS=',' read -ra arch_list <<< "$2"; shift 2;;
         --gcc-dir)
@@ -61,9 +60,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ ${#version_list[@]} -eq 0 ]]; then
+if [[ -z "$LLVM_VERSION" ]]; then
     error "--version 参数为必需。"
 fi
+
+[[ "$LLVM_VERSION" != *,* ]] || error "每次仅支持一个 LLVM 版本；请分别调用并指定不同的 --work-dir。"
 
 if [[ -z "$GCC_DIR_PATTERN" ]]; then
     error "--gcc-dir 参数为必需。"
@@ -78,36 +79,34 @@ declare -a failed_list=()
 declare -a failed_cmds=()
 
 info "==============================================="
-info "LLVM 版本: ${version_list[*]}"
+info "LLVM 版本: $LLVM_VERSION"
 info "目标架构: ${arch_list[*]}"
 info "GCC 目录模板: $GCC_DIR_PATTERN"
 info "==============================================="
 
-for ver in "${version_list[@]}"; do
-    for arch in "${arch_list[@]}"; do
-        gcc_dir="${GCC_DIR_PATTERN//\{ARCH\}/$arch}"
+for arch in "${arch_list[@]}"; do
+    gcc_dir="${GCC_DIR_PATTERN//\{ARCH\}/$arch}"
 
-        step "======================================================================"
-        info "开始构建 LLVM：VER=$ver, ARCH=$arch"
-        step "======================================================================"
+    step "======================================================================"
+    info "开始构建 LLVM：VER=$LLVM_VERSION, ARCH=$arch"
+    step "======================================================================"
 
-        # 先打印完整命令: 批量构建时需要能直接拿单条命令出来重跑
-        cmd=("$SCRIPT_DIR/build-toolchain-llvm.sh"
-             --arch "$arch"
-             --llvm-ver "$ver"
-             --target-gcc-toolchain "$gcc_dir"
-             --target-sysroot "$gcc_dir/${arch}-linux-gnu"
-             "${extra_args[@]}")
-        info "执行: $(format_cmd "${cmd[@]}")"
+    # 先打印完整命令: 批量构建时需要能直接拿单条命令出来重跑
+    cmd=("$SCRIPT_DIR/build-toolchain-llvm.sh"
+         --arch "$arch"
+         --llvm-ver "$LLVM_VERSION"
+         --target-gcc-toolchain "$gcc_dir"
+         --target-sysroot "$gcc_dir/${arch}-linux-gnu"
+         "${extra_args[@]}")
+    info "执行: $(format_cmd "${cmd[@]}")"
 
-        if "${cmd[@]}"; then
-            ok "构建成功：LLVM $ver / $arch"
-        else
-            warn "构建失败：LLVM $ver / $arch"
-            failed_list+=("LLVM $ver / $arch")
-            failed_cmds+=("$(format_cmd "${cmd[@]}")")
-        fi
-    done
+    if "${cmd[@]}"; then
+        ok "构建成功：LLVM $LLVM_VERSION / $arch"
+    else
+        warn "构建失败：LLVM $LLVM_VERSION / $arch"
+        failed_list+=("LLVM $LLVM_VERSION / $arch")
+        failed_cmds+=("$(format_cmd "${cmd[@]}")")
+    fi
 done
 
 if [[ ${#failed_list[@]} -gt 0 ]]; then

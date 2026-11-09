@@ -27,7 +27,7 @@
 | `prepare-gcc.sh` | GCC 源码预处理（下载 gmp/mpfr/mpc/isl 等依赖） |
 | `get-latest-versions.sh` | 获取各组件最新发布版本号 |
 | `env-macos.sh` | macOS 环境适配封装（自动设置 GNU 工具路径） |
-| `build-toolchain-llvm-batch.sh` | 批量构建多版本 × 多架构 LLVM 工具链 |
+| `build-toolchain-llvm-batch.sh` | 批量构建单版本 × 多架构 LLVM 工具链 |
 | `run-build-presets.sh` | 执行预设的多版本 GCC/LLVM 构建配方 |
 | `test-toolchain.sh` | 工具链冒烟测试：编译 C/C++/Fortran 并经 qemu-user 运行 |
 | `test/test-qemu-run.sh` | QEMU 系统模拟冒烟测试：启动内核 + initramfs |
@@ -94,14 +94,17 @@ runtimes 子构建默认取编译和链接并发的较小值，可用 `CMAKE_BUI
     --target-sysroot ./cross-riscv64-linux-gnu/riscv64-linux-gnu \
     --target-gcc-toolchain ./cross-riscv64-linux-gnu
 
-# 批量构建多版本 × 多架构（--version 和 --gcc-dir 必填）
-./build-toolchain-llvm-batch.sh -v 22.1.8,21.1.8 -a riscv64,aarch64 \
+# 批量构建单版本 × 多架构（--version 和 --gcc-dir 必填）
+./build-toolchain-llvm-batch.sh -v 22.1.8 -a riscv64,aarch64 \
     --gcc-dir ./cross-{ARCH}-linux-gnu
 
 # 指定工作目录
 ./build-toolchain-llvm-batch.sh -v 22.1.8 -a riscv64,aarch64 \
     --gcc-dir ./gcc_161/cross-{ARCH}-linux-gnu --work-dir ./llvm_2218
 ```
+
+LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构建不同版本时，分别调用并使用不同的
+`--work-dir`；`run-build-presets.sh` 已按此方式组织配方。
 
 #### 4. 交叉编译 BusyBox 与 Linux 内核
 
