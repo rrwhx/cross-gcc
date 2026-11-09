@@ -250,7 +250,7 @@ print_env_hint() {
     echo " 用于静态 gdb (--static --enable-gdb)，两个变量都需要:"
     echo "   export LIBRARY_PATH=\"${PREFIX}/lib:\$LIBRARY_PATH\"      # gcc 找 libgmp.a/libmpfr.a"
     echo "   export C_INCLUDE_PATH=\"${PREFIX}/include:\$C_INCLUDE_PATH\"  # gdb configure 找 gmp.h/mpfr.h"
-    echo "   ./build-toolchain-generic.sh --arch riscv64 --libc glibc \\"
+    echo "   ./build-toolchain-gcc.sh --arch riscv64 --libc glibc \\"
     echo "     --binutils-ver git --static --enable-gdb"
   fi
   echo -e "${CYAN}══════════════════════════════════════════════════════${NC}\n"

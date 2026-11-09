@@ -43,12 +43,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: cross-${{ matrix.target }}
-          key: toolchain-${{ matrix.arch }}-${{ hashFiles('build-toolchain-generic.sh', 'lib.sh', 'prepare-gcc.sh') }}
+          key: toolchain-${{ matrix.arch }}-${{ hashFiles('build-toolchain-gcc.sh', 'lib.sh', 'prepare-gcc.sh') }}
 
       - name: Build toolchain (if not cached)
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
-          ./build-toolchain-generic.sh \
+          ./build-toolchain-gcc.sh \
             --arch ${{ matrix.arch }} --libc glibc --clean
 
       - name: Resolve build versions

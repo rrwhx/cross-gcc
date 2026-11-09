@@ -34,13 +34,13 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help|-h)
-            echo "用法: $0 [选项] [其他选项传递给 build-toolchain-generic.sh]"
+            echo "用法: $0 [选项] [其他选项传递给 build-toolchain-gcc.sh]"
             echo "选项:"
             echo "  -a, --arch <架构列表>      指定架构（逗号分隔），默认: ${default_arch_list[*]}"
             echo "  -l, --libc <libc列表>      指定libc类型（逗号分隔），默认: ${default_libc_list[*]}"
             echo "  -h, --help                 显示帮助信息"
             echo ""
-            echo "其他选项将直接传递给 build-toolchain-generic.sh，例如："
+            echo "其他选项将直接传递给 build-toolchain-gcc.sh，例如："
             echo "  --binutils-ver, --gcc-ver, --glibc-ver, --musl-ver, --linux-ver"
             echo "  --clean, --archive, --threads, --download-dir, --static, 等等"
             echo ""
@@ -80,7 +80,7 @@ for arch in "${arch_list[@]}"; do
         step "======================================================================"
 
         # 先打印完整命令: 批量构建时需要能直接拿单条命令出来单独重跑
-        cmd=("$SCRIPT_DIR/build-toolchain-generic.sh" --arch "$arch" --libc "$libc" "${extra_args[@]}")
+        cmd=("$SCRIPT_DIR/build-toolchain-gcc.sh" --arch "$arch" --libc "$libc" "${extra_args[@]}")
         info "执行: $(format_cmd "${cmd[@]}")"
 
         if "${cmd[@]}"; then

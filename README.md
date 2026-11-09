@@ -14,21 +14,21 @@
 
 | 文件 | 用途 |
 |------|------|
-| `build-toolchain-generic.sh` | 核心脚本：构建 GCC + binutils + glibc/musl 工具链 |
+| `build-toolchain-gcc.sh` | 核心脚本：构建 GCC + binutils + glibc/musl 工具链 |
 | `build-toolchain-elf.sh` | 构建 GCC + binutils + newlib（bare-metal ELF）工具链 |
 | `build-toolchain-llvm.sh` | 构建 LLVM/Clang 交叉编译器（支持自动下载源码） |
 | `build-target-libs.sh` | 交叉编译目标平台第三方库（zlib, zstd, lz4, snappy, jemalloc 等） |
 | `build-busybox.sh` | 交叉编译 BusyBox 并生成 initramfs |
 | `build-kernel.sh` | 交叉编译 Linux 内核 |
-| `build-all.sh` | 批量构建多架构 × 多 libc 组合 |
+| `build-toolchain-gcc-batch.sh` | 批量构建多架构 × 多 libc 组合 |
 | `lib.sh` | 公共函数库（下载、git 克隆、日志、构建辅助） |
 | `install-prerequisites.sh` | 安装系统级构建依赖（Homebrew/apt/dnf/pacman） |
 | `install-flex-bison.sh` | 从源码编译安装 flex + bison + texinfo |
 | `prepare-gcc.sh` | GCC 源码预处理（下载 gmp/mpfr/mpc/isl 等依赖） |
 | `get-latest-versions.sh` | 获取各组件最新发布版本号 |
 | `env-macos.sh` | macOS 环境适配封装（自动设置 GNU 工具路径） |
-| `build-all-llvm.sh` | 批量构建多版本 × 多架构 LLVM 工具链 |
-| `run-build-all.sh` | 批量构建多版本 GCC 的配方脚本 |
+| `build-toolchain-llvm-batch.sh` | 批量构建多版本 × 多架构 LLVM 工具链 |
+| `run-build-presets.sh` | 执行预设的多版本 GCC/LLVM 构建配方 |
 | `test-toolchain.sh` | 工具链冒烟测试：编译 C/C++/Fortran 并经 qemu-user 运行 |
 | `test/test-qemu-run.sh` | QEMU 系统模拟冒烟测试：启动内核 + initramfs |
 | `build-qemu.sh` | 从源码构建 QEMU（系统模拟 + 用户态模拟），供测试脚本使用 |
@@ -50,25 +50,25 @@
 
 ```bash
 # glibc 工具链
-./build-toolchain-generic.sh --arch aarch64 --libc glibc
+./build-toolchain-gcc.sh --arch aarch64 --libc glibc
 
 # musl 工具链
-./build-toolchain-generic.sh --arch riscv64 --libc musl
+./build-toolchain-gcc.sh --arch riscv64 --libc musl
 
 # bare-metal ELF 工具链 (newlib)
 ./build-toolchain-elf.sh --arch riscv64
 
 # 使用 git 最新开发版，每次构建同步远端
-./build-toolchain-generic.sh --arch riscv64 --libc glibc --gcc-ver git
+./build-toolchain-gcc.sh --arch riscv64 --libc glibc --gcc-ver git
 
 # 同时编译 gdb (默认不编译, 需 binutils 使用 git 源)
-./build-toolchain-generic.sh --arch riscv64 --libc glibc --binutils-ver git --enable-gdb
+./build-toolchain-gcc.sh --arch riscv64 --libc glibc --binutils-ver git --enable-gdb
 
 # 全新构建（清除旧 build/log/install 目录）
-./build-toolchain-generic.sh --arch aarch64 --libc glibc --fresh
+./build-toolchain-gcc.sh --arch aarch64 --libc glibc --fresh
 
 # 批量构建
-./build-all.sh --arch aarch64,riscv64,x86_64 --libc glibc
+./build-toolchain-gcc-batch.sh --arch aarch64,riscv64,x86_64 --libc glibc
 ```
 
 #### 3. 构建 LLVM/Clang
@@ -91,11 +91,11 @@
     --target-gcc-toolchain ./cross-riscv64-linux-gnu
 
 # 批量构建多版本 × 多架构（--version 和 --gcc-dir 必填）
-./build-all-llvm.sh -v 22.1.8,21.1.8 -a riscv64,aarch64 \
+./build-toolchain-llvm-batch.sh -v 22.1.8,21.1.8 -a riscv64,aarch64 \
     --gcc-dir ./cross-{ARCH}-linux-gnu
 
 # 指定工作目录
-./build-all-llvm.sh -v 22.1.8 -a riscv64,aarch64 \
+./build-toolchain-llvm-batch.sh -v 22.1.8 -a riscv64,aarch64 \
     --gcc-dir ./gcc_161/cross-{ARCH}-linux-gnu --work-dir ./llvm_2218
 ```
 
@@ -258,8 +258,8 @@ aarch64-linux-gnu-gcc -o hello hello.c
 
 ```bash
 ./install-prerequisites.sh  # 已安装 Homebrew 和 Xcode Command Line Tools
-./env-macos.sh ./build-toolchain-generic.sh --arch riscv64 --libc glibc
-./env-macos.sh ./build-all.sh --arch aarch64,riscv64 --libc glibc
+./env-macos.sh ./build-toolchain-gcc.sh --arch riscv64 --libc glibc
+./env-macos.sh ./build-toolchain-gcc-batch.sh --arch aarch64,riscv64 --libc glibc
 ```
 
 `env-macos.sh` 默认使用 Homebrew GCC 编译主机工具，包括 Linux 头文件工具使用的
@@ -274,16 +274,16 @@ aarch64-linux-gnu-gcc -o hello hello.c
 
 | 脚本 | macOS 状态与范围 |
 |------|-----------------|
-| `build-toolchain-generic.sh`、`test-toolchain.sh` | glibc 工具链已完成构建；C/C++/Fortran 编译链接测试已通过，使用 `--run-mode none` |
+| `build-toolchain-gcc.sh`、`test-toolchain.sh` | glibc 工具链已完成构建；C/C++/Fortran 编译链接测试已通过，使用 `--run-mode none` |
 | `build-busybox.sh` | 已实测 BusyBox 1.38.0 静态编译和 cpio 打包；未测试内核启动 |
 | `build-target-libs.sh`、`cross-build.py` | 修复 zlib、lz4、zstd 的 Linux 目标系统选择；这三个库已实测。Python 入口另验证静态构建，zstd 使用上游 CMake 的共享库开关；其他包未逐一验证 |
 | `build-qemu.sh` | QEMU 11.0.0 的 riscv64 系统模拟已完整构建安装，并验证版本查询、TCG virt 机器初始化；本次未启用 libslirp，未启动 Linux 内核 |
 | `install-prerequisites.sh` | 新增 Homebrew 分支，已用替身命令验证，测试不会实际安装软件 |
-| `build-all.sh`、`run-build-all.sh` | 沿用子脚本的兼容性，未跑完整架构/版本矩阵 |
+| `build-toolchain-gcc-batch.sh`、`run-build-presets.sh` | 沿用子脚本的兼容性，未跑完整架构/版本矩阵 |
 | `prepare-gcc.sh`、`get-latest-versions.sh`、`install-flex-bison.sh` | GNU 工具由封装脚本提供，本次未做完整联网/构建验证 |
 | `build-native-llvm.sh` | LLVM 22.1.8 默认项目、四个后端及运行库已完整构建安装，启用 sanitizer；修复默认 SDK 路径后，清空 SDK 环境的本机 C/C++/Fortran、ASan 编译运行通过，显式覆盖 sysroot 的 RISC-V Linux C/C++ 链接通过 |
 | `build-toolchain-llvm.sh` | 修复 Linux 目标运行库的平台选择及 C 编译器工具链路径；LLVM 22.1.8 的 clang/lld/flang、RISC-V compiler-rt/flang-rt 已完整构建安装，C/C++/Fortran 静态和动态链接共 6 项通过，另验证 compiler-rt builtins 链接；未执行目标程序 |
-| `build-all-llvm.sh` | 沿用子脚本的兼容性，未跑完整架构/版本矩阵 |
+| `build-toolchain-llvm-batch.sh` | 沿用子脚本的兼容性，未跑完整架构/版本矩阵 |
 | `build-toolchain-elf.sh` | Binutils 2.47 + GCC 16.2.0 + newlib 4.6.0.20260123 完整构建安装通过；C/C++ 使用 `--specs=nosys.specs` 链接成 RISC-V ELF，未执行裸机程序 |
 | `build-native-gcc.sh` | Apple Silicon 实测失败：GNU ar 生成的 Mach-O 静态库触发对齐错误；单独配置原版 GCC 16.2.0 也报不支持 `aarch64-apple-darwin`，需要 Darwin 源码补丁及工具链流程适配 |
 | `build-kernel.sh`、`configs/kernel/mk-min-kernel.sh` | 暂不适配：完整内核还需处理主机 ELF 头文件等依赖 |

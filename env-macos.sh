@@ -86,5 +86,5 @@ exec env \
     "$@"
 
     # 用法示例 (脚本 shebang 为 #!/usr/bin/env bash，经 PATH 优先解析，自动使用 Homebrew bash 执行):
-    # ./env-macos.sh ./build-all.sh -a aarch64,loongarch64,riscv32,riscv64 -l glibc,musl --clean --archive
-    # ./env-macos.sh ./build-toolchain-generic.sh --arch riscv64 --libc musl --clean --archive
+    # ./env-macos.sh ./build-toolchain-gcc-batch.sh -a aarch64,loongarch64,riscv32,riscv64 -l glibc,musl --clean --archive
+    # ./env-macos.sh ./build-toolchain-gcc.sh --arch riscv64 --libc musl --clean --archive

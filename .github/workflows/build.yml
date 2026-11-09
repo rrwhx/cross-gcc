@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'build-toolchain-generic.sh'
+      - 'build-toolchain-gcc.sh'
       - 'build-toolchain-elf.sh'
       - 'lib.sh'
       - 'prepare-gcc.sh'
@@ -15,7 +15,7 @@ on:
   pull_request:
     branches: [main, master]
     paths:
-      - 'build-toolchain-generic.sh'
+      - 'build-toolchain-gcc.sh'
       - 'build-toolchain-elf.sh'
       - 'lib.sh'
       - 'prepare-gcc.sh'
@@ -167,7 +167,7 @@ jobs:
           if [ "$LIBC" = newlib ]; then
             script="./build-toolchain-elf.sh --arch $ARCH"
           else
-            script="./build-toolchain-generic.sh --arch $ARCH --libc $LIBC"
+            script="./build-toolchain-gcc.sh --arch $ARCH --libc $LIBC"
           fi
           echo "::group::本地复现此矩阵项"
           echo "GCC_VER=$GCC_VER BINUTILS_VER=$BINUTILS_VER \\"
@@ -190,7 +190,7 @@ jobs:
             ./build-toolchain-elf.sh --arch "$ARCH" \
               --static --install-dir "./cross-$TRIPLE" --clean
           else
-            ./build-toolchain-generic.sh --arch "$ARCH" --libc "$LIBC" \
+            ./build-toolchain-gcc.sh --arch "$ARCH" --libc "$LIBC" \
               --static --install-dir "./cross-$TRIPLE" --clean
           fi
 
