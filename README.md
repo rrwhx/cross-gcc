@@ -18,8 +18,10 @@
 | `build-toolchain-elf.sh` | 构建 GCC + binutils + newlib（bare-metal ELF）工具链 |
 | `build-toolchain-llvm.sh` | 构建 LLVM/Clang 交叉编译器（支持自动下载源码） |
 | `build-target-libs.sh` | 交叉编译目标平台第三方库（zlib, zstd, lz4, snappy, jemalloc 等） |
+| `build-packages.py` | 按包配方构建目标平台或本机的第三方库和程序 |
 | `build-busybox.sh` | 交叉编译 BusyBox 并生成 initramfs |
 | `build-kernel.sh` | 交叉编译 Linux 内核 |
+| `build-mini-kernel.sh` | 生成最小内核配置并构建，支持仅生成配置 |
 | `build-toolchain-gcc-batch.sh` | 批量构建多架构 × 多 libc 组合 |
 | `lib.sh` | 公共函数库（下载、git 克隆、日志、构建辅助） |
 | `install-prerequisites.sh` | 安装系统级构建依赖（Homebrew/apt/dnf/pacman） |
@@ -242,7 +244,7 @@ Git 源码以 detached HEAD 保存，并记录实际提交。缓存用于减少�
 
 `build-qemu.sh` 的 `--ref` 使用相同的引用规则，命名引用默认同步远端；
 本地非 Git 源码目录仍可直接使用。
-`cross-build.py` 的 recipe 使用 `git_ref`，默认同步命名引用，不再提供额外更新开关；
+`build-packages.py` 的 recipe 使用 `git_ref`，默认同步命名引用，不再提供额外更新开关；
 子模块会按父仓库记录的提交同步，构建清单记录实际 `git_commit`。
 
 源码归档沿用原有下载与源码目录。首次解压到同级临时目录，`tar` 成功后才原子移动到最终目录；
@@ -294,7 +296,7 @@ aarch64-linux-gnu-gcc -o hello hello.c
 |------|-----------------|
 | `build-toolchain-gcc.sh`、`test-toolchain.sh` | glibc 工具链已完成构建；C/C++/Fortran 编译链接测试已通过，使用 `--run-mode none` |
 | `build-busybox.sh` | 已实测 BusyBox 1.38.0 静态编译和 cpio 打包；未测试内核启动 |
-| `build-target-libs.sh`、`cross-build.py` | 修复 zlib、lz4、zstd 的 Linux 目标系统选择；这三个库已实测。Python 入口另验证静态构建，zstd 使用上游 CMake 的共享库开关；其他包未逐一验证 |
+| `build-target-libs.sh`、`build-packages.py` | 修复 zlib、lz4、zstd 的 Linux 目标系统选择；这三个库已实测。Python 入口另验证静态构建，zstd 使用上游 CMake 的共享库开关；其他包未逐一验证 |
 | `build-qemu.sh` | QEMU 11.0.0 的 riscv64 系统模拟已完整构建安装，并验证版本查询、TCG virt 机器初始化；本次未启用 libslirp，未启动 Linux 内核 |
 | `install-prerequisites.sh` | 新增 Homebrew 分支，已用替身命令验证，测试不会实际安装软件 |
 | `build-toolchain-gcc-batch.sh`、`run-build-presets.sh` | 沿用子脚本的兼容性，未跑完整架构/版本矩阵 |
@@ -304,7 +306,7 @@ aarch64-linux-gnu-gcc -o hello hello.c
 | `build-toolchain-llvm-batch.sh` | 沿用子脚本的兼容性，未跑完整架构/版本矩阵 |
 | `build-toolchain-elf.sh` | Binutils 2.47 + GCC 16.2.0 + newlib 4.6.0.20260123 完整构建安装通过；C/C++ 使用 `--specs=nosys.specs` 链接成 RISC-V ELF，未执行裸机程序 |
 | `build-native-gcc.sh` | Apple Silicon 实测失败：GNU ar 生成的 Mach-O 静态库触发对齐错误；单独配置原版 GCC 16.2.0 也报不支持 `aarch64-apple-darwin`，需要 Darwin 源码补丁及工具链流程适配 |
-| `build-kernel.sh`、`configs/kernel/mk-min-kernel.sh` | 暂不适配：完整内核还需处理主机 ELF 头文件等依赖 |
+| `build-kernel.sh`、`build-mini-kernel.sh` | 暂不适配：完整内核还需处理主机 ELF 头文件等依赖 |
 
 ```bash
 # 交叉构建 BusyBox + initramfs

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-cross-build.py — 跨平台构建系统
+build-packages.py — 跨平台构建系统
 
 声明式包定义 + 命令式构建后端，支持库/可执行程序的交叉编译与本地编译。
 静态/动态链接为一等公民。产物包含源码位置、执行命令、版本等完整元数据。
 
 用法:
-  ./cross-build.py --list                           # 列出所有可用包
-  ./cross-build.py x264 x265 --target riscv64-linux-gnu --static
-  ./cross-build.py zlib zstd --target aarch64-linux-gnu --toolchain-dir ./cross-aarch64-linux-gnu
-  ./cross-build.py champsim --native                # 本地构建
-  ./cross-build.py x264 --target riscv64-linux-gnu --no-install --static
+  ./build-packages.py --list                           # 列出所有可用包
+  ./build-packages.py x264 x265 --target riscv64-linux-gnu --static
+  ./build-packages.py zlib zstd --target aarch64-linux-gnu --toolchain-dir ./cross-aarch64-linux-gnu
+  ./build-packages.py champsim --native                # 本地构建
+  ./build-packages.py x264 --target riscv64-linux-gnu --no-install --static
 """
 
 import argparse

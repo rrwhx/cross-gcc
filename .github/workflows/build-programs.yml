@@ -5,7 +5,7 @@ on:
     branches: [main, master]
     paths:
       - 'versions.env'
-      - 'cross-build.py'
+      - 'build-packages.py'
       - '.github/workflows/build-programs.yml'
   pull_request:
     branches: [main, master]
@@ -54,7 +54,7 @@ jobs:
           ./build-toolchain-gcc.sh --arch ${{ matrix.arch }} --libc glibc --clean
 
       - name: List available packages
-        run: ./cross-build.py --list
+        run: ./build-packages.py --list
 
       # 默认发布集 (--release): zlib / lz4 / coremark —— 三个典型且构建简单的包,
       # 覆盖 tarball+autotools / tarball+make / git+make 三种组合
@@ -65,14 +65,14 @@ jobs:
           PKGS="${{ github.event.inputs.packages }}"
           if [ -n "$PKGS" ]; then
             # shellcheck disable=SC2086
-            ./cross-build.py $PKGS \
+            ./build-packages.py $PKGS \
               --target ${{ matrix.target }} \
               --toolchain-dir ./cross-${{ matrix.target }} \
               --static \
               --install-dir ./staging-${{ matrix.target }} \
               --manifest manifests/${{ matrix.target }}.json
           else
-            ./cross-build.py --release \
+            ./build-packages.py --release \
               --target ${{ matrix.target }} \
               --toolchain-dir ./cross-${{ matrix.target }} \
               --static \
@@ -181,7 +181,7 @@ jobs:
           body: |
             ## 交叉编译的程序与库
 
-            由 `cross-build.py` 构建，**全部静态链接**，可直接放入 initramfs 或经 QEMU 运行。
+            由 `build-packages.py` 构建，**全部静态链接**，可直接放入 initramfs 或经 QEMU 运行。
 
             ### 默认发布集
             | 包 | 类型 | 构建方式 |

@@ -4,7 +4,7 @@ set -uo pipefail
 
 # 获取公共配置和日志函数。
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-source "$SCRIPT_DIR/../../lib.sh"
+source "$SCRIPT_DIR/lib.sh"
 
 # ---------------------------------------------------------------------------
 # 路径和并发可通过环境变量或命令行覆盖。

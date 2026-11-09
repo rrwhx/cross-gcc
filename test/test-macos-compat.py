@@ -19,10 +19,10 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 BASH = shutil.which("bash")
 sys.dont_write_bytecode = True
-spec = importlib.util.spec_from_file_location("cross_build", ROOT / "cross-build.py")
-cross_build = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = cross_build
-spec.loader.exec_module(cross_build)
+spec = importlib.util.spec_from_file_location("build_packages", ROOT / "build-packages.py")
+build_packages = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = build_packages
+spec.loader.exec_module(build_packages)
 
 
 class MacOSCompatibility(unittest.TestCase):
@@ -193,16 +193,16 @@ class MacOSCompatibility(unittest.TestCase):
                 args = SimpleNamespace(target=target, native=native, static=static,
                                        no_install=False, jobs=2, work_dir=str(self.work),
                                        install_dir="", toolchain_dir="", cc="", cxx="")
-                engine = cross_build.BuildEngine(args)
-                zlib_env = engine._link_env(cross_build.PACKAGES["zlib"])
+                engine = build_packages.BuildEngine(args)
+                zlib_env = engine._link_env(build_packages.PACKAGES["zlib"])
                 if native:
                     self.assertEqual(zlib_env.get("CHOST"), engine.env.get("CHOST"))
                 else:
                     self.assertEqual(zlib_env["CHOST"], target)
                 with self.subTest(native=native, target=target, static=static, package="lz4"):
-                    with patch.object(cross_build, "run_cmd", return_value=SimpleNamespace(returncode=0)) as run:
+                    with patch.object(build_packages, "run_cmd", return_value=SimpleNamespace(returncode=0)) as run:
                         with patch.object(engine, "_collect_outputs"):
-                            engine._build_make(cross_build.PACKAGES["lz4"], self.src,
+                            engine._build_make(build_packages.PACKAGES["lz4"], self.src,
                                                self.work / "lib-build", self.work / "install",
                                                SimpleNamespace(commands=[]))
                     self.assertEqual(run.call_count, 2)
@@ -216,10 +216,10 @@ class MacOSCompatibility(unittest.TestCase):
                                        static=static, no_install=False, jobs=2,
                                        work_dir=str(self.work), install_dir="",
                                        toolchain_dir="", cc="", cxx="")
-                engine = cross_build.BuildEngine(args)
-                package = cross_build.PACKAGES["zstd"]
+                engine = build_packages.BuildEngine(args)
+                package = build_packages.PACKAGES["zstd"]
                 self.assertEqual(package.build_system, "cmake")
-                with patch.object(cross_build, "run_cmd", return_value=SimpleNamespace(returncode=0)) as run:
+                with patch.object(build_packages, "run_cmd", return_value=SimpleNamespace(returncode=0)) as run:
                     with patch.object(engine, "_collect_outputs"):
                         engine._build_cmake(package, self.src, self.work / "lib-build",
                                             self.work / "install", SimpleNamespace(commands=[]))

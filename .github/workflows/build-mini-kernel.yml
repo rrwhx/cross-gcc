@@ -9,6 +9,7 @@ on:
       - 'build-busybox.sh'
       - 'lib.sh'
       - 'configs/kernel/**'
+      - 'build-mini-kernel.sh'
       - 'test/test-qemu-run.sh'
       - '.github/workflows/build-mini-kernel.yml'
   pull_request:
