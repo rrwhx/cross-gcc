@@ -295,7 +295,7 @@ build_step "build" "${LOG_DIR}" ninja -j"${THREADS}"
 
 step "=== 安装 LLVM ==="
 cd "${BUILD_DIR}"
-build_step "install" "${LOG_DIR}" ninja install
+build_step "install" "${LOG_DIR}" ninja -j"${THREADS}" install
 
 if [[ "$STATIC_BUILD" == true ]]; then
     static_check_paths=()

@@ -33,6 +33,10 @@
 | `test/test-qemu-run.sh` | QEMU 系统模拟冒烟测试：启动内核 + initramfs |
 | `build-qemu.sh` | 从源码构建 QEMU（系统模拟 + 用户态模拟），供测试脚本使用 |
 
+`run-build-presets.sh` 为 LLVM 配方自动设置默认并发：编译按 4 GiB/任务、链接按 10 GiB/任务估算，向下取整后限制在 1 到 CPU 逻辑核数之间。
+手动设置优先于自动值，且不受内存或 CPU 上限截断：编译读取 `THREADS`，命令行 `-j/--threads` 优先；链接读取 `LLVM_LINK_JOBS`，配方中的 `--link-jobs` 优先。
+runtimes 子构建默认取编译和链接并发的较小值，可用 `CMAKE_BUILD_PARALLEL_LEVEL` 覆盖；安装阶段也遵循编译并发设置。
+
 ---
 
 ### 快速开始
