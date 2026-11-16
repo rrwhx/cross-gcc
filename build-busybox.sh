@@ -30,6 +30,9 @@ COREMARK_GIT="https://github.com/eembc/coremark.git"
 ARCH=""
 CROSS_COMPILE=""
 WORK_DIR=$(pwd)
+DOWNLOAD_DIR=""
+BUILD_DIR=""
+LOG_DIR=""
 OUTPUT_FILE=""
 CLEAN_BUILD=false
 WITH_COREMARK=false
@@ -47,6 +50,9 @@ usage() {
   --cross-compile   交叉编译前缀，可为完整路径或仅前缀
                     (例如: riscv64-linux-gnu- 或 /path/to/bin/riscv64-linux-gnu-)
   --work-dir        工作目录前缀 (默认: 当前目录)
+  --download-dir    源码下载目录 (默认: <work-dir>/downloads)
+  --build-dir       构建目录 (默认: <work-dir>/build-busybox-ARCH)
+  --log-dir         日志目录 (默认: <work-dir>/logs-busybox-ARCH)
   --busybox-ver     BusyBox 版本 (默认: ${BUSYBOX_VER}, 支持 git[:REF])
   --output          输出 initramfs 路径 (默认: <work-dir>/initrd-<arch>.cpio)
   --coremark        编译 CoreMark 性能测试程序 (git master, 静态链接),
@@ -71,6 +77,9 @@ while [[ $# -gt 0 ]]; do
         --arch)           require_option_value "$@"; ARCH="$2"; shift 2;;
         --cross-compile)  require_option_value "$@"; CROSS_COMPILE="$2"; shift 2;;
         --work-dir)       require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --download-dir)   require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
+        --build-dir)      require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
+        --log-dir)        require_option_value "$@"; LOG_DIR="$2"; shift 2;;
         --busybox-ver)    require_option_value "$@"; BUSYBOX_VER="$2"; shift 2;;
         --output)         require_option_value "$@"; OUTPUT_FILE="$2"; shift 2;;
         --coremark)       WITH_COREMARK=true; shift;;
@@ -106,14 +115,14 @@ fi
 # ---------------------------------------------------------------------------
 # 目录设置
 # ---------------------------------------------------------------------------
-WORK_DIR=$(realpath "$WORK_DIR")
-DOWNLOAD_DIR="${WORK_DIR}/downloads"
+canonicalize_dirs WORK_DIR
+DOWNLOAD_DIR="${DOWNLOAD_DIR:-${WORK_DIR}/downloads}"
 SRC_DIR="${WORK_DIR}/src-busybox-${ARCH}"
-BUILD_DIR="${WORK_DIR}/build-busybox-${ARCH}"
-LOG_DIR="${WORK_DIR}/logs-busybox-${ARCH}"
+BUILD_DIR="${BUILD_DIR:-${WORK_DIR}/build-busybox-${ARCH}}"
+LOG_DIR="${LOG_DIR:-${WORK_DIR}/logs-busybox-${ARCH}}"
 OUTPUT_FILE="${OUTPUT_FILE:-${WORK_DIR}/initrd-${ARCH}.cpio}"
 
-mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR"
+canonicalize_dirs DOWNLOAD_DIR SRC_DIR BUILD_DIR LOG_DIR
 
 # ---------------------------------------------------------------------------
 # 获取源码

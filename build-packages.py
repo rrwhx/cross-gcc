@@ -515,10 +515,13 @@ class BuildEngine:
         self.install = not args.no_install
         self.jobs = args.jobs or detect_cpu_count()
         self.work_dir = Path(args.work_dir).resolve()
-        self.download_dir = self.work_dir / "downloads"
+        self.download_dir = (Path(args.download_dir).resolve() if args.download_dir
+                             else self.work_dir / "downloads")
         self.src_dir = self.work_dir / f"src-{self.target or 'native'}"
-        self.build_base = self.work_dir / f"build-{self.target or 'native'}"
-        self.log_dir = self.work_dir / f"logs-{self.target or 'native'}"
+        self.build_base = (Path(args.build_dir).resolve() if args.build_dir
+                           else self.work_dir / f"build-{self.target or 'native'}")
+        self.log_dir = (Path(args.log_dir).resolve() if args.log_dir
+                        else self.work_dir / f"logs-{self.target or 'native'}")
         self.install_dir = Path(args.install_dir).resolve() if args.install_dir else None
         self.results: list[BuildResult] = []
 
@@ -1245,6 +1248,9 @@ def main():
     parser.add_argument("--no-install", action="store_true", help="仅构建不安装")
     parser.add_argument("--install-dir", default="", help="安装目录 (默认: sysroot 或 build/_install)")
     parser.add_argument("--work-dir", default=".", help="工作目录 (默认: 当前目录)")
+    parser.add_argument("--download-dir", default="", help="下载目录 (默认: <work-dir>/downloads)")
+    parser.add_argument("--build-dir", default="", help="构建目录 (默认: <work-dir>/build-<target或native>)")
+    parser.add_argument("--log-dir", default="", help="日志目录 (默认: <work-dir>/logs-<target或native>)")
     parser.add_argument("-j", "--jobs", type=int, default=os.environ.get("JOBS") or None,
                         help="并行编译线程数（正整数，默认读取 JOBS，其次自动检测）")
     parser.add_argument("--cc", default="", help="C 编译器 (覆盖自动推导)")

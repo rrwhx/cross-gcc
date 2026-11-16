@@ -32,6 +32,9 @@ LIB_DEFS=(
 TARGET=""
 TOOLCHAIN_DIR=""
 WORK_DIR=$(pwd)
+DOWNLOAD_DIR=""
+BUILD_DIR=""
+LOG_DIR=""
 SKIP_LIBS=""   # 逗号分隔的字符串，避免空数组在 set -u 下的兼容性问题
 ONLY_LIBS=""
 CLEAN_BUILD=false
@@ -78,6 +81,9 @@ usage() {
   --target         目标架构三元组 (例如: riscv64-linux-gnu)
   --toolchain-dir  工具链所在的根目录 (例如: ./cross-riscv64-linux-gnu)
   --work-dir       工作目录前缀 (默认: 当前目录)
+  --download-dir   源码下载目录 (默认: <work-dir>/downloads)
+  --build-dir      构建目录 (默认: <work-dir>/build-libs-TARGET)
+  --log-dir        日志目录 (默认: <work-dir>/logs-libs-TARGET)
   --skip           跳过指定的库，多次使用指定多个 (例如: --skip lz4 --skip snappy)
   --only           仅编译指定的库，多次使用指定多个 (例如: --only zlib --only zstd)
   -j,--jobs        并行编译线程数 (默认: ${JOBS})
@@ -106,6 +112,9 @@ while [[ $# -gt 0 ]]; do
         --target)        require_option_value "$@"; TARGET="$2"; shift 2;;
         --toolchain-dir) require_option_value "$@"; TOOLCHAIN_DIR="$2"; shift 2;;
         --work-dir)      require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --download-dir)  require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
+        --build-dir)     require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
+        --log-dir)       require_option_value "$@"; LOG_DIR="$2"; shift 2;;
         --skip)          require_option_value "$@"; validate_library_names "$1" "$2"; SKIP_LIBS="${SKIP_LIBS:+${SKIP_LIBS},}$2"; shift 2;;
         --only)          require_option_value "$@"; validate_library_names "$1" "$2"; ONLY_LIBS="${ONLY_LIBS:+${ONLY_LIBS},}$2"; shift 2;;
         --zlib-ver|--zlib-ng-ver|--lz4-ver|--zstd-ver|--snappy-ver|--jemalloc-ver)
@@ -141,18 +150,18 @@ done
 # 目录与工具链设置
 # ---------------------------------------------------------------------------
 TOOLCHAIN_DIR=$(realpath "$TOOLCHAIN_DIR")
-WORK_DIR=$(realpath "$WORK_DIR")
-DOWNLOAD_DIR="${WORK_DIR}/downloads"
+canonicalize_dirs WORK_DIR
+DOWNLOAD_DIR="${DOWNLOAD_DIR:-${WORK_DIR}/downloads}"
 SRC_DIR="${WORK_DIR}/src-$TARGET"
-BUILD_DIR="${WORK_DIR}/build-libs-$TARGET"
-LOG_DIR="${WORK_DIR}/logs-libs-$TARGET"
+BUILD_DIR="${BUILD_DIR:-${WORK_DIR}/build-libs-$TARGET}"
+LOG_DIR="${LOG_DIR:-${WORK_DIR}/logs-libs-$TARGET}"
 TARGET_SYSROOT="$TOOLCHAIN_DIR/$TARGET"
 
 if [[ ! -d "$TARGET_SYSROOT" ]]; then
     error "未找到目标 sysroot 目录: $TARGET_SYSROOT \n请检查 --target 和 --toolchain-dir 参数是否正确匹配。"
 fi
 
-mkdir -p "$DOWNLOAD_DIR" "$SRC_DIR" "$BUILD_DIR" "$LOG_DIR"
+canonicalize_dirs DOWNLOAD_DIR SRC_DIR BUILD_DIR LOG_DIR
 
 export PATH="$TOOLCHAIN_DIR/bin:$PATH"
 export CC="${TARGET}-gcc"

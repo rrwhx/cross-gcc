@@ -25,6 +25,9 @@ setup_error_trap
 ARCH=""
 CROSS_COMPILE=""
 WORK_DIR=$(pwd)
+DOWNLOAD_DIR=""
+BUILD_DIR=""
+LOG_DIR=""
 SRC_DIR=""
 DEFCONFIG=""
 OUTPUT_DIR=""
@@ -40,6 +43,9 @@ usage() {
   --cross-compile   交叉编译前缀，可为完整路径或仅前缀
                     (例如: riscv64-linux-gnu- 或 /path/to/bin/riscv64-linux-gnu-)
   --work-dir        工作目录前缀 (默认: 当前目录)
+  --download-dir    源码下载目录 (默认: <work-dir>/downloads)
+  --build-dir       构建目录 (默认: <work-dir>/build-kernel-ARCH)
+  --log-dir         日志目录 (默认: <work-dir>/logs-kernel-ARCH)
   --linux-ver       Linux 内核版本 (默认: ${LINUX_VER}, 支持 git[:REF])
   --src-dir         直接指定已解压的内核源码路径 (跳过下载/解压)
   --defconfig       使用指定的内核 config 文件 (复制为 .config 后 make olddefconfig)
@@ -65,6 +71,9 @@ while [[ $# -gt 0 ]]; do
         --arch)           require_option_value "$@"; ARCH="$2"; shift 2;;
         --cross-compile)  require_option_value "$@"; CROSS_COMPILE="$2"; shift 2;;
         --work-dir)       require_option_value "$@"; WORK_DIR="$2"; shift 2;;
+        --download-dir)   require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
+        --build-dir)      require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
+        --log-dir)        require_option_value "$@"; LOG_DIR="$2"; shift 2;;
         --linux-ver)      require_option_value "$@"; LINUX_VER="$2"; shift 2;;
         --src-dir)        require_option_value "$@"; SRC_DIR="$2"; shift 2;;
         --defconfig)      require_option_value "$@"; DEFCONFIG="$2"; shift 2;;
@@ -118,13 +127,13 @@ fi
 # ---------------------------------------------------------------------------
 # 目录设置
 # ---------------------------------------------------------------------------
-WORK_DIR=$(realpath "$WORK_DIR")
-DOWNLOAD_DIR="${WORK_DIR}/downloads"
-BUILD_DIR="${WORK_DIR}/build-kernel-${ARCH}"
-LOG_DIR="${WORK_DIR}/logs-kernel-${ARCH}"
+canonicalize_dirs WORK_DIR
+DOWNLOAD_DIR="${DOWNLOAD_DIR:-${WORK_DIR}/downloads}"
+BUILD_DIR="${BUILD_DIR:-${WORK_DIR}/build-kernel-${ARCH}}"
+LOG_DIR="${LOG_DIR:-${WORK_DIR}/logs-kernel-${ARCH}}"
 OUTPUT_DIR="${OUTPUT_DIR:-${WORK_DIR}/kernel-${ARCH}}"
 
-mkdir -p "$DOWNLOAD_DIR" "$BUILD_DIR" "$LOG_DIR" "$OUTPUT_DIR"
+canonicalize_dirs DOWNLOAD_DIR BUILD_DIR LOG_DIR OUTPUT_DIR
 
 info "ARCH=$ARCH (KERNEL_ARCH=$KERNEL_ARCH)"
 info "CROSS_COMPILE=$CROSS_COMPILE"

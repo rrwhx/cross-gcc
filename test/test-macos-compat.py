@@ -190,7 +190,8 @@ class MacOSCompatibility(unittest.TestCase):
     def test_cross_libraries_keep_target_rules_during_install(self):
         for native, target in ((False, "riscv64-linux-gnu"), (False, "x86_64-w64-mingw32"), (True, "")):
             for static in (False, True):
-                args = SimpleNamespace(target=target, native=native, static=static,
+                args = SimpleNamespace(download_dir="", build_dir="", log_dir="",
+                                       target=target, native=native, static=static,
                                        no_install=False, jobs=2, work_dir=str(self.work),
                                        install_dir="", toolchain_dir="", cc="", cxx="")
                 engine = build_packages.BuildEngine(args)
@@ -212,7 +213,8 @@ class MacOSCompatibility(unittest.TestCase):
     def test_zstd_static_build_disables_shared_library(self):
         for static in (False, True):
             with self.subTest(static=static):
-                args = SimpleNamespace(target="riscv64-linux-gnu", native=False,
+                args = SimpleNamespace(download_dir="", build_dir="", log_dir="",
+                                       target="riscv64-linux-gnu", native=False,
                                        static=static, no_install=False, jobs=2,
                                        work_dir=str(self.work), install_dir="",
                                        toolchain_dir="", cc="", cxx="")

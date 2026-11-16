@@ -180,6 +180,10 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
 | `--archive` | 构建后打包为 tar.xz 并删除原目录 |
 | `--static` | 静态链接工具链自身的可执行文件，可拷贝到同架构其他机器执行 |
 
+`build-kernel.sh`、`build-busybox.sh`、`build-target-libs.sh` 和 `build-packages.py`
+同样支持 `--download-dir`、`--build-dir`、`--log-dir`，省略时沿用各入口在工作目录下的默认布局。
+显式目录参数的相对路径以启动目录为基准。
+
 编译并发统一按命令行 `-j/--jobs` > `JOBS` 环境变量 > 自动检测的优先级设置。
 参数使用 `-j/--jobs` 指定编译并发、`--组件-ver` 指定组件版本，源码、构建、安装等目录使用 `--xxx-dir`。
 LLVM 批量入口使用 `--llvm-ver`，工具链目录使用 `--toolchain-dir`（批量入口允许 `{ARCH}` 模板）。
