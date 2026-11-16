@@ -27,7 +27,7 @@ run_build() {
     fi
 }
 
-# LLVM 自动并发按编译 4 GiB/任务、链接 10 GiB/任务估算，手动设置优先。
+# LLVM 自动并发按编译 6 GiB/任务、链接 10 GiB/任务估算，手动设置优先。
 run_llvm_build() {
     local memory_mb="" cpu_count compile_jobs link_jobs child_jobs
     local requested_compile="$preset_jobs" requested_link="${LLVM_LINK_JOBS:-}" previous="" arg
@@ -57,7 +57,7 @@ run_llvm_build() {
         warn "无法获取可用内存，LLVM 自动并发回退为 1"
         memory_mb=0
     fi
-    compile_jobs=$((memory_mb / 4096))
+    compile_jobs=$((memory_mb / 6144))
     link_jobs=$((memory_mb / 10240))
     if (( compile_jobs < 1 )); then compile_jobs=1; fi
     if (( link_jobs < 1 )); then link_jobs=1; fi
