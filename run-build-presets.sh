@@ -14,6 +14,9 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 # 在公共库补默认值前，记录用户显式设置的编译并发。
 preset_jobs="${JOBS:-}"
 source "$SCRIPT_DIR/lib.sh"
+
+# 所有配方默认共用启动目录的下载缓存，后面的用户参数可覆盖该默认值。
+set -- --download-dir "$PWD/downloads" "$@"
 failed_cmds=()
 
 # 每个套件失败后继续执行，最后统一报告失败命令和退出码。

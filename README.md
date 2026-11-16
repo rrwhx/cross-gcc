@@ -40,6 +40,8 @@
 `run-build-presets.sh` 按 GCC、LLVM 分组执行，各组先构建 native 工具链，再构建交叉工具链。
 native GCC 16.2.0（binutils 2.46.1）和 native LLVM 23.1.5 分别使用 `native_gcc_162/`、`native_llvm_2315/` 工作目录。
 这些版本沿用现有配方中的最新稳定版本。
+所有配方默认共用启动目录下的 `downloads/`，复用归档、解压源码及 Git 缓存；
+可通过 `--download-dir DIR` 指定其他位置，相对路径以启动目录为基准。
 原生及交叉 LLVM 配方均自动设置默认并发：编译按 6 GiB/任务、链接按 10 GiB/任务估算，向下取整后限制在 1 到 CPU 逻辑核数之间。
 手动设置优先于自动值，且不受内存或 CPU 上限截断：编译读取 `JOBS`，命令行 `-j/--jobs` 优先；链接读取 `LLVM_LINK_JOBS`，配方中的 `--link-jobs` 优先。
 runtimes 子构建默认取编译和链接并发的较小值，可用 `CMAKE_BUILD_PARALLEL_LEVEL` 覆盖；安装阶段也遵循编译并发设置。
