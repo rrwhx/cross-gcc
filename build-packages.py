@@ -7,10 +7,10 @@ build-packages.py — 跨平台构建系统
 
 用法:
   ./build-packages.py --list                           # 列出所有可用包
-  ./build-packages.py x264 x265 --target riscv64-linux-gnu --static
-  ./build-packages.py zlib zstd --target aarch64-linux-gnu --toolchain-dir ./cross-aarch64-linux-gnu
-  ./build-packages.py champsim --native                # 本地构建
-  ./build-packages.py x264 --target riscv64-linux-gnu --no-install --static
+  ./build-packages.py --only x264,x265 --target riscv64-linux-gnu --static
+  ./build-packages.py --only zlib,zstd --target aarch64-linux-gnu --toolchain-dir ./cross-aarch64-linux-gnu
+  ./build-packages.py --only champsim --native                # 本地构建
+  ./build-packages.py --only x264 --target riscv64-linux-gnu --no-install --static
 """
 
 import argparse
@@ -1229,16 +1229,20 @@ def main():
         示例:
           %(prog)s --list
           %(prog)s --release --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu --static
-          %(prog)s zlib zstd --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu --static
-          %(prog)s x264 x265 --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu --static --no-install
-          %(prog)s coremark --native --static
-          %(prog)s champsim --native
-          %(prog)s sparta riscv-perf-model --native
-          %(prog)s myprog --native --recipes my-recipes.json    # 配置式扩展
+          %(prog)s --only zlib,zstd --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu --static
+          %(prog)s --only x264,x265 --target riscv64-linux-gnu --toolchain-dir ./cross-riscv64-linux-gnu --static --no-install
+          %(prog)s --only coremark --native --static
+          %(prog)s --only champsim --native
+          %(prog)s --only sparta,riscv-perf-model --native
+          %(prog)s --only myprog --native --recipes my-recipes.json    # 配置式扩展
         """),
     )
 
-    parser.add_argument("packages", nargs="*", help="要构建的包名 (可多个)")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--only", action="append", default=[], metavar="LIST",
+                           help="仅构建指定包，支持逗号列表和重复选项")
+    parser.add_argument("--skip", action="append", default=[], metavar="LIST",
+                        help="跳过指定包，支持逗号列表和重复选项；必需依赖被跳过时报错")
     parser.add_argument("--list", action="store_true", help="列出所有可用包")
     parser.add_argument("--target", default="", help="目标三元组 (例: riscv64-linux-gnu)")
     parser.add_argument("--native", action="store_true", help="本地构建 (忽略 --target)")
@@ -1258,8 +1262,8 @@ def main():
     parser.add_argument("--manifest", default="", help="输出构建清单 JSON 路径")
     parser.add_argument("--recipes", action="append", default=[],
                         help="加载额外的包定义 JSON (配置式扩展, 可多次指定)")
-    parser.add_argument("--all", action="store_true", help="构建所有库类型的包")
-    parser.add_argument("--release", action="store_true",
+    selection.add_argument("--all", action="store_true", help="构建所有库类型的包")
+    selection.add_argument("--release", action="store_true",
                         help="构建默认发布集 (几个典型且简单的包, 见 --list 的发布列)")
     parser.add_argument("--dry-run", action="store_true",
                         help="只打印构建计划 (顺序/源码/链接方式), 不下载不构建")
@@ -1271,6 +1275,21 @@ def main():
     # 配置式扩展: 从 JSON 加载/覆盖包定义 (无需修改本脚本即可新增构建)
     for recipe in args.recipes:
         load_recipes(Path(recipe))
+
+    def package_names(values, option):
+        names = []
+        for value in values:
+            for name in value.split(","):
+                if not name:
+                    parser.error(f"{option} 的包名列表不能为空或包含空项")
+                if name not in PACKAGES:
+                    parser.error(f"未知包: {name} ({option}，用 --list 查看可用包)")
+                if name not in names:
+                    names.append(name)
+        return names
+
+    only_names = package_names(args.only, "--only")
+    skip_names = set(package_names(args.skip, "--skip"))
 
     # --list
     if args.list:
@@ -1290,19 +1309,17 @@ def main():
         if not names:
             error("发布集为空 (无包标记 release_default)")
             sys.exit(1)
-    elif args.all:
+    elif only_names:
+        names = only_names
+    elif args.all or args.skip:
         names = [n for n, p in PACKAGES.items() if p.pkg_type == "library"]
-    elif not args.packages:
+    else:
         parser.print_help()
         sys.exit(1)
-    else:
-        names = args.packages
 
-    # 验证包名
-    for n in names:
-        if n not in PACKAGES:
-            error(f"未知包: {n}  (用 --list 查看所有可用包)")
-            sys.exit(1)
+    names = [name for name in names if name not in skip_names]
+    if not names:
+        parser.error("未选中任何包，请检查 --only 和 --skip")
 
     # 验证目标
     if not args.native and not args.target:
@@ -1311,6 +1328,12 @@ def main():
 
     # 依赖解析
     names = resolve_build_order(names)
+    skipped_dependencies = skip_names.intersection(names)
+    if skipped_dependencies:
+        parser.error(f"必需依赖被 --skip 排除: {', '.join(sorted(skipped_dependencies))}")
+    for name in names:
+        if name not in PACKAGES:
+            parser.error(f"依赖包未定义: {name}")
     info(f"构建顺序: {' -> '.join(names)}")
     info(f"目标: {args.target or 'native'}, 链接: {'static' if args.static else 'shared'}")
 

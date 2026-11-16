@@ -158,6 +158,9 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
     --target aarch64-linux-gnu \
     --toolchain-dir ./cross-aarch64-linux-gnu
 
+# 列出可用库（无需指定工具链）
+./build-target-libs.sh --list
+
 # 仅编译 / 跳过指定库
 ./build-target-libs.sh --target riscv64-linux-gnu \
     --toolchain-dir ./cross-riscv64-linux-gnu \
@@ -182,6 +185,9 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
 
 `build-kernel.sh`、`build-busybox.sh`、`build-target-libs.sh` 和 `build-packages.py`
 同样支持 `--download-dir`、`--build-dir`、`--log-dir`，省略时沿用各入口在工作目录下的默认布局。
+目标库与包构建均使用 `--list` 列出可用项目、`--only LIST` 选择、`--skip LIST` 排除；
+列表支持逗号分隔和重复选项，`--skip` 优先。包构建自动加入必需依赖，若依赖被排除则报错。
+例如：`./build-packages.py --only zlib,zstd --native --dry-run`。
 显式目录参数的相对路径以启动目录为基准。
 
 编译并发统一按命令行 `-j/--jobs` > `JOBS` 环境变量 > 自动检测的优先级设置。

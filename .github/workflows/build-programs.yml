@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       packages:
-        description: '要构建的包 (空格分隔, 留空则用矩阵默认值)'
+        description: '要构建的包 (逗号分隔, 留空则用矩阵默认值)'
         required: false
         default: ''
 
@@ -64,8 +64,7 @@ jobs:
         run: |
           PKGS="${{ github.event.inputs.packages }}"
           if [ -n "$PKGS" ]; then
-            # shellcheck disable=SC2086
-            ./build-packages.py $PKGS \
+            ./build-packages.py --only "$PKGS" \
               --target ${{ matrix.target }} \
               --toolchain-dir ./cross-${{ matrix.target }} \
               --static \

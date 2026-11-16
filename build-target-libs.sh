@@ -38,6 +38,7 @@ LOG_DIR=""
 SKIP_LIBS=""   # 逗号分隔的字符串，避免空数组在 set -u 下的兼容性问题
 ONLY_LIBS=""
 CLEAN_BUILD=false
+LIST_ONLY=false
 
 # 判断某个库是否应该编译
 should_build() {
@@ -75,6 +76,34 @@ validate_library_names() {
     done
 }
 
+# 从库定义字符串中解析各字段
+parse_lib_def() {
+    local def="$1"
+    LIB_NAME="${def%%|*}";  def="${def#*|}"
+    LIB_VER="${def%%|*}";   def="${def#*|}"
+    LIB_URL="${def%%|*}";   def="${def#*|}"
+    LIB_BUILD="${def%%|*}"; def="${def#*|}"
+    LIB_EXTRA="$def"
+
+    # 从对应的 *_VER 变量读取覆盖值；CLI 解析时直接更新该变量。
+    local version_var="${LIB_NAME//-/_}_VER"
+    version_var="${version_var^^}"
+    LIB_VER="${!version_var:-$LIB_VER}"
+    if should_build "$LIB_NAME"; then
+        [[ "$LIB_VER" =~ ^[[:alnum:]][[:alnum:].+_-]*$ ]] || error "$version_var 的版本号无效: $LIB_VER"
+    fi
+
+    # 替换 URL 模板中的版本占位符
+    LIB_URL="${LIB_URL//\{VER\}/$LIB_VER}"
+
+    # 从 URL 末尾提取归档文件扩展名
+    if [[ "$LIB_URL" =~ \.(tar\.[a-z0-9]+)$ ]]; then
+        LIB_EXT="${BASH_REMATCH[1]}"
+    else
+        LIB_EXT="tar.gz"
+    fi
+}
+
 usage() {
     cat <<EOF
 用法: $(basename "$0") --target TARGET --toolchain-dir DIR [选项]
@@ -84,8 +113,9 @@ usage() {
   --download-dir   源码下载目录 (默认: <work-dir>/downloads)
   --build-dir      构建目录 (默认: <work-dir>/build-libs-TARGET)
   --log-dir        日志目录 (默认: <work-dir>/logs-libs-TARGET)
-  --skip           跳过指定的库，多次使用指定多个 (例如: --skip lz4 --skip snappy)
-  --only           仅编译指定的库，多次使用指定多个 (例如: --only zlib --only zstd)
+  --list           列出可用库、版本和构建系统
+  --skip LIST      跳过指定库，支持逗号分隔和重复选项 (例如: --skip lz4,snappy)
+  --only LIST      仅编译指定库，支持逗号分隔和重复选项 (例如: --only zlib,zstd)
   -j,--jobs        并行编译线程数 (默认: ${JOBS})
   --clean          构建完成后删除构建目录和日志目录
   -h,--help        显示帮助
@@ -126,10 +156,20 @@ while [[ $# -gt 0 ]]; do
             shift 2;;
         -j|--jobs)       require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --clean)         CLEAN_BUILD=true; shift;;
+        --list)          LIST_ONLY=true; shift;;
         -h|--help)       usage;;
         *)               error "未知选项: $1"; usage;;
     esac
 done
+
+if [[ "$LIST_ONLY" == true ]]; then
+    printf '%-16s %-16s %s\n' '库名' '版本' '构建系统'
+    for def in "${LIB_DEFS[@]}"; do
+        parse_lib_def "$def"
+        printf '%-16s %-16s %s\n' "$LIB_NAME" "$LIB_VER" "$LIB_BUILD"
+    done
+    exit 0
+fi
 
 require_positive_integer "构建线程数" "$JOBS"
 
@@ -186,34 +226,6 @@ info "交叉编译器: $CC"
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
-
-# 从库定义字符串中解析各字段
-parse_lib_def() {
-    local def="$1"
-    LIB_NAME="${def%%|*}";  def="${def#*|}"
-    LIB_VER="${def%%|*}";   def="${def#*|}"
-    LIB_URL="${def%%|*}";   def="${def#*|}"
-    LIB_BUILD="${def%%|*}"; def="${def#*|}"
-    LIB_EXTRA="$def"
-
-    # 从对应的 *_VER 变量读取覆盖值；CLI 解析时直接更新该变量。
-    local version_var="${LIB_NAME//-/_}_VER"
-    version_var="${version_var^^}"
-    LIB_VER="${!version_var:-$LIB_VER}"
-    if should_build "$LIB_NAME"; then
-        [[ "$LIB_VER" =~ ^[[:alnum:]][[:alnum:].+_-]*$ ]] || error "$version_var 的版本号无效: $LIB_VER"
-    fi
-
-    # 替换 URL 模板中的版本占位符
-    LIB_URL="${LIB_URL//\{VER\}/$LIB_VER}"
-
-    # 从 URL 末尾提取归档文件扩展名
-    if [[ "$LIB_URL" =~ \.(tar\.[a-z0-9]+)$ ]]; then
-        LIB_EXT="${BASH_REMATCH[1]}"
-    else
-        LIB_EXT="tar.gz"
-    fi
-}
 
 # 编译并安装单个库
 build_package() {
