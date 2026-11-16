@@ -17,6 +17,8 @@
 | `build-toolchain-gcc.sh` | 核心脚本：构建 GCC + binutils + glibc/musl 工具链 |
 | `build-toolchain-elf.sh` | 构建 GCC + binutils + newlib（bare-metal ELF）工具链 |
 | `build-toolchain-llvm.sh` | 构建 LLVM/Clang 交叉编译器（支持自动下载源码） |
+| `build-native-gcc.sh` | 构建本机 GCC/binutils 工具链 |
+| `build-native-llvm.sh` | 构建本机 LLVM/Clang 工具链 |
 | `build-target-libs.sh` | 交叉编译目标平台第三方库（zlib, zstd, lz4, snappy, jemalloc 等） |
 | `build-packages.py` | 按包配方构建目标平台或本机的第三方库和程序 |
 | `build-busybox.sh` | 交叉编译 BusyBox 并生成 initramfs |
@@ -30,12 +32,15 @@
 | `get-latest-versions.sh` | 获取各组件最新发布版本号 |
 | `env-macos.sh` | macOS 环境适配封装（自动设置 GNU 工具路径） |
 | `build-toolchain-llvm-batch.sh` | 批量构建单版本 × 多架构 LLVM 工具链 |
-| `run-build-presets.sh` | 执行预设的多版本 GCC/LLVM 构建配方 |
+| `run-build-presets.sh` | 执行原生及多版本交叉 GCC/LLVM 构建配方 |
 | `test-toolchain.sh` | 工具链冒烟测试：编译 C/C++/Fortran 并经 qemu-user 运行 |
 | `test/test-qemu-run.sh` | QEMU 系统模拟冒烟测试：启动内核 + initramfs |
 | `build-qemu.sh` | 从源码构建 QEMU（系统模拟 + 用户态模拟），供测试脚本使用 |
 
-`run-build-presets.sh` 为 LLVM 配方自动设置默认并发：编译按 6 GiB/任务、链接按 10 GiB/任务估算，向下取整后限制在 1 到 CPU 逻辑核数之间。
+`run-build-presets.sh` 按 GCC、LLVM 分组执行，各组先构建 native 工具链，再构建交叉工具链。
+native GCC 16.2.0（binutils 2.46.1）和 native LLVM 23.1.5 分别使用 `native_gcc_162/`、`native_llvm_2315/` 工作目录。
+这些版本沿用现有配方中的最新稳定版本。
+原生及交叉 LLVM 配方均自动设置默认并发：编译按 6 GiB/任务、链接按 10 GiB/任务估算，向下取整后限制在 1 到 CPU 逻辑核数之间。
 手动设置优先于自动值，且不受内存或 CPU 上限截断：编译读取 `JOBS`，命令行 `-j/--jobs` 优先；链接读取 `LLVM_LINK_JOBS`，配方中的 `--link-jobs` 优先。
 runtimes 子构建默认取编译和链接并发的较小值，可用 `CMAKE_BUILD_PARALLEL_LEVEL` 覆盖；安装阶段也遵循编译并发设置。
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 批量构建多版本 GCC/LLVM 工具链的配方脚本
+# 批量构建原生及多版本交叉 GCC/LLVM 工具链的配方脚本
 # 注意: 不使用 set -e，单个构建套件失败不中断后续套件 (各套件内部会汇总失败)
 set -uo pipefail
 
@@ -77,6 +77,8 @@ run_llvm_build() {
         "$@" --jobs "$compile_jobs" --link-jobs "$link_jobs"
 }
 
+# GCC 配方：原生与交叉工具链。
+run_build "$SCRIPT_DIR/build-native-gcc.sh" "$@" --gcc-ver 16.2.0 --binutils-ver 2.46.1 --work-dir native_gcc_162
 run_build "$SCRIPT_DIR/build-toolchain-gcc-batch.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l musl  --gcc-ver 16.2.0 --musl-ver 1.2.6  --binutils-ver 2.46.1 --work-dir gcc_162-musl_126
 run_build "$SCRIPT_DIR/build-toolchain-gcc-batch.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver git    --glibc-ver 2.43  --binutils-ver git    --work-dir gcc_dev-glibc_243
 run_build "$SCRIPT_DIR/build-toolchain-gcc-batch.sh" "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 16.2.0 --glibc-ver 2.43  --binutils-ver 2.46.1 --work-dir gcc_162-glibc_243
@@ -89,6 +91,8 @@ run_build "$SCRIPT_DIR/build-toolchain-gcc-batch.sh" "$@" -a aarch64,loongarch64
 # ./build-toolchain-gcc-batch.sh "$@" -a aarch64,loongarch64,riscv32,riscv64,x86_64 -l glibc --gcc-ver 9.5.0 --glibc-ver 2.41  --binutils-ver 2.46.1 --work-dir gcc_95-glibc_241
 
 
+# LLVM 配方：原生与交叉工具链。
+run_llvm_build "$SCRIPT_DIR/build-native-llvm.sh" "$@" --llvm-ver git:llvmorg-23.1.5 --work-dir native_llvm_2315
 run_llvm_build "$SCRIPT_DIR/build-toolchain-llvm-batch.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --toolchain-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ --llvm-ver git:llvmorg-23.1.5 --work-dir llvm_2315/
 run_llvm_build "$SCRIPT_DIR/build-toolchain-llvm-batch.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --toolchain-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ --llvm-ver git:llvmorg-22.1.8 --work-dir llvm_2218/
 run_llvm_build "$SCRIPT_DIR/build-toolchain-llvm-batch.sh" "$@" -a aarch64,loongarch64,riscv64,x86_64 --toolchain-dir ./gcc_162-glibc_243/cross-{ARCH}-linux-gnu/ --llvm-ver git --work-dir llvm_dev/
