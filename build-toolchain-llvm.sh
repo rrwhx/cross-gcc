@@ -48,7 +48,7 @@ usage() {
 
   --arch              目标架构 (必填, 例如: aarch64, riscv64, x86_64, loongarch64)
   --llvm-ver          LLVM 版本 (默认: $LLVM_VER, 支持 git[:REF])
-  --src-dir           LLVM 源码目录 (直接指定已解压的源码路径，跳过下载/解压)
+  --src-dir           已有 llvm-project 源码树根目录 (含 llvm/ 子目录，跳过下载/解压)
   --work-dir          工作目录前缀 (默认: 当前目录)
   --download-dir      源码下载目录 (默认: WORK_DIR/downloads)
   --toolchain-dir     目标 GCC 工具链目录 (与 --target-sysroot 配对使用)

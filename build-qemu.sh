@@ -39,7 +39,8 @@ usage() {
 
 从源码构建 QEMU。默认构建 riscv64 系统模拟；Linux 主机还构建 Linux 用户态模拟。
 
-  --src-dir DIR     QEMU 源码目录 (默认: ./qemu, 缺失时从 --repo 克隆 --ref)
+  --src-dir DIR     QEMU 源码树根目录，含 configure (默认: ./qemu)
+                    缺失时从 --repo 克隆 --ref；已有 Git 源码按 --ref 同步
   --build-dir DIR   out-of-tree 构建目录 (默认: <src-dir>/build)
   --install-dir DIR 安装前缀 (默认: ./qemu-install)
   -a,--arch LIST     架构列表 (逗号分隔), 每个展开为 <arch>-softmmu
@@ -134,12 +135,16 @@ if [[ "$HOST_OS" == Darwin && "$STATIC_BUILD" == true ]]; then
 fi
 
 SRC_DIR="${SRC_DIR:-$PWD/qemu}"
+[[ "$SRC_DIR" == /* ]] || SRC_DIR="$PWD/$SRC_DIR"
 STATIC_SUFFIX=""
 if [[ "$STATIC_BUILD" == true ]]; then
     STATIC_SUFFIX="-static"
 fi
 BUILD_DIR="${BUILD_DIR:-$SRC_DIR/build$STATIC_SUFFIX}"
 INSTALL_DIR="${INSTALL_DIR:-$PWD/qemu-install$STATIC_SUFFIX}"
+# 后续会 cd 到构建目录，用户提供的相对目录始终以启动目录为基准。
+[[ "$BUILD_DIR" == /* ]] || BUILD_DIR="$PWD/$BUILD_DIR"
+[[ "$INSTALL_DIR" == /* ]] || INSTALL_DIR="$PWD/$INSTALL_DIR"
 
 info "源码目录: $SRC_DIR"
 info "构建目录: $BUILD_DIR"

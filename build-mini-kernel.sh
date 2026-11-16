@@ -25,7 +25,7 @@ usage() {
 
 生成 QEMU virt 最小内核配置 (defconfig + 裁剪) 并构建
 
-  --src-dir DIR        内核源码树 (必填，或设置 SRC_DIR 环境变量)
+  --src-dir DIR        已有 Linux 源码树根目录，含顶层 Makefile (必填，或设置 SRC_DIR)
   --arch ARCH          目标架构 (riscv64|aarch64|x86_64|loongarch64)
   --toolchain-dir DIR  工具链根目录，含 bin/<target>-gcc (或设置 TOOLCHAIN_DIR)
   --target TRIPLE      工具链目标三元组，与 --toolchain-dir 同时使用 (或设置 TARGET)

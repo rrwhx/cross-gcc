@@ -51,7 +51,7 @@ usage() {
   --build-dir       构建目录 (默认: <work-dir>/build-kernel-ARCH)
   --log-dir         日志目录 (默认: <work-dir>/logs-kernel-ARCH)
   --linux-ver       Linux 内核版本 (默认: ${LINUX_VER}, 支持 git[:REF])
-  --src-dir         直接指定已解压的内核源码路径 (跳过下载/解压)
+  --src-dir         已有 Linux 源码树根目录 (含顶层 Makefile，跳过下载/解压)
   --defconfig       使用指定的内核 config 文件 (复制为 .config 后 make olddefconfig)
                     默认不使用，仍为 defconfig + kvm_guest.config
                     x86_64 时无论哪种配置都会强制启用 CONFIG_PVH (vmlinux 可直接被 QEMU 加载)

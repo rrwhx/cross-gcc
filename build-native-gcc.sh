@@ -42,7 +42,8 @@ usage() {
 
   --work-dir     工作目录前缀 (默认: 当前目录)
   --download-dir 源码下载目录 (默认: WORK_DIR/downloads)
-  --src-dir      源码解压目录 (默认: 与 download-dir 相同)
+  --src-dir      多组件源码父目录，脚本在其下创建 gcc-<版本> 等子目录
+                 (默认: 与 download-dir 相同；目录不存在时自动创建)
   --build-dir    构建工作目录 (默认: WORK_DIR/build-native-HOST)
   --log-dir      日志目录 (默认: WORK_DIR/logs-native-HOST)
   --install-dir  工具链安装前缀 (默认: WORK_DIR/native-HOST)

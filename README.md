@@ -194,7 +194,18 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
 参数使用 `-j/--jobs` 指定编译并发、`--组件-ver` 指定组件版本，源码、构建、安装等目录使用 `--xxx-dir`。
 LLVM 批量入口使用 `--llvm-ver`，工具链目录使用 `--toolchain-dir`（批量入口允许 `{ARCH}` 模板）。
 QEMU 使用 `--src-dir`、`--build-dir`、`--install-dir`；flex/bison 安装脚本同样使用 `--install-dir`。
-`--src-dir` 在 GCC 构建入口中指多组件源码的存放目录，在 LLVM/QEMU/内核入口中指具体源码树。
+`--src-dir` 的含义由入口对应的源码结构决定：
+
+| 入口 | `--src-dir DIR` 的含义 | 获取源码的行为 |
+|------|----------------------|----------------|
+| `build-toolchain-gcc.sh`、`build-toolchain-elf.sh`、`build-native-gcc.sh` | 多组件源码的父目录，组件位于 `DIR/gcc-<版本>`、`DIR/binutils-<版本>` 等子目录 | 自动创建父目录，并按各组件版本获取源码；默认与下载目录相同 |
+| `build-toolchain-llvm.sh`、`build-native-llvm.sh` | 已有 `llvm-project` 源码树根目录，含 `llvm/` 子目录 | 指定后直接使用该目录，跳过下载和解压 |
+| `build-kernel.sh`、`build-mini-kernel.sh` | 已有 Linux 源码树根目录，含顶层 `Makefile` | 直接使用源码；最小内核入口必须提供此目录 |
+| `build-qemu.sh` | QEMU 源码树根目录，含 `configure` | 缺失时克隆，已有 Git 源码同步 `--ref`，已有非 Git 源码直接使用 |
+
+例如 GCC 使用 `--src-dir ./sources`，LLVM 使用 `--src-dir ./sources/llvm-project`。
+源码路径由各脚本自行处理，相对路径以启动目录为基准。
+
 内核、BusyBox 和最小内核入口均可使用 `--toolchain-dir DIR --target TRIPLE`，也可使用 `--cross-compile PREFIX`。
 `--toolchain-dir` 指含 `bin/<target>-gcc` 的单套工具链根目录，`--target` 与 `--arch` 必须匹配。
 最小内核入口需要 `--src-dir` 和 `--arch`，工作目录默认当前目录，并发沿用公共 `JOBS` 设置。
