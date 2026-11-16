@@ -56,8 +56,7 @@ usage() {
   --build-dir         构建目录 (默认: WORK_DIR/build-llvm-ARCH)
   --install-dir       安装目录 (默认: WORK_DIR/install-llvm-ARCH)
   --log-dir           日志目录 (默认: WORK_DIR/logs-llvm-ARCH)
-  --link-jobs         并行链接作业数 (命令行 > LLVM_LINK_JOBS 环境变量)
-                      均未指定时不额外设置链接并发。
+  LLVM_LINK_JOBS      环境变量：并行链接作业数，未设置时沿用 LLVM 默认值。
   -j,--jobs           并行编译线程数 (默认: ${JOBS})
   --mirror            下载镜像源 (默认: $MIRROR)
   --static            静态链接工具链自身的可执行文件 (clang/lld/flang 等)，产物不依赖 host
@@ -65,7 +64,7 @@ usage() {
                       (glibc-static / libc6-dev) 与 libstdc++.a。目标侧运行时
                       (compiler-rt/flang-rt/builtins) 不受影响。会自动关闭 clang 插件与
                       LLVM dylib，并给构建/日志/安装目录追加 -static 后缀。
-                      静态链接内存占用较高，必要时配合 --link-jobs 1 使用。
+                      静态链接内存占用较高，必要时设置 LLVM_LINK_JOBS=1。
 
 构建后处理选项:
   --fresh             构建前删除已有的 build/log/install 目录
@@ -80,7 +79,7 @@ usage() {
   $(basename "$0") --arch riscv64 --llvm-ver git:llvmorg-22.1.8
   $(basename "$0") --arch aarch64 --src-dir ./llvm-project
   $(basename "$0") --arch aarch64 --toolchain-dir ./cross-aarch64-linux-gnu --target-sysroot ./cross-aarch64-linux-gnu/aarch64-linux-gnu
-  $(basename "$0") --arch riscv64 --static --fresh --link-jobs 2
+  LLVM_LINK_JOBS=2 $(basename "$0") --arch riscv64 --static --fresh
 EOF
     exit 0
 }
@@ -97,7 +96,7 @@ while [[ $# -gt 0 ]]; do
         --build-dir)             require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
         --install-dir)           require_option_value "$@"; INSTALL_DIR="$2"; shift 2;;
         --log-dir)               require_option_value "$@"; LOG_DIR="$2"; shift 2;;
-        --link-jobs)             require_option_value "$@"; require_positive_integer "$1" "$2"; LINK_JOBS="$2"; shift 2;;
+        --link-jobs)             error "请通过 LLVM_LINK_JOBS 环境变量设置链接并发";;
         -j|--jobs)               require_option_value "$@"; require_positive_integer "$1" "$2"; JOBS="$2"; shift 2;;
         --mirror)                require_option_value "$@"; MIRROR="$2"; shift 2;;
         --static)                STATIC_BUILD=true; shift;;

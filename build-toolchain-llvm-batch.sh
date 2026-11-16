@@ -35,7 +35,7 @@ usage() {
   -h,--help               显示帮助
 
 其他选项将直接传递给 build-toolchain-llvm.sh，例如：
-  --mirror, --fresh, --clean, --archive, --link-jobs, --static, -j/--jobs, --work-dir
+  --mirror, --fresh, --clean, --archive, --static, -j/--jobs, --work-dir
 
 示例:
   $(basename "$0") --llvm-ver 22.1.8 -a riscv64,aarch64 --toolchain-dir ./cross-{ARCH}-linux-gnu
@@ -58,6 +58,7 @@ while [[ $# -gt 0 ]]; do
         --toolchain-dir)
             require_option_value "$@"
             TOOLCHAIN_DIR_PATTERN="$2"; shift 2;;
+        --link-jobs) error "请通过 LLVM_LINK_JOBS 环境变量设置链接并发";;
         -h|--help) usage;;
         *)
             extra_args+=("$1"); shift;;
