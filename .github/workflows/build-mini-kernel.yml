@@ -127,7 +127,7 @@ jobs:
           ls -lh images/
           # --strict: 环境缺失导致的 SKIP 也视为失败, 防止假阳性绿
           ./test/test-qemu-run.sh --qemu-dir "$(dirname "$QEMU_BIN")" --images-dir ./images \
-            --timeout 120 --verbose --strict ${{ matrix.arch }}
+            --timeout 120 --verbose --strict --arch ${{ matrix.arch }}
 
       - name: Package bundle (<arch>-boot-min.tar.gz)
         run: |

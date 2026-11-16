@@ -67,11 +67,11 @@ ARCHS=()
 
 usage() {
     cat <<EOF
-用法: $(basename "$0") [选项] [架构...]
+用法: $(basename "$0") [选项]
 
 使用 QEMU 启动交叉编译的内核 + initramfs 进行冒烟测试
 
-  架构参数        要测试的架构（默认: 全部可用）
+  --arch LIST     要测试的架构（逗号分隔，默认: 全部）
                   支持: ${ALL_ARCHS[*]}
 
   --qemu-dir      QEMU 二进制目录 (默认: \$QEMU_DIR 或 ~/qemu_upstream/build)
@@ -83,29 +83,35 @@ usage() {
 
 示例:
   $(basename "$0")                          # 测试所有架构
-  $(basename "$0") riscv64 aarch64          # 仅测试指定架构
+  $(basename "$0") --arch riscv64,aarch64          # 仅测试指定架构
   $(basename "$0") --images-dir ./release   # 指定产物目录
-  $(basename "$0") --verbose riscv64        # 调试模式查看输出
+  $(basename "$0") --verbose --arch riscv64        # 调试模式查看输出
 EOF
     exit 0
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --arch)
+            require_option_value "$@"
+            [[ -n "$2" && "$2" != ,* && "$2" != *, && "$2" != *,,* ]] || error "--arch 的列表不能为空或包含空项"
+            IFS=',' read -ra ARCHS <<< "$2"; shift 2;;
         --qemu-dir)    require_option_value "$@"; QEMU_DIR="$2"; shift 2;;
         --images-dir)  require_option_value "$@"; IMAGES_DIR="$2"; shift 2;;
         --timeout)     require_option_value "$@"; require_positive_integer "$1" "$2"; TIMEOUT="$2"; shift 2;;
         --verbose)     VERBOSE=true; shift;;
         --strict)      STRICT=true; shift;;
         -h|--help)     usage;;
-        -*)            error "未知选项: $1";;
-        *)             ARCHS+=("$1"); shift;;
+        *)             error "未知选项: $1";;
     esac
 done
 
 require_positive_integer "运行超时" "$TIMEOUT"
 
 [[ ${#ARCHS[@]} -eq 0 ]] && ARCHS=("${ALL_ARCHS[@]}")
+for arch in "${ARCHS[@]}"; do
+    declare -f "cmd_qemu_$arch" >/dev/null 2>&1 || error "不支持的架构: $arch"
+done
 
 # ---------------------------------------------------------------------------
 # 前置检查

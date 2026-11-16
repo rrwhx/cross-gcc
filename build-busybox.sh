@@ -29,6 +29,8 @@ COREMARK_GIT="https://github.com/eembc/coremark.git"
 # ---------------------------------------------------------------------------
 ARCH=""
 CROSS_COMPILE=""
+TOOLCHAIN_DIR=""
+TARGET=""
 WORK_DIR=$(pwd)
 DOWNLOAD_DIR=""
 BUILD_DIR=""
@@ -40,14 +42,16 @@ ADD_FILES=()
 
 usage() {
     cat <<EOF
-用法: $(basename "$0") --arch ARCH --cross-compile PREFIX [选项]
+用法: $(basename "$0") --arch ARCH [选项]
 
 交叉编译 BusyBox 并生成 initramfs (cpio 格式)
 启动行为: 内核 cmdline "--" 后的内容会作为参数传给 /init 并经 shell -c 执行后关机,
 无参数时进入交互 shell, 优先 bash (例: qemu -append "console=ttyS0 -- /root/coremark")
 
   --arch            目标架构 (例如: riscv64, aarch64, x86_64)
-  --cross-compile   交叉编译前缀，可为完整路径或仅前缀
+  --toolchain-dir   工具链根目录，与 --target 同时使用 (含 bin/<target>-gcc)
+  --target          工具链目标三元组 (例如: riscv64-linux-gnu)
+  --cross-compile   交叉编译前缀，与 --toolchain-dir/--target 二选一
                     (例如: riscv64-linux-gnu- 或 /path/to/bin/riscv64-linux-gnu-)
   --work-dir        工作目录前缀 (默认: 当前目录)
   --download-dir    源码下载目录 (默认: <work-dir>/downloads)
@@ -64,7 +68,7 @@ usage() {
   -h,--help         显示帮助
 
 示例:
-  $(basename "$0") --arch riscv64 --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+  $(basename "$0") --arch riscv64 --toolchain-dir ./cross-riscv64-linux-gnu --target riscv64-linux-gnu
   $(basename "$0") --arch aarch64 --cross-compile aarch64-linux-gnu-
   $(basename "$0") --arch riscv64 --busybox-ver git:1_37_0 --cross-compile riscv64-linux-gnu-
   $(basename "$0") --arch riscv64 --coremark --cross-compile riscv64-linux-gnu-
@@ -76,6 +80,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch)           require_option_value "$@"; ARCH="$2"; shift 2;;
         --cross-compile)  require_option_value "$@"; CROSS_COMPILE="$2"; shift 2;;
+        --toolchain-dir)  require_option_value "$@"; TOOLCHAIN_DIR="$2"; shift 2;;
+        --target)         require_option_value "$@"; TARGET="$2"; shift 2;;
         --work-dir)       require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --download-dir)   require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
         --build-dir)      require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
@@ -93,9 +99,16 @@ done
 
 require_positive_integer "构建线程数" "$JOBS"
 
-if [[ -z "$ARCH" || -z "$CROSS_COMPILE" ]]; then
-    error "--arch 和 --cross-compile 参数为必需。"
+[[ -n "$ARCH" ]] || error "--arch 参数为必需"
+if [[ -n "$TOOLCHAIN_DIR" || -n "$TARGET" ]]; then
+    [[ -z "$CROSS_COMPILE" ]] || error "--cross-compile 与 --toolchain-dir/--target 不能同时使用"
+    [[ -n "$TOOLCHAIN_DIR" && -n "$TARGET" ]] || error "--toolchain-dir 和 --target 必须同时使用"
+    [[ "${TARGET%%-*}" == "$ARCH" ]] || error "--target 与 --arch 不匹配: $TARGET / $ARCH"
+    [[ -d "$TOOLCHAIN_DIR/bin" ]] || error "工具链 bin 目录不存在: $TOOLCHAIN_DIR/bin"
+    TOOLCHAIN_DIR="$(cd "$TOOLCHAIN_DIR" && pwd -P)"
+    CROSS_COMPILE="$TOOLCHAIN_DIR/bin/$TARGET-"
 fi
+[[ -n "$CROSS_COMPILE" ]] || error "必须指定 --cross-compile 或 --toolchain-dir/--target"
 
 # ---------------------------------------------------------------------------
 # 工具链设置

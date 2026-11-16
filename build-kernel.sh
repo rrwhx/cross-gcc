@@ -24,6 +24,8 @@ setup_error_trap
 # ---------------------------------------------------------------------------
 ARCH=""
 CROSS_COMPILE=""
+TOOLCHAIN_DIR=""
+TARGET=""
 WORK_DIR=$(pwd)
 DOWNLOAD_DIR=""
 BUILD_DIR=""
@@ -35,12 +37,14 @@ CLEAN_BUILD=false
 
 usage() {
     cat <<EOF
-用法: $(basename "$0") --arch ARCH --cross-compile PREFIX [选项]
+用法: $(basename "$0") --arch ARCH [选项]
 
 交叉编译 Linux 内核 (defconfig + kvm_guest.config)
 
   --arch            目标架构 (例如: riscv64, aarch64, x86_64)
-  --cross-compile   交叉编译前缀，可为完整路径或仅前缀
+  --toolchain-dir   工具链根目录，与 --target 同时使用 (含 bin/<target>-gcc)
+  --target          工具链目标三元组 (例如: riscv64-linux-gnu)
+  --cross-compile   交叉编译前缀，与 --toolchain-dir/--target 二选一
                     (例如: riscv64-linux-gnu- 或 /path/to/bin/riscv64-linux-gnu-)
   --work-dir        工作目录前缀 (默认: 当前目录)
   --download-dir    源码下载目录 (默认: <work-dir>/downloads)
@@ -58,7 +62,7 @@ usage() {
   -h,--help         显示帮助
 
 示例:
-  $(basename "$0") --arch riscv64 --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+  $(basename "$0") --arch riscv64 --toolchain-dir ./cross-riscv64-linux-gnu --target riscv64-linux-gnu
   $(basename "$0") --arch riscv64 --cross-compile riscv64-linux-gnu- --src-dir ./downloads/linux-7.1.1
   $(basename "$0") --arch riscv64 --linux-ver git:v6.12 --cross-compile riscv64-linux-gnu-
   $(basename "$0") --arch riscv64 --cross-compile riscv64-linux-gnu- --defconfig configs/kernel/riscv_qemu_virt_min_defconfig
@@ -70,6 +74,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch)           require_option_value "$@"; ARCH="$2"; shift 2;;
         --cross-compile)  require_option_value "$@"; CROSS_COMPILE="$2"; shift 2;;
+        --toolchain-dir)  require_option_value "$@"; TOOLCHAIN_DIR="$2"; shift 2;;
+        --target)         require_option_value "$@"; TARGET="$2"; shift 2;;
         --work-dir)       require_option_value "$@"; WORK_DIR="$2"; shift 2;;
         --download-dir)   require_option_value "$@"; DOWNLOAD_DIR="$2"; shift 2;;
         --build-dir)      require_option_value "$@"; BUILD_DIR="$2"; shift 2;;
@@ -88,9 +94,16 @@ done
 
 require_positive_integer "构建线程数" "$JOBS"
 
-if [[ -z "$ARCH" || -z "$CROSS_COMPILE" ]]; then
-    error "--arch 和 --cross-compile 参数为必需。"
+[[ -n "$ARCH" ]] || error "--arch 参数为必需"
+if [[ -n "$TOOLCHAIN_DIR" || -n "$TARGET" ]]; then
+    [[ -z "$CROSS_COMPILE" ]] || error "--cross-compile 与 --toolchain-dir/--target 不能同时使用"
+    [[ -n "$TOOLCHAIN_DIR" && -n "$TARGET" ]] || error "--toolchain-dir 和 --target 必须同时使用"
+    [[ "${TARGET%%-*}" == "$ARCH" ]] || error "--target 与 --arch 不匹配: $TARGET / $ARCH"
+    [[ -d "$TOOLCHAIN_DIR/bin" ]] || error "工具链 bin 目录不存在: $TOOLCHAIN_DIR/bin"
+    TOOLCHAIN_DIR="$(cd "$TOOLCHAIN_DIR" && pwd -P)"
+    CROSS_COMPILE="$TOOLCHAIN_DIR/bin/$TARGET-"
 fi
+[[ -n "$CROSS_COMPILE" ]] || error "必须指定 --cross-compile 或 --toolchain-dir/--target"
 
 if [[ -n "$DEFCONFIG" ]]; then
     [[ -f "$DEFCONFIG" ]] || error "指定的内核 config 文件不存在: $DEFCONFIG"

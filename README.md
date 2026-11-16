@@ -121,7 +121,7 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
 ```bash
 # BusyBox (生成 initramfs)
 ./build-busybox.sh --arch riscv64 \
-    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+    --toolchain-dir ./cross-riscv64-linux-gnu --target riscv64-linux-gnu
 
 # BusyBox 使用 git 源码
 ./build-busybox.sh --arch riscv64 --busybox-ver git:1_37_0 \
@@ -139,7 +139,7 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
 
 # Linux 内核
 ./build-kernel.sh --arch riscv64 \
-    --cross-compile ./cross-riscv64-linux-gnu/bin/riscv64-linux-gnu-
+    --toolchain-dir ./cross-riscv64-linux-gnu --target riscv64-linux-gnu
 
 # Linux 内核使用 git 源码
 ./build-kernel.sh --arch riscv64 --linux-ver git:v6.12 \
@@ -189,9 +189,11 @@ LLVM 批量入口每次只接受一个版本，可同时构建多个架构。构
 LLVM 批量入口使用 `--llvm-ver`，工具链目录使用 `--toolchain-dir`（批量入口允许 `{ARCH}` 模板）。
 QEMU 使用 `--src-dir`、`--build-dir`、`--install-dir`；flex/bison 安装脚本同样使用 `--install-dir`。
 `--src-dir` 在 GCC 构建入口中指多组件源码的存放目录，在 LLVM/QEMU/内核入口中指具体源码树。
-最小内核辅助脚本的 `--toolchains-dir` 指含多套 `cross-<triple>/` 的父目录。
-该辅助入口需要显式指定源码目录，以及工具链父目录或交叉编译前缀；工作目录默认当前目录，
-并发沿用公共 `JOBS` 设置。路径可由 `SRC_DIR`、`TOOLCHAINS_DIR`、`CROSS_COMPILE`、`WORK_DIR`、`BUILD_DIR` 环境变量提供。
+内核、BusyBox 和最小内核入口均可使用 `--toolchain-dir DIR --target TRIPLE`，也可使用 `--cross-compile PREFIX`。
+`--toolchain-dir` 指含 `bin/<target>-gcc` 的单套工具链根目录，`--target` 与 `--arch` 必须匹配。
+最小内核入口需要 `--src-dir` 和 `--arch`，工作目录默认当前目录，并发沿用公共 `JOBS` 设置。
+其路径可由 `SRC_DIR`、`TOOLCHAIN_DIR`、`CROSS_COMPILE`、`WORK_DIR`、`BUILD_DIR` 环境变量提供，目标三元组可由 `TARGET` 提供。
+QEMU 系统测试使用 `--arch riscv64,aarch64` 选择架构。
 脚本中的安装根目录统一使用 `INSTALL_DIR`，组件版本使用 `*_VER`，输出路径区分
 `OUTPUT_FILE` 与 `OUTPUT_DIR`；上游构建工具的 `--prefix`、`PREFIX` 和 `DESTDIR` 按各自接口传递。
 
@@ -398,7 +400,7 @@ Flang 的部分源文件编译时占用数 GB 内存；16 GB 内存的机器建�
     --target aarch64-linux-gnu --run-mode all --qemu-dir ./qemu-install/bin
 
 # 2) 系统模拟冒烟测试：启动交叉编译的内核 + initramfs
-./test/test-qemu-run.sh riscv64 aarch64 --qemu-dir ./qemu-install/bin
+./test/test-qemu-run.sh --arch riscv64,aarch64 --qemu-dir ./qemu-install/bin
 
 # 从源码构建 QEMU（当系统未提供所需版本/架构时）
 # 默认不安装系统依赖；首次构建可加 --deps 自动装依赖（需 sudo）
